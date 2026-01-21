@@ -345,180 +345,180 @@ def init_db() -> None:
         
         conn = get_connection()
         try:
-        with conn.cursor() as cursor:
-            # Resource containers table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS resource_containers (
-                    container_key TEXT PRIMARY KEY,
-                    drive_item_id TEXT,
-                    
-                    relative_path TEXT NOT NULL,
-                    bucket TEXT,
-                    primary_department TEXT,
-                    sub_department TEXT,
-                    training_type TEXT,
-                    
-                    container_type TEXT NOT NULL,
-                    display_name TEXT,
-                    web_url TEXT,
-                    
-                    resource_count INTEGER DEFAULT 1,
-                    valid_link_count INTEGER DEFAULT 0,
-                    contents_count INTEGER DEFAULT 0,
-                    is_placeholder INTEGER DEFAULT 0,
-                    
-                    scrub_status TEXT DEFAULT 'not_reviewed',
-                    scrub_notes TEXT,
-                    scrub_owner TEXT,
-                    scrub_updated TEXT,
-                    
-                    invest_decision TEXT,
-                    invest_owner TEXT,
-                    invest_effort TEXT,
-                    invest_notes TEXT,
-                    invest_updated TEXT,
-                    
-                    first_seen TEXT,
-                    last_seen TEXT,
-                    source TEXT,
-                    is_archived INTEGER DEFAULT 0,
-                    audience TEXT,
-                    approved_for_investment INTEGER DEFAULT 0,
-                    scrub_reasons TEXT,
-                    sales_stage TEXT
-                )
-            """)
-            
-            # Indexes
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_containers_path 
-                ON resource_containers(relative_path)
-            """)
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_containers_bucket 
-                ON resource_containers(bucket)
-            """)
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_containers_dept 
-                ON resource_containers(primary_department)
-            """)
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_containers_subdept 
-                ON resource_containers(sub_department)
-            """)
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_containers_scrub_status 
-                ON resource_containers(scrub_status)
-            """)
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_containers_active 
-                ON resource_containers(is_archived, is_placeholder)
-            """)
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_containers_approved 
-                ON resource_containers(approved_for_investment)
-            """)
-            
-            # Legacy catalog_items table (for backwards compatibility)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS catalog_items (
-                    item_id TEXT PRIMARY KEY,
-                    department TEXT NOT NULL,
-                    bucket TEXT NOT NULL,
-                    functional_area TEXT NOT NULL,
-                    training_type TEXT NOT NULL,
-                    item_type TEXT NOT NULL,
-                    item_identity TEXT NOT NULL UNIQUE,
-                    display_name TEXT,
-                    size INTEGER,
-                    modified TEXT,
-                    first_seen TEXT NOT NULL,
-                    last_seen TEXT NOT NULL,
-                    source TEXT NOT NULL,
-                    source_type TEXT DEFAULT 'sharepoint',
-                    scrub_status TEXT DEFAULT 'not_reviewed',
-                    scrub_notes TEXT,
-                    scrub_owner TEXT,
-                    scrub_updated TEXT,
-                    invest_decision TEXT,
-                    invest_owner TEXT,
-                    invest_effort TEXT,
-                    invest_notes TEXT,
-                    invest_updated TEXT
-                )
-            """)
-            
-            # Scan snapshots table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS scan_snapshots (
-                    snapshot_id SERIAL PRIMARY KEY,
-                    timestamp TEXT NOT NULL,
-                    total_items INTEGER NOT NULL,
-                    total_files INTEGER NOT NULL,
-                    total_links INTEGER NOT NULL,
-                    areas_with_training INTEGER NOT NULL,
-                    areas_without_training INTEGER NOT NULL,
-                    coverage_pct REAL NOT NULL,
-                    source TEXT NOT NULL
-                )
-            """)
-            
-            # Sync runs table for CFO metrics
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS sync_runs (
-                    run_id SERIAL PRIMARY KEY,
-                    started_at TEXT NOT NULL,
-                    finished_at TEXT,
-                    source TEXT NOT NULL,
-                    active_total_before INTEGER NOT NULL,
-                    added_count INTEGER NOT NULL,
-                    archived_count INTEGER NOT NULL,
-                    active_total_after INTEGER NOT NULL
-                )
-            """)
-            
-            # Departments table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS departments (
-                    department TEXT PRIMARY KEY,
-                    last_seen TEXT NOT NULL
-                )
-            """)
-            
-            # Migration: backfill first_seen for rows where it's NULL
-            cursor.execute("""
-                UPDATE resource_containers
-                SET first_seen = COALESCE(first_seen, last_seen, NOW()::TEXT)
-                WHERE first_seen IS NULL OR first_seen = ''
-            """)
-            
-            # Normalize legacy statuses to canonical
-            cursor.execute("UPDATE resource_containers SET scrub_status = 'Include' WHERE scrub_status = 'PASS'")
-            cursor.execute("UPDATE resource_containers SET scrub_status = 'Include' WHERE scrub_status = 'keep'")
-            cursor.execute("UPDATE resource_containers SET scrub_status = 'Modify' WHERE scrub_status = 'HOLD'")
-            cursor.execute("UPDATE resource_containers SET scrub_status = 'Modify' WHERE scrub_status = 'modify'")
-            cursor.execute("UPDATE resource_containers SET scrub_status = 'Modify' WHERE scrub_status = 'gap'")
-            cursor.execute("UPDATE resource_containers SET scrub_status = 'Sunset' WHERE scrub_status = 'BLOCK'")
-            cursor.execute("UPDATE resource_containers SET scrub_status = 'Sunset' WHERE LOWER(scrub_status) = 'sunset'")
-            
-            # Force NULL/empty to not_reviewed
-            cursor.execute("""
-                UPDATE resource_containers SET scrub_status = 'not_reviewed' 
-                WHERE scrub_status IS NULL OR scrub_status = ''
-            """)
-            
-            # Force any remaining unknown value to not_reviewed
-            cursor.execute("""
-                UPDATE resource_containers SET scrub_status = 'not_reviewed' 
-                WHERE scrub_status NOT IN ('not_reviewed', 'Include', 'Modify', 'Sunset')
-            """)
-            
-        conn.commit()
-        _logger.info("init_db() completed successfully")
-    finally:
-        return_connection(conn)
-    
-    _init_db_done = True
+            with conn.cursor() as cursor:
+                # Resource containers table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS resource_containers (
+                        container_key TEXT PRIMARY KEY,
+                        drive_item_id TEXT,
+                        
+                        relative_path TEXT NOT NULL,
+                        bucket TEXT,
+                        primary_department TEXT,
+                        sub_department TEXT,
+                        training_type TEXT,
+                        
+                        container_type TEXT NOT NULL,
+                        display_name TEXT,
+                        web_url TEXT,
+                        
+                        resource_count INTEGER DEFAULT 1,
+                        valid_link_count INTEGER DEFAULT 0,
+                        contents_count INTEGER DEFAULT 0,
+                        is_placeholder INTEGER DEFAULT 0,
+                        
+                        scrub_status TEXT DEFAULT 'not_reviewed',
+                        scrub_notes TEXT,
+                        scrub_owner TEXT,
+                        scrub_updated TEXT,
+                        
+                        invest_decision TEXT,
+                        invest_owner TEXT,
+                        invest_effort TEXT,
+                        invest_notes TEXT,
+                        invest_updated TEXT,
+                        
+                        first_seen TEXT,
+                        last_seen TEXT,
+                        source TEXT,
+                        is_archived INTEGER DEFAULT 0,
+                        audience TEXT,
+                        approved_for_investment INTEGER DEFAULT 0,
+                        scrub_reasons TEXT,
+                        sales_stage TEXT
+                    )
+                """)
+                
+                # Indexes
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_containers_path 
+                    ON resource_containers(relative_path)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_containers_bucket 
+                    ON resource_containers(bucket)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_containers_dept 
+                    ON resource_containers(primary_department)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_containers_subdept 
+                    ON resource_containers(sub_department)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_containers_scrub_status 
+                    ON resource_containers(scrub_status)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_containers_active 
+                    ON resource_containers(is_archived, is_placeholder)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_containers_approved 
+                    ON resource_containers(approved_for_investment)
+                """)
+                
+                # Legacy catalog_items table (for backwards compatibility)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS catalog_items (
+                        item_id TEXT PRIMARY KEY,
+                        department TEXT NOT NULL,
+                        bucket TEXT NOT NULL,
+                        functional_area TEXT NOT NULL,
+                        training_type TEXT NOT NULL,
+                        item_type TEXT NOT NULL,
+                        item_identity TEXT NOT NULL UNIQUE,
+                        display_name TEXT,
+                        size INTEGER,
+                        modified TEXT,
+                        first_seen TEXT NOT NULL,
+                        last_seen TEXT NOT NULL,
+                        source TEXT NOT NULL,
+                        source_type TEXT DEFAULT 'sharepoint',
+                        scrub_status TEXT DEFAULT 'not_reviewed',
+                        scrub_notes TEXT,
+                        scrub_owner TEXT,
+                        scrub_updated TEXT,
+                        invest_decision TEXT,
+                        invest_owner TEXT,
+                        invest_effort TEXT,
+                        invest_notes TEXT,
+                        invest_updated TEXT
+                    )
+                """)
+                
+                # Scan snapshots table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS scan_snapshots (
+                        snapshot_id SERIAL PRIMARY KEY,
+                        timestamp TEXT NOT NULL,
+                        total_items INTEGER NOT NULL,
+                        total_files INTEGER NOT NULL,
+                        total_links INTEGER NOT NULL,
+                        areas_with_training INTEGER NOT NULL,
+                        areas_without_training INTEGER NOT NULL,
+                        coverage_pct REAL NOT NULL,
+                        source TEXT NOT NULL
+                    )
+                """)
+                
+                # Sync runs table for CFO metrics
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS sync_runs (
+                        run_id SERIAL PRIMARY KEY,
+                        started_at TEXT NOT NULL,
+                        finished_at TEXT,
+                        source TEXT NOT NULL,
+                        active_total_before INTEGER NOT NULL,
+                        added_count INTEGER NOT NULL,
+                        archived_count INTEGER NOT NULL,
+                        active_total_after INTEGER NOT NULL
+                    )
+                """)
+                
+                # Departments table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS departments (
+                        department TEXT PRIMARY KEY,
+                        last_seen TEXT NOT NULL
+                    )
+                """)
+                
+                # Migration: backfill first_seen for rows where it's NULL
+                cursor.execute("""
+                    UPDATE resource_containers
+                    SET first_seen = COALESCE(first_seen, last_seen, NOW()::TEXT)
+                    WHERE first_seen IS NULL OR first_seen = ''
+                """)
+                
+                # Normalize legacy statuses to canonical
+                cursor.execute("UPDATE resource_containers SET scrub_status = 'Include' WHERE scrub_status = 'PASS'")
+                cursor.execute("UPDATE resource_containers SET scrub_status = 'Include' WHERE scrub_status = 'keep'")
+                cursor.execute("UPDATE resource_containers SET scrub_status = 'Modify' WHERE scrub_status = 'HOLD'")
+                cursor.execute("UPDATE resource_containers SET scrub_status = 'Modify' WHERE scrub_status = 'modify'")
+                cursor.execute("UPDATE resource_containers SET scrub_status = 'Modify' WHERE scrub_status = 'gap'")
+                cursor.execute("UPDATE resource_containers SET scrub_status = 'Sunset' WHERE scrub_status = 'BLOCK'")
+                cursor.execute("UPDATE resource_containers SET scrub_status = 'Sunset' WHERE LOWER(scrub_status) = 'sunset'")
+                
+                # Force NULL/empty to not_reviewed
+                cursor.execute("""
+                    UPDATE resource_containers SET scrub_status = 'not_reviewed' 
+                    WHERE scrub_status IS NULL OR scrub_status = ''
+                """)
+                
+                # Force any remaining unknown value to not_reviewed
+                cursor.execute("""
+                    UPDATE resource_containers SET scrub_status = 'not_reviewed' 
+                    WHERE scrub_status NOT IN ('not_reviewed', 'Include', 'Modify', 'Sunset')
+                """)
+                
+            conn.commit()
+            _logger.info("init_db() completed successfully")
+        finally:
+            return_connection(conn)
+        
+        _init_db_done = True
 
 
 # -----------------------------------------------------------------------------
