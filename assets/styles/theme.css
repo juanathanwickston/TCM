@@ -1,0 +1,111 @@
+/* Global Theme - Geist Font Applied App-Wide */
+/* Uses specific selectors to avoid breaking Material Icons */
+
+:root {
+    --app-font-sans: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ============================================= */
+/* TEXT CONTENT ONLY - Never override icons     */
+/* ============================================= */
+
+/* Main page title and headers */
+[data-testid="stAppViewContainer"] h1,
+[data-testid="stAppViewContainer"] h2,
+[data-testid="stAppViewContainer"] h3,
+[data-testid="stAppViewContainer"] h4,
+[data-testid="stAppViewContainer"] h5,
+[data-testid="stAppViewContainer"] h6 {
+    font-family: var(--app-font-sans) !important;
+}
+
+/* Paragraph text */
+[data-testid="stAppViewContainer"] p {
+    font-family: var(--app-font-sans) !important;
+}
+
+/* Markdown content */
+[data-testid="stMarkdownContainer"] {
+    font-family: var(--app-font-sans) !important;
+}
+
+/* Form labels */
+[data-testid="stWidgetLabel"] {
+    font-family: var(--app-font-sans) !important;
+}
+
+/* Text inputs */
+[data-testid="stTextInput"] input,
+[data-testid="stTextArea"] textarea {
+    font-family: var(--app-font-sans) !important;
+}
+
+/* Select boxes - text only */
+[data-testid="stSelectbox"] [data-baseweb="select"] {
+    font-family: var(--app-font-sans) !important;
+}
+
+/* Number inputs */
+[data-testid="stNumberInput"] input {
+    font-family: var(--app-font-sans) !important;
+}
+
+/* Buttons - text only, not icons */
+[data-testid="stButton"] button {
+    font-family: var(--app-font-sans) !important;
+}
+
+/* Sidebar navigation text */
+[data-testid="stSidebarNav"] a {
+    font-family: var(--app-font-sans) !important;
+}
+
+/* Sidebar header */
+[data-testid="stSidebarHeader"] {
+    font-family: var(--app-font-sans) !important;
+}
+
+/* Data tables */
+[data-testid="stDataFrame"] th,
+[data-testid="stDataFrame"] td {
+    font-family: var(--app-font-sans) !important;
+}
+
+/* Metrics */
+[data-testid="stMetricValue"] {
+    font-family: var(--app-font-sans) !important;
+}
+
+[data-testid="stMetricLabel"] {
+    font-family: var(--app-font-sans) !important;
+}
+
+/* Expander - header text only, NOT the icon */
+[data-testid="stExpander"] summary>span>span {
+    font-family: var(--app-font-sans) !important;
+}
+
+/* Captions */
+[data-testid="stCaptionContainer"] {
+    font-family: var(--app-font-sans) !important;
+}
+
+/* Alerts */
+[data-testid="stAlert"] {
+    font-family: var(--app-font-sans) !important;
+}
+
+/* Progress bar label */
+[data-testid="stProgress"] {
+    font-family: var(--app-font-sans) !important;
+}
+
+/* Tabs */
+[data-testid="stTabs"] button {
+    font-family: var(--app-font-sans) !important;
+}
+
+/* Download buttons */
+[data-testid="stDownloadButton"] button {
+    font-family: var(--app-font-sans) !important;
+}

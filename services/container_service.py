@@ -1,0 +1,621 @@
+"""
+Container Service
+=================
+Handles container detection, path parsing, and ZIP import.
+
+FOLDER STRUCTURE (4-level with Sub-Department):
+- L0: Department (HR, Point of Sale, etc.)
+- L1: Sub-Department (_General, Aloha, OnePOS, etc.)
+- L2: Bucket (Onboarding, Upskilling, Not Sure)
+- L3: Training Type (Instructor Led, Self Directed, etc.)
+
+LEAF DETECTION RULES:
+- File directly under L3 folder (L4) → container
+- Folder directly under L3 folder (L3+1) → container
+- links.txt directly under L3 folder (L4) → container
+- L0/L1/L2/L3 category folders → NOT containers
+"""
+
+import re
+import zipfile
+import hashlib
+from pathlib import Path
+from typing import Dict, List, Optional, Any
+from datetime import datetime
+
+from db import upsert_container, make_container_key, get_all_containers
+
+
+# Template structure constants
+BUCKETS = {
+    "01_onboarding": "onboarding",
+    "02_upskilling": "upskilling", 
+    "03_not sure (drop here)": "not_sure",
+}
+
+TRAINING_TYPES = {
+    "01_instructor led - in person": "instructor_led_in_person",
+    "01_instructor led – in person": "instructor_led_in_person",
+    "02_instructor led - virtual": "instructor_led_virtual",
+    "02_instructor led – virtual": "instructor_led_virtual",
+    "03_self directed": "self_directed",
+    "04_video on demand": "video_on_demand",
+    "05_job aids": "job_aids",
+    "06_resources": "resources",
+}
+
+# Friendly display labels for training types (key → label)
+TRAINING_TYPE_LABELS = {
+    "instructor_led_in_person": "Instructor Led - In Person",
+    "instructor_led_virtual": "Instructor Led - Virtual",
+    "self_directed": "Self Directed",
+    "video_on_demand": "Video On Demand",
+    "job_aids": "Job Aids",
+    "resources": "Resources",
+}
+
+# OS metadata files excluded from ingestion.
+# Explicit denylist - these NEVER create resource_containers.
+# Compare with filename.lower().
+EXCLUDED_FILENAMES = frozenset({"desktop.ini", ".ds_store", "thumbs.db"})
+
+
+def compute_file_count(container: dict) -> int:
+    """
+    Compute file count for a container (secondary metric, Inventory only).
+    
+    This is NOT the canonical KPI. The canonical operational total is SUM(resource_count).
+    This function computes "Items inside folders" for informational display.
+    
+    Logic (fail closed):
+    - file → 1
+    - folder → max(int(contents_count or 0), 0)
+    - link/links → max(int(valid_link_count or 0), 0)
+    - unknown → 0
+    
+    Returns:
+        int: File count contribution for this container
+    """
+    container_type = container.get("container_type", "")
+    
+    if container_type == "file":
+        return 1
+    
+    if container_type == "folder":
+        try:
+            count = int(container.get("contents_count") or 0)
+            return max(count, 0)
+        except (ValueError, TypeError):
+            return 0
+    
+    if container_type in ("link", "links"):
+        try:
+            count = int(container.get("valid_link_count") or 0)
+            return max(count, 0)
+        except (ValueError, TypeError):
+            return 0
+    
+    # Unknown container type - fail closed
+    return 0
+
+
+def normalize_bucket(name: str) -> Optional[str]:
+    """Normalize bucket folder name to key."""
+    if not name:
+        return None
+    key = name.lower().strip()
+    for prefix, bucket in BUCKETS.items():
+        if key.startswith(prefix.split("_", 1)[0]) and bucket.replace("_", " ") in key.replace("_", " "):
+            return bucket
+        if key == prefix:
+            return bucket
+    # Fuzzy match
+    for prefix, bucket in BUCKETS.items():
+        if bucket in key.replace("_", " ").replace("-", " "):
+            return bucket
+    # Fallback: return cleaned name (structure is authoritative)
+    return key
+
+
+def normalize_training_type(name: str) -> Optional[str]:
+    """Normalize training type folder name to key."""
+    key = name.lower().strip()
+    for prefix, ttype in TRAINING_TYPES.items():
+        if key == prefix:
+            return ttype
+        # Handle em-dash vs hyphen
+        clean_key = key.replace("–", "-").replace("—", "-")
+        clean_prefix = prefix.replace("–", "-").replace("—", "-")
+        if clean_key == clean_prefix:
+            return ttype
+    return None
+
+
+def parse_path(relative_path: str) -> Dict[str, Optional[str]]:
+    """
+    Parse folder path to extract department, sub_department, bucket, and training_type.
+    
+    STRUCTURE (4-level with Sub-Department):
+    - L0: Department (HR, Point of Sale, etc.)
+    - L1: Sub-Department (_General, Aloha, OnePOS, etc.)
+    - L2: Bucket (Onboarding, Upskilling, Not Sure)
+    - L3: Training Type (Instructor Led, Self Directed, etc.)
+    
+    Returns dict with primary_department, sub_department, bucket, training_type.
+    """
+    # Normalize separators
+    path = relative_path.replace("\\", "/").strip("/")
+    parts = [p for p in path.split("/") if p]
+    
+    if not parts:
+        return {"bucket": None, "primary_department": None, "sub_department": None, "training_type": None, "depth": 0}
+    
+    # L0: Department (use as-is)
+    dept = parts[0] if len(parts) > 0 else None
+    
+    # L1: Sub-Department (use as-is)
+    sub_dept = parts[1] if len(parts) > 1 else None
+    
+    # L2: Bucket
+    bucket = normalize_bucket(parts[2]) if len(parts) > 2 else None
+    
+    # L3: Training Type
+    training_type = normalize_training_type(parts[3]) if len(parts) > 3 else None
+    
+    return {
+        "bucket": bucket,
+        "primary_department": dept,
+        "sub_department": sub_dept,
+        "training_type": training_type,
+        "depth": len(parts),
+    }
+
+
+def get_container_depth(bucket: str) -> int:
+    """Get the L3 depth for container detection (4-level hierarchy)."""
+    return 4  # L0 (dept) + L1 (sub-dept) + L2 (bucket) + L3 (training type)
+
+
+def is_leaf_container(relative_path: str, is_folder: bool, filename: str) -> bool:
+    """
+    Determine if an item is a leaf container.
+    
+    Rules (4-level structure):
+    - File directly under L3 (L4 depth) → YES
+    - Folder directly under L3 (L3+1 = L4 depth) → YES
+    - links.txt at L4 depth → YES (special)
+    - L0/L1/L2/L3 folders → NO
+    - Items nested under L4 → NO
+    
+    Detection is based on DEPTH, not bucket normalization.
+    Structure is authoritative.
+    """
+    parsed = parse_path(relative_path)
+    current_depth = parsed["depth"]
+    
+    # L3 depth is always 4 (Dept/SubDept/Bucket/TrainingType)
+    l3_depth = 4
+    
+    # links.txt special handling
+    if filename.lower() == "links.txt":
+        return current_depth == l3_depth  # Must be directly under L3
+    
+    if is_folder:
+        # Folder is container only if it's L3+1 (L4)
+        return current_depth == l3_depth + 1
+    else:
+        # File is container if directly under L3 (L4)
+        return current_depth == l3_depth
+
+
+def parse_links_content(content: str) -> Dict[str, Any]:
+    """
+    Parse links.txt content to extract URLs.
+    
+    Rules:
+    - Valid URL: starts with http:// or https://
+    - Ignore blank lines
+    - Ignore comment lines (starting with #)
+    """
+    lines = content.strip().split('\n') if content else []
+    valid_urls = []
+    
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        if line.startswith('http://') or line.startswith('https://'):
+            valid_urls.append(line)
+    
+    count = len(valid_urls)
+    return {
+        'valid_link_count': count,
+        'is_placeholder': count == 0,
+        'resource_count': count,  # Each valid URL is 1 resource
+        'urls': valid_urls
+    }
+
+
+def import_from_zip(zip_path: str) -> Dict[str, Any]:
+    """
+    Import containers from a ZIP file.
+    
+    Only imports leaf containers (files/folders/links.txt under L3).
+    Structural folders are NOT stored.
+    
+    Returns import statistics.
+    """
+    results = {
+        'new_containers': 0,
+        'updated_containers': 0,
+        'skipped': 0,
+        'errors': [],
+    }
+    
+    with zipfile.ZipFile(zip_path, 'r') as zf:
+        entries = zf.namelist()
+        
+        # Identify containers
+        for entry in entries:
+            # Skip root folder entry
+            if not entry or entry.endswith('/') and entry.count('/') <= 1:
+                continue
+            
+            is_folder = entry.endswith('/')
+            path = entry.rstrip('/')
+            filename = Path(path).name
+            
+            # Get relative path (strip root folder)
+            parts = path.split('/')
+            if len(parts) <= 1:
+                continue
+            relative_path = '/'.join(parts[1:])  # Skip root folder
+            
+            # Determine container type and check if leaf
+            if filename.lower() == "links.txt":
+                container_type = "links"
+            elif is_folder:
+                container_type = "folder"
+            else:
+                container_type = "file"
+            
+            # Check if this is a leaf container
+            parent_path = '/'.join(parts[1:-1]) if not is_folder else relative_path.rstrip('/')
+            
+            if not is_leaf_container(parent_path if container_type != "folder" else relative_path, 
+                                      is_folder, filename):
+                results['skipped'] += 1
+                continue
+            
+            # Parse path for metadata
+            parsed = parse_path(parent_path if container_type != "folder" else relative_path.rstrip('/'))
+            
+            # For links.txt, parse content
+            resource_count = 1
+            valid_link_count = 0
+            is_placeholder = False
+            
+            if container_type == "links":
+                try:
+                    content = zf.read(entry).decode('utf-8', errors='ignore')
+                    links_data = parse_links_content(content)
+                    valid_link_count = links_data['valid_link_count']
+                    is_placeholder = links_data['is_placeholder']
+                    resource_count = links_data['resource_count']
+                except Exception as e:
+                    results['errors'].append(f"Error reading {entry}: {e}")
+                    is_placeholder = True
+                    resource_count = 0
+            
+            # Generate deterministic key
+            container_key = make_container_key(
+                relative_path=relative_path,
+                container_type=container_type
+            )
+            
+            # Upsert container
+            is_new = upsert_container(
+                container_key=container_key,
+                relative_path=relative_path,
+                container_type=container_type,
+                bucket=parsed['bucket'],
+                primary_department=parsed['primary_department'],
+                sub_department=parsed['sub_department'],
+                training_type=parsed['training_type'],
+                display_name=filename,
+                resource_count=resource_count,
+                valid_link_count=valid_link_count,
+                is_placeholder=is_placeholder,
+                source="zip"
+            )
+            
+            if is_new:
+                results['new_containers'] += 1
+            else:
+                results['updated_containers'] += 1
+    
+    return results
+
+
+def import_from_folder(root_dir: str) -> Dict[str, Any]:
+    """
+    Import containers from a local folder (temporary SharePoint source of truth).
+    
+    Mirrors import_from_zip behavior exactly:
+    - Only imports leaf containers (files/folders/links.txt under L3)
+    - Structural folders are NOT stored
+    - Idempotent: upserts metadata, never overwrites scrub/invest fields
+    
+    RECONCILIATION: After scan, archives any resource not seen in this sync.
+    
+    Args:
+        root_dir: Path to the Payroc Training Catalogue folder
+        
+    Returns:
+        Import statistics dict with new_containers, updated_containers, skipped, errors, archived
+    """
+    import os
+    from datetime import datetime
+    from db import get_active_resource_count, archive_stale_resources, record_sync_run, upsert_department
+    
+    # Record sync start time (all upserts use this as last_seen)
+    sync_started_at = datetime.utcnow().isoformat()
+    active_before = get_active_resource_count()
+    
+    # Track discovered departments for upsert
+    discovered_departments = set()
+    
+    results = {
+        'new_containers': 0,
+        'updated_containers': 0,
+        'skipped': 0,
+        'errors': [],
+        'archived': 0,
+    }
+    
+    root_path = Path(root_dir).resolve()
+    
+    if not root_path.exists():
+        results['errors'].append(f"Folder not found: {root_dir}")
+        return results
+    
+    if not root_path.is_dir():
+        results['errors'].append(f"Not a directory: {root_dir}")
+        return results
+    
+    # Walk the directory tree
+    for dirpath, dirnames, filenames in os.walk(root_path):
+        current_path = Path(dirpath)
+        
+        # Compute relative path from root
+        try:
+            rel_path = current_path.relative_to(root_path)
+            relative_path = str(rel_path).replace("\\", "/")
+        except ValueError:
+            # Path traversal guard - skip if outside root
+            results['errors'].append(f"Path traversal detected: {dirpath}")
+            continue
+        
+        # Skip the root folder itself
+        if relative_path == ".":
+            continue
+        
+        # Process files in this directory
+        for filename in filenames:
+            # OS artifact exclusion (before any other logic)
+            if filename.lower() in EXCLUDED_FILENAMES:
+                continue
+            
+            file_path = current_path / filename
+            file_relative = f"{relative_path}/{filename}" if relative_path else filename
+            
+            # Get parent path for leaf detection
+            parent_path = relative_path
+            
+            # Check if this is a leaf container
+            if not is_leaf_container(parent_path, False, filename):
+                results['skipped'] += 1
+                continue
+            
+            # Parse path for metadata
+            parsed = parse_path(parent_path)
+            
+            # Collect department for departments table
+            if parsed.get('primary_department'):
+                discovered_departments.add(parsed['primary_department'])
+            
+            # Handle links.txt specially - expand into individual link records
+            if filename.lower() == "links.txt":
+                try:
+                    content = file_path.read_text(encoding='utf-8', errors='ignore')
+                    links_data = parse_links_content(content)
+                    urls = links_data.get('urls', [])
+                    
+                    # Create individual record for each URL
+                    for url in urls:
+                        # Generate unique relative_path for display/hierarchy
+                        url_hash = hashlib.sha256(url.encode()).hexdigest()[:8]
+                        link_relative_path = f"{parent_path}/links.txt#{url_hash}"
+                        
+                        # Generate deterministic key from full string (no collision risk)
+                        key_source = f"{parent_path}|{url}|link"
+                        container_key = hashlib.sha256(key_source.encode()).hexdigest()[:16]
+                        
+                        is_new = upsert_container(
+                            container_key=container_key,
+                            relative_path=link_relative_path,
+                            container_type="link",
+                            bucket=parsed['bucket'],
+                            primary_department=parsed['primary_department'],
+                            sub_department=parsed['sub_department'],
+                            training_type=parsed['training_type'],
+                            display_name=url,
+                            web_url=url,
+                            resource_count=1,
+                            valid_link_count=1,
+                            is_placeholder=False,
+                            source="folder",
+                            last_seen_override=sync_started_at
+                        )
+                        
+                        if is_new:
+                            results['new_containers'] += 1
+                        else:
+                            results['updated_containers'] += 1
+                    
+                    # If no valid URLs, skip (no placeholder record for empty links.txt)
+                    if not urls:
+                        results['skipped'] += 1
+                        
+                except Exception as e:
+                    results['errors'].append(f"Error reading {file_relative}: {e}")
+                
+                continue  # links.txt itself produces no row
+            
+            # Regular file handling (non-links.txt)
+            container_type = "file"
+            
+            # Count contents for ZIP files (archives are like folders)
+            contents_count = 0
+            if filename.lower().endswith('.zip'):
+                try:
+                    import zipfile
+                    with zipfile.ZipFile(file_path, 'r') as zf:
+                        # Count only files, not directories
+                        contents_count = sum(1 for info in zf.infolist() if not info.is_dir())
+                except Exception:
+                    contents_count = 0  # Fallback if ZIP is corrupted/unreadable
+            
+            # Generate deterministic key
+            container_key = make_container_key(
+                relative_path=file_relative,
+                container_type=container_type
+            )
+            
+            # Upsert container
+            is_new = upsert_container(
+                container_key=container_key,
+                relative_path=file_relative,
+                container_type=container_type,
+                bucket=parsed['bucket'],
+                primary_department=parsed['primary_department'],
+                sub_department=parsed['sub_department'],
+                training_type=parsed['training_type'],
+                display_name=filename,
+                resource_count=1,
+                valid_link_count=0,
+                contents_count=contents_count,
+                is_placeholder=False,
+                source="folder",
+                last_seen_override=sync_started_at
+            )
+            
+            if is_new:
+                results['new_containers'] += 1
+            else:
+                results['updated_containers'] += 1
+        
+        # Process subdirectories as potential folder containers
+        for dirname in dirnames:
+            dir_full_path = current_path / dirname
+            dir_relative = f"{relative_path}/{dirname}" if relative_path else dirname
+            
+            # Check if this folder is a leaf container (L3+1 depth)
+            if not is_leaf_container(dir_relative, True, dirname):
+                continue  # It's a structural folder, not a container
+            
+            # Parse path for metadata
+            parsed = parse_path(dir_relative)
+            
+            # Collect department for departments table
+            if parsed.get('primary_department'):
+                discovered_departments.add(parsed['primary_department'])
+            
+            # Count files inside this folder for contents_count (informational only)
+            folder_contents = sum(1 for item in dir_full_path.iterdir() if item.is_file())
+            
+            # Generate deterministic key
+            container_key = make_container_key(
+                relative_path=dir_relative,
+                container_type="folder"
+            )
+            
+            # Upsert container with contents_count
+            is_new = upsert_container(
+                container_key=container_key,
+                relative_path=dir_relative,
+                container_type="folder",
+                bucket=parsed['bucket'],
+                primary_department=parsed['primary_department'],
+                sub_department=parsed['sub_department'],
+                training_type=parsed['training_type'],
+                display_name=dirname,
+                resource_count=1,
+                valid_link_count=0,
+                contents_count=folder_contents,
+                is_placeholder=False,
+                source="folder",
+                last_seen_override=sync_started_at
+            )
+            
+            if is_new:
+                results['new_containers'] += 1
+            else:
+                results['updated_containers'] += 1
+    
+    # -------------------------------------------------------------------------
+    # DEPARTMENT DISCOVERY: Upsert all discovered departments
+    # -------------------------------------------------------------------------
+    for dept in discovered_departments:
+        upsert_department(dept, sync_started_at)
+    
+    # -------------------------------------------------------------------------
+    # RECONCILIATION: Archive stale resources after scan completes
+    # -------------------------------------------------------------------------
+    archived_count = archive_stale_resources(sync_started_at)
+    results['archived'] = archived_count
+    
+    # Record sync run for CFO metrics
+    active_after = get_active_resource_count()
+    record_sync_run(
+        started_at=sync_started_at,
+        finished_at=datetime.utcnow().isoformat(),
+        source="local_folder",
+        active_total_before=active_before,
+        added_count=results['new_containers'],
+        archived_count=archived_count,
+        active_total_after=active_after
+    )
+    
+    return results
+
+
+def get_tree_structure() -> Dict[str, Any]:
+    """
+    Build virtual tree structure from container paths.
+    Tree nodes are derived (not stored), only active containers are included.
+    """
+    from db import get_active_containers
+    containers = get_active_containers()
+    
+    tree = {}
+    
+    for container in containers:
+        path = container['relative_path']
+        parts = path.replace("\\", "/").strip("/").split("/")
+        
+        # Build tree nodes
+        current = tree
+        for i, part in enumerate(parts[:-1]):  # All but last (the container itself)
+            if part not in current:
+                current[part] = {"_children": {}, "_is_folder": True}
+            current = current[part]["_children"]
+        
+        # Add container as leaf
+        leaf_name = parts[-1]
+        current[leaf_name] = {
+            "_container": container,
+            "_is_folder": container['container_type'] == 'folder',
+        }
+    
+    return tree
