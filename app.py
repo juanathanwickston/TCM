@@ -16,7 +16,7 @@ load_dotenv()
 from components.font_loader import inject_custom_fonts
 from components.styles import inject_global_styles
 from components.sidebar_router import render_sidebar
-from db import init_db
+from db import init_db, reset_query_counter, log_rerun_stats
 from services.auth_service import get_authenticator
 
 # Import view modules
@@ -79,13 +79,21 @@ except Exception as e:
 # =============================================================================
 # AUTHENTICATED APP
 # =============================================================================
-st.sidebar.write(f"Welcome, {name}")
-authenticator.logout("Logout", "sidebar")
 
-# Render sidebar (mode toggle + nav/assistant routing)
-render_sidebar(PAGES)
+# Reset instrumentation counters at start of every rerun (before any DB calls)
+reset_query_counter()
 
-# Render active page
-active = st.session_state.get("active_page", "dashboard")
-page_module = PAGES.get(active, dashboard)
-page_module.render()
+try:
+    st.sidebar.write(f"Welcome, {name}")
+    authenticator.logout("Logout", "sidebar")
+
+    # Render sidebar (mode toggle + nav/assistant routing)
+    render_sidebar(PAGES)
+
+    # Render active page
+    active = st.session_state.get("active_page", "dashboard")
+    page_module = PAGES.get(active, dashboard)
+    page_module.render()
+finally:
+    # Always log stats, even on error
+    log_rerun_stats()
