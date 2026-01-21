@@ -137,13 +137,6 @@ def inject_global_styles():
         border-radius: 0 2px 2px 0 !important;
     }
     
-
-        border: 1px solid rgba(0, 0, 0, 0.06);
-        border-radius: 12px;
-        padding: 16px;
-        margin-top: 16px;
-    }
-    
     /* =========================================================================
        SCRUBBING: Button Color Semantics (CRITICAL)
        ========================================================================= */
