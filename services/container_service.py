@@ -591,6 +591,10 @@ def import_from_folder(root_dir: str) -> Dict[str, Any]:
         active_total_after=active_after
     )
     
+    # Clear reference data cache after sync
+    from db import clear_cache
+    clear_cache()
+    
     return results
 
 
