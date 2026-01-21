@@ -140,7 +140,7 @@ def render():
         border-radius: 0 !important;
         cursor: pointer !important;
         border-left: 3px solid transparent !important;
-        transition: all 0.15s ease !important;
+        transition: background 0.15s ease !important;
     }
     
     section[data-testid="stMain"] div[data-testid="stRadio"] label:hover {
