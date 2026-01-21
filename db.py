@@ -16,19 +16,139 @@ from typing import Optional, List, Dict, Any
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from psycopg2.pool import ThreadedConnectionPool
+import time
+import logging
+import threading
+
+# Configure logging for instrumentation (server-side only)
+_logger = logging.getLogger(__name__)
+_logger.setLevel(logging.INFO)
+if not _logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter('%(asctime)s [%(name)s] %(message)s'))
+    _logger.addHandler(_handler)
+
+# =============================================================================
+# CONNECTION POOL (lazy-initialized singleton)
+# =============================================================================
+_pool: Optional[ThreadedConnectionPool] = None
+_pool_lock = threading.Lock()
+_init_db_done = False
+_init_db_lock = threading.Lock()
+
+# Instrumentation counters (thread-safe)
+_stats_lock = threading.Lock()
+_pool_stats = {
+    "borrows": 0,
+    "returns": 0,
+    "exhaustions": 0,
+    "discards": 0,
+    "queries_this_rerun": 0,
+}
+
+
+def _get_pool() -> ThreadedConnectionPool:
+    """
+    Lazy-initialize and return the connection pool.
+    Called on first DB access, not on import.
+    """
+    global _pool
+    if _pool is not None:
+        return _pool
+    
+    with _pool_lock:
+        # Double-check inside lock
+        if _pool is not None:
+            return _pool
+        
+        url = os.environ.get("DATABASE_URL")
+        if not url:
+            raise RuntimeError("DATABASE_URL not set. Cannot proceed.")
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        
+        _pool = ThreadedConnectionPool(
+            minconn=2,
+            maxconn=10,
+            dsn=url,
+            cursor_factory=RealDictCursor
+        )
+        _logger.info("Connection pool initialized (min=2, max=10)")
+        return _pool
 
 
 def get_connection():
     """
-    Get a PostgreSQL database connection.
-    Fails closed if DATABASE_URL is not set.
+    Get a connection from the pool with 2s max wait on exhaustion.
+    Returns a pooled connection. Caller MUST return via return_connection().
     """
-    url = os.environ.get("DATABASE_URL")
-    if not url:
-        raise RuntimeError("DATABASE_URL not set. Cannot proceed.")
-    if url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql://", 1)
-    return psycopg2.connect(url, cursor_factory=RealDictCursor)
+    pool = _get_pool()
+    
+    # Explicit 2s wait with retries (pool.getconn can block or raise)
+    start = time.time()
+    max_wait = 2.0
+    attempt = 0
+    
+    while True:
+        try:
+            conn = pool.getconn()
+            with _stats_lock:
+                _pool_stats["borrows"] += 1
+            return conn
+        except psycopg2.pool.PoolError:
+            elapsed = time.time() - start
+            if elapsed >= max_wait:
+                with _stats_lock:
+                    _pool_stats["exhaustions"] += 1
+                _logger.warning(f"Pool exhaustion after {elapsed:.2f}s")
+                raise RuntimeError("DB pool exhausted. Please retry.")
+            # Brief sleep before retry
+            time.sleep(0.1)
+            attempt += 1
+
+
+def return_connection(conn, healthy: bool = True):
+    """
+    Return a connection to the pool.
+    If unhealthy (connection error occurred), discard it.
+    """
+    pool = _get_pool()
+    try:
+        if healthy:
+            pool.putconn(conn)
+            with _stats_lock:
+                _pool_stats["returns"] += 1
+        else:
+            # Discard poisoned connection
+            pool.putconn(conn, close=True)
+            with _stats_lock:
+                _pool_stats["discards"] += 1
+            _logger.info("Discarded unhealthy connection")
+    except Exception as e:
+        _logger.warning(f"Error returning connection: {e}")
+
+
+def get_pool_stats() -> Dict[str, int]:
+    """Return current pool instrumentation stats."""
+    with _stats_lock:
+        return dict(_pool_stats)
+
+
+def reset_query_counter():
+    """Reset the per-rerun query counter. Call at start of each Streamlit rerun."""
+    with _stats_lock:
+        _pool_stats["queries_this_rerun"] = 0
+
+
+def log_rerun_stats():
+    """Log stats for this rerun. Call at end of page render."""
+    with _stats_lock:
+        _logger.info(
+            f"Rerun stats: queries={_pool_stats['queries_this_rerun']}, "
+            f"borrows={_pool_stats['borrows']}, returns={_pool_stats['returns']}, "
+            f"exhaustions={_pool_stats['exhaustions']}, discards={_pool_stats['discards']}"
+        )
 
 
 def adapt_query(sql: str) -> str:
@@ -150,15 +270,20 @@ def is_write(sql: str) -> bool:
 
 def execute(sql: str, params=None, *, fetch="none"):
     """
-    Central DB executor.
+    Central DB executor using connection pool.
     - fetch: "none" | "one" | "all"
     - Commits only on writes
-    - Closes cursor and connection properly
+    - Always returns connection to pool
+    - Discards connection on connection-level errors
     """
     conn = get_connection()
+    healthy = True
     try:
         with conn.cursor() as cursor:
             cursor.execute(adapt_query(sql), params or ())
+            # Increment query counter
+            with _stats_lock:
+                _pool_stats["queries_this_rerun"] += 1
             if fetch == "one":
                 result = cursor.fetchone()
             elif fetch == "all":
@@ -168,8 +293,18 @@ def execute(sql: str, params=None, *, fetch="none"):
             if is_write(sql):
                 conn.commit()
             return result
+    except psycopg2.OperationalError as e:
+        # Connection-level error - mark as unhealthy
+        healthy = False
+        _logger.error(f"Connection error: {e}")
+        raise
+    except psycopg2.InterfaceError as e:
+        # Connection-level error - mark as unhealthy
+        healthy = False
+        _logger.error(f"Interface error: {e}")
+        raise
     finally:
-        conn.close()
+        return_connection(conn, healthy=healthy)
 
 
 def make_container_key(
@@ -192,9 +327,24 @@ def init_db() -> None:
     Initialize database schema (PostgreSQL).
     Creates tables if missing, runs migrations.
     Does NOT import content (that's explicit via Tools page).
+    
+    Guarded: runs only once per server process.
     """
-    conn = get_connection()
-    try:
+    global _init_db_done
+    
+    # Guard: run only once per process
+    if _init_db_done:
+        return
+    
+    with _init_db_lock:
+        # Double-check inside lock
+        if _init_db_done:
+            return
+        
+        _logger.info("init_db() starting (first run this process)")
+        
+        conn = get_connection()
+        try:
         with conn.cursor() as cursor:
             # Resource containers table
             cursor.execute("""
@@ -364,8 +514,11 @@ def init_db() -> None:
             """)
             
         conn.commit()
+        _logger.info("init_db() completed successfully")
     finally:
-        conn.close()
+        return_connection(conn)
+    
+    _init_db_done = True
 
 
 # -----------------------------------------------------------------------------
@@ -579,7 +732,7 @@ def update_audience_bulk(container_keys: list, audience: str) -> int:
             conn.commit()
             return count
     finally:
-        conn.close()
+        return_connection(conn)
 
 
 def update_scrub_batch(updates: dict) -> int:
@@ -634,7 +787,7 @@ def update_scrub_batch(updates: dict) -> int:
             
             conn.commit()
     finally:
-        conn.close()
+        return_connection(conn)
     return total_updated
 
 
@@ -721,7 +874,7 @@ def get_resource_totals(departments: List[str] = None) -> Dict[str, Any]:
             """)
             invest = cursor.fetchone()
     finally:
-        conn.close()
+        return_connection(conn)
     
     return {
         'onboarding': bucket_totals.get('onboarding', 0) or 0,
@@ -782,7 +935,7 @@ def archive_stale_resources(sync_started_at: str) -> int:
             conn.commit()
             return archived_count
     finally:
-        conn.close()
+        return_connection(conn)
 
 
 def record_sync_run(
@@ -1054,7 +1207,7 @@ def run_audience_migration() -> Dict[str, Any]:
             
             conn.commit()
     finally:
-        conn.close()
+        return_connection(conn)
     
     return {
         'diagnostics': diagnostics,
