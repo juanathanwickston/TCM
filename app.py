@@ -81,8 +81,7 @@ except Exception as e:
 # =============================================================================
 
 import time
-import logging
-_app_logger = logging.getLogger("app")
+from db import _logger as db_logger  # Use same logger that shows in Railway
 
 # Wall-clock start (local to this rerun execution scope)
 _rerun_start = time.time()
@@ -104,7 +103,7 @@ try:
     page_start = time.time()
     page_module.render()
     page_ms = (time.time() - page_start) * 1000
-    _app_logger.info(f"PAGE TIMING: {active}={page_ms:.0f}ms")
+    db_logger.info(f"PAGE TIMING: {active}={page_ms:.0f}ms")
 finally:
     # Always log stats, even on error
     total_ms = (time.time() - _rerun_start) * 1000

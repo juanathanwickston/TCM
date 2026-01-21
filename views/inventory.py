@@ -14,7 +14,8 @@ from db import (
     get_active_containers_filtered,
     get_active_departments,
     get_active_training_types,
-    update_audience_bulk
+    update_audience_bulk,
+    _logger as db_logger
 )
 from services.container_service import import_from_zip, TRAINING_TYPE_LABELS
 from services.sales_stage import SALES_STAGES, SALES_STAGE_LABELS
@@ -314,6 +315,9 @@ def render():
         orig_map = {row["container_key"]: norm(row["Audience"]) for _, row in display_df.iterrows()}
         
         st.markdown("---")
+        
+        # Log table size for performance profiling
+        db_logger.info(f"TABLE: inventory_rows={len(display_df)} cols={len(display_df.columns)}")
         
         edited_df = st.data_editor(
             display_df,
