@@ -334,6 +334,10 @@ def import_from_zip(zip_path: str) -> Dict[str, Any]:
             else:
                 results['updated_containers'] += 1
     
+    # Clear reference data cache after sync
+    from db import clear_cache
+    clear_cache()
+    
     return results
 
 

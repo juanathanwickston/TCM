@@ -47,6 +47,89 @@ _pool_stats = {
     "queries_this_rerun": 0,
 }
 
+# =============================================================================
+# TTL CACHE (for reference data)
+# =============================================================================
+_cache: Dict[str, Any] = {}
+_cache_expiry: Dict[str, float] = {}
+_cache_lock = threading.Lock()
+_CACHE_MAX_SIZE = 100  # Prevent unbounded growth
+
+
+def _make_cache_key(func_name: str, args: tuple, kwargs: dict) -> str:
+    """Create a safe, hashable cache key from function call."""
+    # Convert args/kwargs to string representation (safe for unhashables)
+    try:
+        key_parts = [func_name, repr(args), repr(sorted(kwargs.items()))]
+    except Exception:
+        # Fallback if repr fails
+        key_parts = [func_name, str(id(args)), str(id(kwargs))]
+    return "|".join(key_parts)
+
+
+def _purge_expired_cache():
+    """Remove expired entries from cache. Called periodically."""
+    now = time.time()
+    expired_keys = [k for k, exp in _cache_expiry.items() if exp <= now]
+    for k in expired_keys:
+        _cache.pop(k, None)
+        _cache_expiry.pop(k, None)
+    if expired_keys:
+        _logger.debug(f"Purged {len(expired_keys)} expired cache entries")
+
+
+def clear_cache():
+    """Clear all cached data. Call after Sync or data-changing operations."""
+    with _cache_lock:
+        _cache.clear()
+        _cache_expiry.clear()
+    _logger.info("Reference data cache cleared")
+
+
+def cached(ttl_seconds: int = 30):
+    """
+    TTL cache decorator for read-only DB functions.
+    - Safe for unhashable args
+    - Clears expired entries on each call
+    - Bounded size
+    """
+    import functools
+    
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            key = _make_cache_key(func.__name__, args, kwargs)
+            now = time.time()
+            
+            with _cache_lock:
+                # Purge expired entries occasionally
+                if len(_cache) > 10:
+                    _purge_expired_cache()
+                
+                # Check cache hit
+                if key in _cache and _cache_expiry.get(key, 0) > now:
+                    return _cache[key]
+                
+                # Prevent unbounded growth
+                if len(_cache) >= _CACHE_MAX_SIZE:
+                    _purge_expired_cache()
+                    if len(_cache) >= _CACHE_MAX_SIZE:
+                        # Force clear oldest entries
+                        oldest = sorted(_cache_expiry.items(), key=lambda x: x[1])[:10]
+                        for k, _ in oldest:
+                            _cache.pop(k, None)
+                            _cache_expiry.pop(k, None)
+            
+            # Execute function (outside lock)
+            result = func(*args, **kwargs)
+            
+            with _cache_lock:
+                _cache[key] = result
+                _cache_expiry[key] = now + ttl_seconds
+            
+            return result
+        return wrapper
+    return decorator
 
 def _get_pool() -> ThreadedConnectionPool:
     """
@@ -1018,6 +1101,7 @@ def get_active_containers_filtered(
     return [dict(row) for row in rows] if rows else []
 
 
+@cached(30)
 def get_active_departments() -> List[str]:
     """
     Get distinct departments from active, non-placeholder containers.
@@ -1035,6 +1119,7 @@ def get_active_departments() -> List[str]:
     return [row['primary_department'] for row in rows] if rows else []
 
 
+@cached(30)
 def get_active_training_types(primary_department: str = None) -> List[str]:
     """
     Get distinct training types from active, non-placeholder containers.
