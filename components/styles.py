@@ -28,6 +28,17 @@ def inject_global_styles():
         padding-bottom: 0px !important;
     }
     
+    /* LAYOUT STABILITY: Prevent sidebar resize from causing main content reflow */
+    .stApp > .main {
+        contain: layout style;
+        overflow-x: hidden;
+    }
+    
+    /* Prevent scrollbar-induced layout shift */
+    html {
+        overflow-y: scroll;
+    }
+    
     /* Hide Streamlit's default header bar */
     .stApp > header {
         display: none !important;
