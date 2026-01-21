@@ -114,7 +114,7 @@ def search_containers(query: str, folder_path: str = None) -> List[Dict[str, Any
 
 def get_bucket_summary() -> List[Dict[str, Any]]:
     """Get summary of containers by bucket."""
-    from db import get_connection
+    from db import get_connection, return_connection
     
     conn = get_connection()
     cursor = conn.cursor()
@@ -130,6 +130,6 @@ def get_bucket_summary() -> List[Dict[str, Any]]:
     """)
     
     rows = cursor.fetchall()
-    conn.close()
+    return_connection(conn)
     
     return [dict(row) for row in rows]

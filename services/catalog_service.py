@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from db import get_connection
+from db import get_connection, return_connection
 from models.enums import ScrubStatus, SourceType
 
 
@@ -19,7 +19,7 @@ def get_all_items() -> List[Dict[str, Any]]:
         "SELECT * FROM catalog_items ORDER BY department, bucket, functional_area"
     )
     rows = cursor.fetchall()
-    conn.close()
+    return_connection(conn)
     return [dict(row) for row in rows]
 
 
@@ -33,7 +33,7 @@ def get_items_by_scrub_status(statuses: List[str]) -> List[Dict[str, Any]]:
         statuses
     )
     rows = cursor.fetchall()
-    conn.close()
+    return_connection(conn)
     return [dict(row) for row in rows]
 
 
@@ -71,7 +71,7 @@ def add_manual_item(
     ))
     
     conn.commit()
-    conn.close()
+    return_connection(conn)
     return item_id
 
 
@@ -93,7 +93,7 @@ def update_scrub_status(
     """, (status, owner, notes, now, item_id))
     
     conn.commit()
-    conn.close()
+    return_connection(conn)
 
 
 def update_investment(
@@ -116,7 +116,7 @@ def update_investment(
     """, (decision, owner, effort, notes, now, item_id))
     
     conn.commit()
-    conn.close()
+    return_connection(conn)
 
 
 def get_departments() -> List[str]:
@@ -125,5 +125,5 @@ def get_departments() -> List[str]:
     cursor = conn.cursor()
     cursor.execute("SELECT DISTINCT department FROM catalog_items ORDER BY department")
     rows = cursor.fetchall()
-    conn.close()
+    return_connection(conn)
     return [row['department'] for row in rows]

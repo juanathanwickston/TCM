@@ -11,7 +11,7 @@ Do not compute KPIs in the UI layer.
 """
 
 from typing import Dict, List, Any, Optional
-from db import get_connection
+from db import get_connection, return_connection
 
 
 # =============================================================================
@@ -28,7 +28,7 @@ def get_total_active_resources() -> int:
         WHERE is_archived = 0 AND is_placeholder = 0
     """)
     result = cursor.fetchone()['total']
-    conn.close()
+    return_connection(conn)
     return result
 
 
@@ -69,7 +69,7 @@ def get_catalog_trust_score() -> Dict[str, Any]:
     """)
     
     row = cursor.fetchone()
-    conn.close()
+    return_connection(conn)
     
     return {
         'trusted_resources': row['trusted_resources'],
@@ -95,7 +95,7 @@ def get_unreviewed_exposure() -> int:
     """)
     
     result = cursor.fetchone()['unreviewed_exposure']
-    conn.close()
+    return_connection(conn)
     return result
 
 
@@ -172,7 +172,7 @@ def get_decision_latency_days() -> Optional[int]:
     """)
     
     row = cursor.fetchone()
-    conn.close()
+    return_connection(conn)
     
     if row is None:
         return None
@@ -215,7 +215,7 @@ def get_audience_coverage() -> Dict[str, Any]:
     """)
     
     row = cursor.fetchone()
-    conn.close()
+    return_connection(conn)
     
     return {
         'assigned_resources': row['assigned_resources'],
@@ -271,7 +271,7 @@ def get_audience_coverage_gaps() -> List[Dict[str, Any]]:
         }
         for row in cursor.fetchall()
     ]
-    conn.close()
+    return_connection(conn)
     return results
 
 
@@ -303,7 +303,7 @@ def get_investment_ready_inventory() -> Dict[str, int]:
     """)
     
     row = cursor.fetchone()
-    conn.close()
+    return_connection(conn)
     
     return {
         'containers': row['containers'],
@@ -354,7 +354,7 @@ def get_largest_unreviewed_buckets(limit: int = 10) -> List[Dict[str, Any]]:
         }
         for row in cursor.fetchall()
     ]
-    conn.close()
+    return_connection(conn)
     return results
 
 
@@ -397,7 +397,7 @@ def get_top_investment_ready_resources(limit: int = 5) -> List[Dict[str, Any]]:
         }
         for row in cursor.fetchall()
     ]
-    conn.close()
+    return_connection(conn)
     return results
 
 
@@ -439,7 +439,7 @@ def get_resources_reviewed() -> Dict[str, Any]:
     """)
     
     row = cursor.fetchone()
-    conn.close()
+    return_connection(conn)
     
     return {
         'reviewed_resources': row['reviewed_resources'],
@@ -480,7 +480,7 @@ def get_resources_decisioned() -> Dict[str, Any]:
     """)
     
     row = cursor.fetchone()
-    conn.close()
+    return_connection(conn)
     
     return {
         'decisioned_resources': row['decisioned_resources'],
@@ -513,7 +513,7 @@ def get_submission_summary() -> Dict[str, Any]:
     """)
     
     row = cursor.fetchone()
-    conn.close()
+    return_connection(conn)
     
     total = row['total'] or 0
     onboarding = row['onboarding'] or 0
@@ -548,7 +548,7 @@ def get_scrub_status_breakdown() -> Dict[str, Any]:
     """)
     
     row = cursor.fetchone()
-    conn.close()
+    return_connection(conn)
     
     total = row['total'] or 0
     sunset = row['sunset'] or 0
@@ -590,7 +590,7 @@ def get_source_breakdown() -> List[Dict[str, Any]]:
     """)
     
     rows = cursor.fetchall()
-    conn.close()
+    return_connection(conn)
     
     total = sum(r['count'] for r in rows) or 1
     return [{'source': r['source'], 'count': r['count'], 'pct': r['count'] / total * 100} for r in rows]
@@ -616,7 +616,7 @@ def get_training_type_breakdown() -> List[Dict[str, Any]]:
     """)
     
     rows = cursor.fetchall()
-    conn.close()
+    return_connection(conn)
     
     total = sum(r['count'] for r in rows) or 1
     return [{'type': r['type'], 'count': r['count'], 'pct': r['count'] / total * 100} for r in rows]
