@@ -55,7 +55,7 @@ except RuntimeError as e:
     st.error(f"Authentication configuration error: {e}")
     st.stop()
 
-name, auth_status, username = authenticator.login("Login", "main")
+name, auth_status, username = authenticator.login(location="main")
 
 if auth_status is False:
     st.error("Invalid credentials")
