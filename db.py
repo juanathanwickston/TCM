@@ -92,6 +92,7 @@ def cached(ttl_seconds: int = 30):
     - Safe for unhashable args
     - Clears expired entries on each call
     - Bounded size
+    - Tracks hits/misses
     """
     import functools
     
@@ -108,6 +109,8 @@ def cached(ttl_seconds: int = 30):
                 
                 # Check cache hit
                 if key in _cache and _cache_expiry.get(key, 0) > now:
+                    with _stats_lock:
+                        _pool_stats["cache_hits"] = _pool_stats.get("cache_hits", 0) + 1
                     return _cache[key]
                 
                 # Prevent unbounded growth
@@ -120,7 +123,9 @@ def cached(ttl_seconds: int = 30):
                             _cache.pop(k, None)
                             _cache_expiry.pop(k, None)
             
-            # Execute function (outside lock)
+            # Cache miss - execute function (outside lock)
+            with _stats_lock:
+                _pool_stats["cache_misses"] = _pool_stats.get("cache_misses", 0) + 1
             result = func(*args, **kwargs)
             
             with _cache_lock:
@@ -130,6 +135,7 @@ def cached(ttl_seconds: int = 30):
             return result
         return wrapper
     return decorator
+
 
 def _get_pool() -> ThreadedConnectionPool:
     """
@@ -219,18 +225,24 @@ def get_pool_stats() -> Dict[str, int]:
 
 
 def reset_query_counter():
-    """Reset the per-rerun query counter. Call at start of each Streamlit rerun."""
+    """Reset the per-rerun counters. Call at start of each Streamlit rerun."""
     with _stats_lock:
         _pool_stats["queries_this_rerun"] = 0
+        _pool_stats["total_db_time_ms"] = 0
+        _pool_stats["cache_hits"] = 0
+        _pool_stats["cache_misses"] = 0
 
 
 def log_rerun_stats():
     """Log stats for this rerun. Call at end of page render."""
     with _stats_lock:
+        db_time = _pool_stats.get('total_db_time_ms', 0)
+        cache_hits = _pool_stats.get('cache_hits', 0)
+        cache_misses = _pool_stats.get('cache_misses', 0)
         _logger.info(
-            f"Rerun stats: queries={_pool_stats['queries_this_rerun']}, "
-            f"borrows={_pool_stats['borrows']}, returns={_pool_stats['returns']}, "
-            f"exhaustions={_pool_stats['exhaustions']}, discards={_pool_stats['discards']}"
+            f"RERUN STATS: queries={_pool_stats['queries_this_rerun']}, "
+            f"db_time={db_time:.0f}ms, cache_hits={cache_hits}, cache_misses={cache_misses}, "
+            f"pool_borrows={_pool_stats['borrows']}, exhaustions={_pool_stats['exhaustions']}"
         )
 
 
@@ -359,22 +371,35 @@ def execute(sql: str, params=None, *, fetch="none"):
     - Always returns connection to pool
     - Discards connection on connection-level errors
     """
+    query_start = time.time()
     conn = get_connection()
     healthy = True
+    row_count = 0
     try:
         with conn.cursor() as cursor:
             cursor.execute(adapt_query(sql), params or ())
-            # Increment query counter
-            with _stats_lock:
-                _pool_stats["queries_this_rerun"] += 1
             if fetch == "one":
                 result = cursor.fetchone()
+                row_count = 1 if result else 0
             elif fetch == "all":
                 result = cursor.fetchall()
+                row_count = len(result) if result else 0
             else:
                 result = None
             if is_write(sql):
                 conn.commit()
+            
+            # Timing and counters
+            elapsed_ms = (time.time() - query_start) * 1000
+            with _stats_lock:
+                _pool_stats["queries_this_rerun"] += 1
+                _pool_stats["total_db_time_ms"] = _pool_stats.get("total_db_time_ms", 0) + elapsed_ms
+            
+            # Log slow queries (>100ms)
+            if elapsed_ms > 100:
+                query_preview = sql.strip()[:80].replace('\n', ' ')
+                _logger.warning(f"SLOW QUERY ({elapsed_ms:.0f}ms, {row_count} rows): {query_preview}...")
+            
             return result
     except psycopg2.OperationalError as e:
         # Connection-level error - mark as unhealthy
