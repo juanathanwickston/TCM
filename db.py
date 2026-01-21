@@ -231,18 +231,19 @@ def reset_query_counter():
         _pool_stats["total_db_time_ms"] = 0
         _pool_stats["cache_hits"] = 0
         _pool_stats["cache_misses"] = 0
+        _pool_stats["borrows"] = 0
 
 
-def log_rerun_stats():
+def log_rerun_stats(total_ms: float = 0):
     """Log stats for this rerun. Call at end of page render."""
     with _stats_lock:
         db_time = _pool_stats.get('total_db_time_ms', 0)
         cache_hits = _pool_stats.get('cache_hits', 0)
         cache_misses = _pool_stats.get('cache_misses', 0)
         _logger.info(
-            f"RERUN STATS: queries={_pool_stats['queries_this_rerun']}, "
+            f"RERUN STATS: total={total_ms:.0f}ms, queries={_pool_stats['queries_this_rerun']}, "
             f"db_time={db_time:.0f}ms, cache_hits={cache_hits}, cache_misses={cache_misses}, "
-            f"pool_borrows={_pool_stats['borrows']}, exhaustions={_pool_stats['exhaustions']}"
+            f"pool_borrows={_pool_stats['borrows']}"
         )
 
 

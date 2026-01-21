@@ -80,6 +80,13 @@ except Exception as e:
 # AUTHENTICATED APP
 # =============================================================================
 
+import time
+import logging
+_app_logger = logging.getLogger("app")
+
+# Wall-clock start (local to this rerun execution scope)
+_rerun_start = time.time()
+
 # Reset instrumentation counters at start of every rerun (before any DB calls)
 reset_query_counter()
 
@@ -90,10 +97,15 @@ try:
     # Render sidebar (mode toggle + nav/assistant routing)
     render_sidebar(PAGES)
 
-    # Render active page
+    # Render active page (timed)
     active = st.session_state.get("active_page", "dashboard")
     page_module = PAGES.get(active, dashboard)
+    
+    page_start = time.time()
     page_module.render()
+    page_ms = (time.time() - page_start) * 1000
+    _app_logger.info(f"PAGE TIMING: {active}={page_ms:.0f}ms")
 finally:
     # Always log stats, even on error
-    log_rerun_stats()
+    total_ms = (time.time() - _rerun_start) * 1000
+    log_rerun_stats(total_ms)
