@@ -176,18 +176,7 @@ def render():
         max-width: 1200px !important;
     }
     
-    /* =========================================================================
-       SCRUBBING: Card Sections (bordered containers for visual structure)
-       ========================================================================= */
-    
-    /* Enhanced borders for st.container(border=True) on Scrubbing page */
-    [data-testid="stVerticalBlockBorderWrapper"] {
-        border: 1px solid rgba(0, 0, 0, 0.12) !important;
-        border-radius: 8px !important;
-        background: rgba(0, 0, 0, 0.02) !important;
-        padding: 16px !important;
-        margin-bottom: 12px !important;
-    }
+
     
     /* =========================================================================
        SCRUBBING: Ensure primary button stays GREEN
@@ -305,7 +294,7 @@ def render():
             # =========================
             # ASSET INFO (Card 1)
             # =========================
-            with st.container(border=True):
+            with st.container():
                 st.markdown(f"### {selected.get('display_name', 'Unnamed')}")
                 st.caption(f"{get_display_type(selected)} · {selected.get('relative_path', '')}")
                 
@@ -323,7 +312,7 @@ def render():
             # =========================
             # EDITOR FORM (Card 2)
             # =========================
-            with st.container(border=True):
+            with st.container():
                 # Status dropdown - canonical options only
                 current_status_idx = 0
                 if normalized_status in CANONICAL_SCRUB_STATUSES:

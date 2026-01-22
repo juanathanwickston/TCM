@@ -58,6 +58,18 @@ def inject_global_styles():
     }
     
     /* =========================================================================
+       PAGE FRAME: Layout stability (scoped to prevent global pollution)
+       ========================================================================= */
+    
+    .tcm-page-frame h1 {
+        min-height: 60px;  /* Reserve space for title */
+    }
+    
+    .tcm-page-frame .stCaptionContainer {
+        min-height: 24px;  /* Reserve space for subtitle/caption */
+    }
+    
+    /* =========================================================================
        SIDEBAR: Mode Toggle (Top, Centered, Minimal Black/White)
        ========================================================================= */
     
