@@ -90,11 +90,14 @@ _rerun_start = time.time()
 reset_query_counter()
 
 try:
-    st.sidebar.write(f"Welcome, {name}")
-    authenticator.logout("Logout", "sidebar")
 
     # Render sidebar (mode toggle + nav/assistant routing)
-    render_sidebar(PAGES)
+    render_sidebar(
+        name=name,
+        username=username,
+        authenticator=authenticator,
+        pages=PAGES
+    )
 
     # Render active page (timed)
     active = st.session_state.get("active_page", "dashboard")

@@ -38,27 +38,6 @@ def clear_filters() -> None:
         st.session_state[GLOBAL_FILTER_KEY] = {"departments": []}
 
 
-def render_sidebar_filters(available_departments: List[str]) -> None:
-    """Render global filter controls in sidebar."""
-    init_global_filters(available_departments)
-    
-    st.sidebar.header("Filters")
-    
-    current = get_active_filters()
-    
-    selected = st.sidebar.multiselect(
-        "Departments",
-        options=available_departments,
-        default=current.get("departments", available_departments),
-        help="Filter affects all pages"
-    )
-    
-    set_department_filter(selected)
-    
-    if st.sidebar.button("Clear Filters"):
-        clear_filters()
-        st.rerun()
-
 
 def render_active_filter_pills() -> None:
     """Render active filter pills in content area."""

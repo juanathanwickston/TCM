@@ -235,6 +235,34 @@ def inject_global_styles():
         color: rgba(0, 0, 0, 0.5);
         margin: 4px 0 12px 0;
     }
+    
+    /* =========================================================================
+       SIDEBAR: Single ownership styling
+       ========================================================================= */
+    
+    /* Identity block - wrapper for spacing */
+    .tcm-sidebar-identity {
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Logout area - visually separated */
+    .tcm-sidebar-logout {
+        margin-top: 1rem;
+    }
+    
+    .tcm-sidebar-logout button {
+        width: auto !important;
+        padding: 0.25rem 0.5rem !important;
+        font-size: 1.2rem !important;
+    }
+    
+    /* Navigation - left-aligned */
+    [data-testid="stSidebar"] button[kind="secondary"] {
+        text-align: left !important;
+        justify-content: flex-start !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
