@@ -157,18 +157,9 @@ def render_sidebar(
     init_session_state()
     
     with st.sidebar:
-        # 1. IDENTITY BLOCK (top)
-        st.markdown('''
-        <div class="tcm-sidebar-identity">
-            <p style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; margin: 0 0 0.25rem 0;">SIGNED IN AS</p>
-            <p style="font-size: 1rem; font-weight: 500; color: rgb(49, 51, 63); margin: 0;"><strong>{}</strong></p>
-        </div>
-        '''.format(name), unsafe_allow_html=True)
-        
-        # 2. MODE TOGGLE - at top, centered
+        # MODE TOGGLE - at top, centered
         render_mode_toggle()
         
-        # 3. NAVIGATION - mode-dependent
         if st.session_state.sidebar_mode == "nav":
             # Navigation mode - nav only, no view hooks
             render_navigation()
@@ -176,11 +167,5 @@ def render_sidebar(
         else:
             # Assistant mode
             render_assistant_sidebar()
-        
-        # 4. LOGOUT (after nav, visually separated)
-        st.markdown("---")
-        st.markdown('<div class="tcm-sidebar-logout">', unsafe_allow_html=True)
-        authenticator.logout("🚪", "sidebar", key="logout_btn")
-        st.markdown('</div>', unsafe_allow_html=True)
 
 
