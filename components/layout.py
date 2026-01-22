@@ -24,11 +24,6 @@ def section_divider() -> None:
     st.markdown("---")
 
 
-def page_footer(text: str = "Training Catalogue Manager") -> None:
-    """Render page footer."""
-    st.markdown("---")
-    st.caption(text)
-
 
 def empty_state(message: str, hint: str = None) -> None:
     """Render empty state message."""
