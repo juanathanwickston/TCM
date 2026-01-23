@@ -10,7 +10,7 @@ PRODUCTION: Requires DATABASE_URL environment variable.
 
 import os
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
@@ -247,6 +247,28 @@ def log_rerun_stats(total_ms: float = 0):
         )
 
 
+from contextlib import contextmanager
+
+@contextmanager
+def transaction():
+    """
+    Transaction context manager for batched operations.
+    Commits once on success, rollbacks on exception.
+    Only this context manager owns the connection lifecycle.
+    """
+    conn = get_connection()
+    healthy = True
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        healthy = False
+        conn.rollback()
+        raise
+    finally:
+        return_connection(conn, healthy=healthy)
+
+
 def adapt_query(sql: str) -> str:
     """
     Convert SQLite-style '?' placeholders to psycopg2 '%s' placeholders,
@@ -364,16 +386,22 @@ def is_write(sql: str) -> bool:
     }
 
 
-def execute(sql: str, params=None, *, fetch="none"):
+def execute(sql: str, params=None, *, fetch="none", conn=None):
     """
     Central DB executor using connection pool.
     - fetch: "none" | "one" | "all"
-    - Commits only on writes
-    - Always returns connection to pool
+    - Commits only on writes (when caller does not own connection)
+    - Returns connection to pool only when caller does not own it
     - Discards connection on connection-level errors
+    
+    If conn is provided, caller owns the transaction:
+    - No autocommit (caller commits via transaction context manager)
+    - No pool return (caller returns via transaction context manager)
     """
     query_start = time.time()
-    conn = get_connection()
+    owns_conn = conn is None
+    if owns_conn:
+        conn = get_connection()
     healthy = True
     row_count = 0
     try:
@@ -387,7 +415,7 @@ def execute(sql: str, params=None, *, fetch="none"):
                 row_count = len(result) if result else 0
             else:
                 result = None
-            if is_write(sql):
+            if is_write(sql) and owns_conn:
                 conn.commit()
             
             # Timing and counters
@@ -413,7 +441,8 @@ def execute(sql: str, params=None, *, fetch="none"):
         _logger.error(f"Interface error: {e}")
         raise
     finally:
-        return_connection(conn, healthy=healthy)
+        if owns_conn:
+            return_connection(conn, healthy=healthy)
 
 
 def make_container_key(
@@ -658,7 +687,7 @@ def upsert_container(
     IDEMPOTENT: Updates metadata but NEVER overwrites scrub/invest fields.
     Returns True if new, False if updated.
     """
-    now = last_seen_override or datetime.utcnow().isoformat()
+    now = last_seen_override or datetime.now(timezone.utc).isoformat()
     
     existing = execute(
         "SELECT container_key FROM resource_containers WHERE container_key = ?",
@@ -708,6 +737,91 @@ def upsert_container(
             contents_count, int(is_placeholder), now, now, source
         ))
         return True
+
+
+# =============================================================================
+# Batched Upsert (Performance Optimization)
+# =============================================================================
+
+from psycopg2.extras import execute_values
+
+# Column order for batch upsert (must match tuple order)
+_UPSERT_COLUMNS = (
+    "container_key", "drive_item_id", "relative_path", "bucket",
+    "primary_department", "sub_department", "training_type", "container_type",
+    "display_name", "web_url", "resource_count", "valid_link_count",
+    "contents_count", "is_placeholder", "first_seen", "last_seen", "source", "is_archived"
+)
+
+# Required keys that must NOT be None (based on schema NOT NULL constraints)
+_REQUIRED_KEYS = frozenset({"container_key", "relative_path", "container_type"})
+
+_UPSERT_SQL = f"""
+INSERT INTO resource_containers ({', '.join(_UPSERT_COLUMNS)})
+VALUES %s
+ON CONFLICT (container_key) DO UPDATE SET
+    relative_path = EXCLUDED.relative_path,
+    bucket = EXCLUDED.bucket,
+    primary_department = EXCLUDED.primary_department,
+    sub_department = EXCLUDED.sub_department,
+    training_type = EXCLUDED.training_type,
+    display_name = EXCLUDED.display_name,
+    web_url = EXCLUDED.web_url,
+    resource_count = EXCLUDED.resource_count,
+    valid_link_count = EXCLUDED.valid_link_count,
+    contents_count = EXCLUDED.contents_count,
+    is_placeholder = EXCLUDED.is_placeholder,
+    last_seen = EXCLUDED.last_seen,
+    source = EXCLUDED.source,
+    drive_item_id = EXCLUDED.drive_item_id,
+    is_archived = 0
+"""
+
+
+def batch_upsert_containers(rows: list, *, conn, chunk_size: int = 500) -> int:
+    """
+    Batched upsert using INSERT ... ON CONFLICT DO UPDATE.
+    
+    Args:
+        rows: List of dicts with container data (keys must match _UPSERT_COLUMNS)
+        conn: Connection from transaction() context (caller owns commit)
+        chunk_size: Max rows per statement to avoid size limits
+    
+    Returns:
+        Total rows processed
+        
+    Raises:
+        ValueError: If required keys are missing or None
+    """
+    if not rows:
+        return 0
+    
+    # Validate required keys - fail fast with clear error
+    for i, row in enumerate(rows):
+        for key in _REQUIRED_KEYS:
+            if key not in row or row[key] is None:
+                container_id = row.get('container_key', f'row_index_{i}')
+                raise ValueError(
+                    f"Missing required key '{key}' in row {i} (container_key={container_id})"
+                )
+    
+    # Convert dicts to tuples in deterministic column order
+    tuples = []
+    for row in rows:
+        t = tuple(row.get(col) for col in _UPSERT_COLUMNS)
+        tuples.append(t)
+    
+    query_start = time.time()
+    
+    with conn.cursor() as cursor:
+        for i in range(0, len(tuples), chunk_size):
+            chunk = tuples[i:i + chunk_size]
+            execute_values(cursor, _UPSERT_SQL, chunk)
+    
+    elapsed_ms = (time.time() - query_start) * 1000
+    _logger.info(f"BATCH UPSERT: {len(rows)} rows in {elapsed_ms:.0f}ms")
+    
+    return len(rows)
 
 
 def get_all_containers() -> List[Dict[str, Any]]:
@@ -760,7 +874,7 @@ def update_container_scrub(
     
     # Reasons are deprecated in new workflow, just serialize if provided
     reasons_json = json.dumps(sorted(reasons)) if reasons else None
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     
     # Build update dynamically based on provided values
     updates = [
@@ -797,7 +911,7 @@ def update_container_invest(
     notes: str = None
 ) -> None:
     """Update investment fields for a container."""
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     execute("""
         UPDATE resource_containers SET
             invest_decision = ?, invest_owner = ?, invest_effort = ?,
@@ -1021,16 +1135,22 @@ def get_active_resource_count() -> int:
     return row['cnt'] if row else 0
 
 
-def archive_stale_resources(sync_started_at: str) -> int:
+def archive_stale_resources(sync_started_at: str, *, conn=None) -> int:
     """
     Archive resources not seen in current sync.
     
     Rule: Any resource with last_seen < sync_started_at OR last_seen IS NULL
     is considered stale and archived.
     
+    Args:
+        sync_started_at: ISO timestamp of sync start
+        conn: Optional connection from transaction() context (caller owns commit)
+    
     Returns: number of rows archived
     """
-    conn = get_connection()
+    owns_conn = conn is None
+    if owns_conn:
+        conn = get_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute(adapt_query("""
@@ -1041,10 +1161,12 @@ def archive_stale_resources(sync_started_at: str) -> int:
                     AND (last_seen < ? OR last_seen IS NULL)
             """), (sync_started_at,))
             archived_count = cursor.rowcount
-            conn.commit()
+            if owns_conn:
+                conn.commit()
             return archived_count
     finally:
-        return_connection(conn)
+        if owns_conn:
+            return_connection(conn)
 
 
 def record_sync_run(
@@ -1069,10 +1191,10 @@ def record_sync_run(
 
 
 def get_active_containers() -> List[Dict[str, Any]]:
-    """Get all active (non-archived) containers for Inventory."""
+    """Get all active (non-archived, non-placeholder) containers for Inventory."""
     rows = execute("""
         SELECT * FROM resource_containers 
-        WHERE is_archived = 0 
+        WHERE is_archived = 0 AND is_placeholder = 0
         ORDER BY relative_path
     """, fetch="all")
     return [dict(row) for row in rows] if rows else []

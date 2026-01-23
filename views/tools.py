@@ -89,9 +89,9 @@ def render():
                                 st.warning(err)
                     
                     success_message(
-                        f"Synced: {result['new_containers']} new, "
-                        f"{result['updated_containers']} updated, "
-                        f"{result['skipped']} skipped"
+                        f"Synced: {result['processed_containers']} processed, "
+                        f"{result['skipped']} skipped, "
+                        f"{result['archived']} archived"
                     )
                     st.rerun()
             else:

@@ -345,47 +345,54 @@ def import_from_folder(root_dir: str) -> Dict[str, Any]:
     """
     Import containers from a local folder (temporary SharePoint source of truth).
     
-    Mirrors import_from_zip behavior exactly:
-    - Only imports leaf containers (files/folders/links.txt under L3)
-    - Structural folders are NOT stored
-    - Idempotent: upserts metadata, never overwrites scrub/invest fields
-    
-    RECONCILIATION: After scan, archives any resource not seen in this sync.
+    Uses batched upsert for performance:
+    - Phase 1: Filesystem walk, collect rows (no DB writes)
+    - Phase 2: Single transaction for batch upsert + archive
     
     Args:
         root_dir: Path to the Payroc Training Catalogue folder
         
     Returns:
-        Import statistics dict with new_containers, updated_containers, skipped, errors, archived
+        Import statistics dict with processed_containers, skipped, errors, archived
     """
     import os
-    from datetime import datetime
-    from db import get_active_resource_count, archive_stale_resources, record_sync_run, upsert_department
+    from datetime import datetime, timezone
+    from db import (
+        get_active_resource_count, archive_stale_resources, record_sync_run,
+        upsert_department, transaction, batch_upsert_containers, clear_cache
+    )
     
     # Record sync start time (all upserts use this as last_seen)
-    sync_started_at = datetime.utcnow().isoformat()
+    sync_started_at = datetime.now(timezone.utc).isoformat()
     active_before = get_active_resource_count()
     
     # Track discovered departments for upsert
     discovered_departments = set()
     
-    results = {
-        'new_containers': 0,
-        'updated_containers': 0,
-        'skipped': 0,
-        'errors': [],
-        'archived': 0,
-    }
+    # Collect rows for batch upsert (Phase 1: no DB writes)
+    rows = []
+    skipped = 0
+    errors = []
     
     root_path = Path(root_dir).resolve()
     
     if not root_path.exists():
-        results['errors'].append(f"Folder not found: {root_dir}")
-        return results
+        errors.append(f"Folder not found: {root_dir}")
+        return {
+            'processed_containers': 0,
+            'skipped': 0,
+            'errors': errors,
+            'archived': 0,
+        }
     
     if not root_path.is_dir():
-        results['errors'].append(f"Not a directory: {root_dir}")
-        return results
+        errors.append(f"Not a directory: {root_dir}")
+        return {
+            'processed_containers': 0,
+            'skipped': 0,
+            'errors': errors,
+            'archived': 0,
+        }
     
     # Walk the directory tree
     for dirpath, dirnames, filenames in os.walk(root_path):
@@ -397,7 +404,7 @@ def import_from_folder(root_dir: str) -> Dict[str, Any]:
             relative_path = str(rel_path).replace("\\", "/")
         except ValueError:
             # Path traversal guard - skip if outside root
-            results['errors'].append(f"Path traversal detected: {dirpath}")
+            errors.append(f"Path traversal detected: {dirpath}")
             continue
         
         # Skip the root folder itself
@@ -418,7 +425,7 @@ def import_from_folder(root_dir: str) -> Dict[str, Any]:
             
             # Check if this is a leaf container
             if not is_leaf_container(parent_path, False, filename):
-                results['skipped'] += 1
+                skipped += 1
                 continue
             
             # Parse path for metadata
@@ -445,34 +452,33 @@ def import_from_folder(root_dir: str) -> Dict[str, Any]:
                         key_source = f"{parent_path}|{url}|link"
                         container_key = hashlib.sha256(key_source.encode()).hexdigest()[:16]
                         
-                        is_new = upsert_container(
-                            container_key=container_key,
-                            relative_path=link_relative_path,
-                            container_type="link",
-                            bucket=parsed['bucket'],
-                            primary_department=parsed['primary_department'],
-                            sub_department=parsed['sub_department'],
-                            training_type=parsed['training_type'],
-                            display_name=url,
-                            web_url=url,
-                            resource_count=1,
-                            valid_link_count=1,
-                            is_placeholder=False,
-                            source="folder",
-                            last_seen_override=sync_started_at
-                        )
-                        
-                        if is_new:
-                            results['new_containers'] += 1
-                        else:
-                            results['updated_containers'] += 1
+                        rows.append({
+                            'container_key': container_key,
+                            'drive_item_id': None,
+                            'relative_path': link_relative_path,
+                            'bucket': parsed['bucket'],
+                            'primary_department': parsed['primary_department'],
+                            'sub_department': parsed['sub_department'],
+                            'training_type': parsed['training_type'],
+                            'container_type': 'link',
+                            'display_name': url,
+                            'web_url': url,
+                            'resource_count': 1,
+                            'valid_link_count': 1,
+                            'contents_count': 0,
+                            'is_placeholder': 0,
+                            'first_seen': sync_started_at,
+                            'last_seen': sync_started_at,
+                            'source': 'folder',
+                            'is_archived': 0,
+                        })
                     
                     # If no valid URLs, skip (no placeholder record for empty links.txt)
                     if not urls:
-                        results['skipped'] += 1
+                        skipped += 1
                         
                 except Exception as e:
-                    results['errors'].append(f"Error reading {file_relative}: {e}")
+                    errors.append(f"Error reading {file_relative}: {e}")
                 
                 continue  # links.txt itself produces no row
             
@@ -496,28 +502,26 @@ def import_from_folder(root_dir: str) -> Dict[str, Any]:
                 container_type=container_type
             )
             
-            # Upsert container
-            is_new = upsert_container(
-                container_key=container_key,
-                relative_path=file_relative,
-                container_type=container_type,
-                bucket=parsed['bucket'],
-                primary_department=parsed['primary_department'],
-                sub_department=parsed['sub_department'],
-                training_type=parsed['training_type'],
-                display_name=filename,
-                resource_count=1,
-                valid_link_count=0,
-                contents_count=contents_count,
-                is_placeholder=False,
-                source="folder",
-                last_seen_override=sync_started_at
-            )
-            
-            if is_new:
-                results['new_containers'] += 1
-            else:
-                results['updated_containers'] += 1
+            rows.append({
+                'container_key': container_key,
+                'drive_item_id': None,
+                'relative_path': file_relative,
+                'bucket': parsed['bucket'],
+                'primary_department': parsed['primary_department'],
+                'sub_department': parsed['sub_department'],
+                'training_type': parsed['training_type'],
+                'container_type': container_type,
+                'display_name': filename,
+                'web_url': None,
+                'resource_count': 1,
+                'valid_link_count': 0,
+                'contents_count': contents_count,
+                'is_placeholder': 0,
+                'first_seen': sync_started_at,
+                'last_seen': sync_started_at,
+                'source': 'folder',
+                'is_archived': 0,
+            })
         
         # Process subdirectories as potential folder containers
         for dirname in dirnames:
@@ -544,58 +548,61 @@ def import_from_folder(root_dir: str) -> Dict[str, Any]:
                 container_type="folder"
             )
             
-            # Upsert container with contents_count
-            is_new = upsert_container(
-                container_key=container_key,
-                relative_path=dir_relative,
-                container_type="folder",
-                bucket=parsed['bucket'],
-                primary_department=parsed['primary_department'],
-                sub_department=parsed['sub_department'],
-                training_type=parsed['training_type'],
-                display_name=dirname,
-                resource_count=1,
-                valid_link_count=0,
-                contents_count=folder_contents,
-                is_placeholder=False,
-                source="folder",
-                last_seen_override=sync_started_at
-            )
-            
-            if is_new:
-                results['new_containers'] += 1
-            else:
-                results['updated_containers'] += 1
+            rows.append({
+                'container_key': container_key,
+                'drive_item_id': None,
+                'relative_path': dir_relative,
+                'bucket': parsed['bucket'],
+                'primary_department': parsed['primary_department'],
+                'sub_department': parsed['sub_department'],
+                'training_type': parsed['training_type'],
+                'container_type': 'folder',
+                'display_name': dirname,
+                'web_url': None,
+                'resource_count': 1,
+                'valid_link_count': 0,
+                'contents_count': folder_contents,
+                'is_placeholder': 0,
+                'first_seen': sync_started_at,
+                'last_seen': sync_started_at,
+                'source': 'folder',
+                'is_archived': 0,
+            })
     
     # -------------------------------------------------------------------------
-    # DEPARTMENT DISCOVERY: Upsert all discovered departments
+    # PHASE 2: Single transaction for batch upsert + archive
+    # -------------------------------------------------------------------------
+    with transaction() as conn:
+        processed_count = batch_upsert_containers(rows, conn=conn)
+        archived_count = archive_stale_resources(sync_started_at, conn=conn)
+    
+    # -------------------------------------------------------------------------
+    # DEPARTMENT DISCOVERY: Upsert all discovered departments (outside main txn)
     # -------------------------------------------------------------------------
     for dept in discovered_departments:
         upsert_department(dept, sync_started_at)
-    
-    # -------------------------------------------------------------------------
-    # RECONCILIATION: Archive stale resources after scan completes
-    # -------------------------------------------------------------------------
-    archived_count = archive_stale_resources(sync_started_at)
-    results['archived'] = archived_count
     
     # Record sync run for CFO metrics
     active_after = get_active_resource_count()
     record_sync_run(
         started_at=sync_started_at,
-        finished_at=datetime.utcnow().isoformat(),
+        finished_at=datetime.now(timezone.utc).isoformat(),
         source="local_folder",
         active_total_before=active_before,
-        added_count=results['new_containers'],
+        added_count=processed_count,  # Note: this is total processed, not just new
         archived_count=archived_count,
         active_total_after=active_after
     )
     
     # Clear reference data cache after sync
-    from db import clear_cache
     clear_cache()
     
-    return results
+    return {
+        'processed_containers': processed_count,
+        'skipped': skipped,
+        'errors': errors,
+        'archived': archived_count,
+    }
 
 
 def get_tree_structure() -> Dict[str, Any]:
