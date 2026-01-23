@@ -7,6 +7,7 @@ All content imports are EXPLICIT user actions (no auto-import on startup).
 
 import streamlit as st
 import pandas as pd
+import os
 from io import BytesIO
 from pathlib import Path
 
@@ -97,6 +98,44 @@ def render():
                 with message_container:
                     st.error("Folder not found: `Payroc Training Catalogue/`")
                 st.caption("Create this folder in the project root to enable local sync.")
+        
+        # SharePoint Sync (gated by env var)
+        if os.getenv("SHAREPOINT_SYNC_ENABLED", "").lower() == "true":
+            st.markdown("---")
+            st.markdown("**Sync from SharePoint**")
+            st.caption("Live sync from Roc_UCentral site → Payroc Training Catalogue library")
+            
+            if st.button("Sync from SharePoint", type="primary", key="tools_sync_sharepoint"):
+                with st.spinner("Syncing from SharePoint..."):
+                    try:
+                        from services.sharepoint_service import sync_from_sharepoint, is_sharepoint_enabled
+                        
+                        # SECOND GUARD: Don't rely solely on service code staying perfect
+                        if not is_sharepoint_enabled():
+                            error_message("SharePoint sync is disabled (SHAREPOINT_SYNC_ENABLED != 'true')")
+                            st.stop()
+                        
+                        result = sync_from_sharepoint()
+                        
+                        success_message(
+                            f"SharePoint sync complete: {result['added']} added, "
+                            f"{result['archived']} archived, {result['total']} active"
+                        )
+                        
+                        # Show detailed stats
+                        st.caption(
+                            f"Scanned: {result.get('folders_scanned', 0)} folders, "
+                            f"{result.get('files_scanned', 0)} files, "
+                            f"{result.get('links_created', 0)} links"
+                        )
+                        
+                        if result.get('scope_violations', 0) > 0:
+                            with message_container:
+                                st.warning(f"⚠️ {result['scope_violations']} scope violations detected (see logs)")
+                        
+                        st.rerun()
+                    except Exception as e:
+                        error_message(f"SharePoint sync failed: {str(e)}")
 
         section_divider()
 
