@@ -243,13 +243,18 @@ def render():
         with st.expander("Danger Zone"):
             st.markdown("**Clear All Data**")
             st.caption("This will delete all data. Scrub/invest decisions will be lost.")
-            
-            if st.button("Clear All Data", type="secondary", key="tools_clear_data"):
-                confirm = st.checkbox("I understand this cannot be undone", key="tools_confirm_clear")
-                if confirm:
-                    clear_containers()
-                    success_message("All data cleared")
-                    st.rerun()
+
+            confirm = st.checkbox("I understand this cannot be undone", key="tools_confirm_clear")
+
+            if st.button(
+                "Clear All Data",
+                type="secondary",
+                key="tools_clear_data",
+                disabled=not confirm
+            ):
+                clear_containers()
+                success_message("All data cleared")
+                st.rerun()
     
     render_page_frame(
         title="Tools",
