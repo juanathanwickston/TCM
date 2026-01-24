@@ -21,7 +21,7 @@
                     <select class="form-select" id="department" name="department" onchange="this.form.submit()">
                         <option value="">All Departments</option>
                         {% for dept in departments %}
-                        <option value="{{ dept }}" {% if current_department == dept %}selected{% endif %}>{{ dept }}
+                        <option value="{{ dept }}" {% if current_department==dept %}selected{% endif %}>{{ dept }}
                         </option>
                         {% endfor %}
                     </select>
@@ -31,7 +31,7 @@
                     <select class="form-select" id="training_type" name="training_type" onchange="this.form.submit()">
                         <option value="">All Types</option>
                         {% for tt in training_types %}
-                        <option value="{{ tt }}" {% if current_training_type == tt %}selected{% endif %}>{{
+                        <option value="{{ tt }}" {% if current_training_type==tt %}selected{% endif %}>{{
                             training_type_labels|get_item:tt|default:tt }}</option>
                         {% endfor %}
                     </select>
@@ -40,10 +40,10 @@
                     <label for="sales_stage" class="form-label">Sales Stage</label>
                     <select class="form-select" id="sales_stage" name="sales_stage" onchange="this.form.submit()">
                         <option value="">All</option>
-                        <option value="untagged" {% if current_sales_stage == 'untagged' %}selected{% endif %}>Untagged
+                        <option value="untagged" {% if current_sales_stage=='untagged' %}selected{% endif %}>Untagged
                         </option>
                         {% for stage_key, stage_label in sales_stages %}
-                        <option value="{{ stage_key }}" {% if current_sales_stage == stage_key %}selected{% endif %}>{{
+                        <option value="{{ stage_key }}" {% if current_sales_stage==stage_key %}selected{% endif %}>{{
                             stage_label }}</option>
                         {% endfor %}
                     </select>
@@ -52,10 +52,10 @@
                     <label for="audience" class="form-label">Audience</label>
                     <select class="form-select" id="audience" name="audience" onchange="this.form.submit()">
                         <option value="">All</option>
-                        <option value="unassigned" {% if current_audience == 'unassigned' %}selected{% endif %}>Unassigned
+                        <option value="unassigned" {% if current_audience=='unassigned' %}selected{% endif %}>Unassigned
                         </option>
                         {% for aud in audiences %}
-                        <option value="{{ aud }}" {% if current_audience == aud %}selected{% endif %}>{{ aud }}</option>
+                        <option value="{{ aud }}" {% if current_audience==aud %}selected{% endif %}>{{ aud }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -118,7 +118,7 @@
                                         onchange="this.form.submit()">
                                         <option value="">-</option>
                                         {% for aud in audiences %}
-                                        <option value="{{ aud }}" {% if c.audience == aud %}selected{% endif %}>{{ aud }}
+                                        <option value="{{ aud }}" {% if c.audience==aud %}selected{% endif %}>{{ aud }}
                                         </option>
                                         {% endfor %}
                                     </select>
