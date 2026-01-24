@@ -34,7 +34,8 @@ if _is_production:
     SECRET_KEY = os.environ.get('SECRET_KEY')
     if not SECRET_KEY:
         raise RuntimeError("SECRET_KEY environment variable is required in production")
-    DEBUG = False
+    # Allow DEBUG override for troubleshooting (default False)
+    DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes')
     # ALLOWED_HOSTS must be explicitly set
     _hosts = os.environ.get('ALLOWED_HOSTS', '')
     if not _hosts:
