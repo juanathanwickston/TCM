@@ -55,14 +55,53 @@ except RuntimeError as e:
     st.error(f"Authentication configuration error: {e}")
     st.stop()
 
-name, auth_status, username = authenticator.login(location="main")
+if not st.session_state.get("authentication_status"):
+    st.markdown("""
+    <style>
+      .login-shell{
+        min-height: 100vh;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+      }
+      .login-container{
+        width:100%;
+        max-width:420px;
+        padding:2rem;
+        border:1px solid rgba(255,255,255,0.12);
+        border-radius:12px;
+        background:#0e1117;
+      }
+      .login-title{
+        text-align:center;
+        font-size:1.5rem;
+        font-weight:600;
+        margin-bottom:0.25rem;
+      }
+      .login-subtitle{
+        text-align:center;
+        color:rgba(255,255,255,0.6);
+        font-size:0.95rem;
+        margin-bottom:1.5rem;
+      }
+      .login-container .stButton > button{
+        width:100%;
+        padding:0.75rem;
+        font-size:1rem;
+      }
+    </style>
+    """, unsafe_allow_html=True)
 
-if auth_status is False:
-    st.error("Invalid credentials")
-    st.stop()
+    st.markdown('<div class="login-shell"><div class="login-container">', unsafe_allow_html=True)
+    st.markdown('<div class="login-title">Training Catalogue Manager</div>', unsafe_allow_html=True)
+    st.markdown('<div class="login-subtitle">Sign in to continue</div>', unsafe_allow_html=True)
 
-if auth_status is None:
-    st.warning("Please log in to continue")
+    name, auth_status, username = authenticator.login(location="main")
+
+    if auth_status is False:
+        st.error("Invalid username or password")
+
+    st.markdown('</div></div>', unsafe_allow_html=True)
     st.stop()
 
 
