@@ -50,22 +50,19 @@ inject_global_styles()
 # =============================================================================
 from services.auth_service import get_authenticator
 
-# Create authenticator (reads cookie, sets session_state)
+# Create authenticator
 try:
     authenticator = get_authenticator()
 except RuntimeError as e:
     st.error(f"Authentication configuration error: {e}")
     st.stop()
 
-# Initialize variables
-name = None
-auth_status = None
-username = None
+# STEP 1: Check auth status by calling login with 'unrendered' - reads cookie without rendering
+name, auth_status, username = authenticator.login(location="unrendered")
 
-# Check if already authenticated (from cookie)
-# authenticator will have set session_state when reading cookie
-if not st.session_state.get("authentication_status"):
-    # NOT AUTHENTICATED - render login UI
+# STEP 2: Gate based on auth_status
+if auth_status is not True:
+    # NOT AUTHENTICATED - render centered login card
     left, mid, right = st.columns([1, 1.5, 1])
     
     with mid:
@@ -73,25 +70,23 @@ if not st.session_state.get("authentication_status"):
         st.caption("Sign in to continue")
         st.divider()
         
-        # Authenticator handles cookie set/read
-        # Current API: login(location=...) - form_name is deprecated, use fields dict if needed
-        st.write("DEBUG: about to render authenticator.login")
-        name, auth_status, username = authenticator.login(location="main")
-        st.write("DEBUG: rendered authenticator.login, auth_status=", auth_status)
+        # Render the actual login widget inside the centered card
+        authenticator.login(location="main")
         
         # Visual element below form
         st.markdown("<small style='color: rgba(255,255,255,0.5);'>Forgot password?</small>", 
                     unsafe_allow_html=True)
     
-    # Gate logic for unauthenticated path
+    # Error message for failed login
     if auth_status is False:
         st.error("Invalid username or password")
     
     st.stop()  # HARD STOP - no app content when unauthenticated
 
-# AUTHENTICATED - set session state for convenience
+# AUTHENTICATED - get user info from session state
 name = st.session_state.get("name")
 username = st.session_state.get("username")
+
 
 
 # =============================================================================
