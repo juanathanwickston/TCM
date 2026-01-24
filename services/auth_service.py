@@ -124,9 +124,15 @@ def get_credentials():
 def validate_credentials(username: str, password: str) -> tuple:
     """
     Validate username/password against stored credentials.
-    Supports both argon2 (newer streamlit-authenticator) and bcrypt (older).
+    
+    BCRYPT ONLY. Fails closed if stored hash is not valid bcrypt format.
+    
+    Returns:
+        Tuple of (success: bool, display_name: str)
     """
     import logging
+    import bcrypt
+    
     _log = logging.getLogger("auth")
     
     credentials = get_credentials()
@@ -135,7 +141,7 @@ def validate_credentials(username: str, password: str) -> tuple:
         return (False, "")
     
     if not credentials:
-        _log.warning("No credentials loaded")
+        _log.error("AUTH ERROR: No credentials loaded from environment")
         return (False, "")
     
     # Case-insensitive username lookup
@@ -148,35 +154,38 @@ def validate_credentials(username: str, password: str) -> tuple:
             break
     
     if not user_data:
-        _log.warning(f"User '{username}' not found")
         return (False, "")
     
     stored_hash = user_data["password"]
-    _log.info(f"Stored hash starts with: {stored_hash[:20]}...")
     
-    # Try argon2 first (newer streamlit-authenticator default)
-    if stored_hash.startswith('$argon2'):
-        try:
-            from argon2 import PasswordHasher
-            from argon2.exceptions import VerifyMismatchError
-            ph = PasswordHasher()
-            ph.verify(stored_hash, password)
-            _log.info("argon2 verification succeeded")
+    # FAIL-CLOSED: Validate bcrypt hash format before attempting verification
+    # Valid bcrypt hashes start with $2a$, $2b$, or $2y$
+    if not (stored_hash.startswith('$2a$') or 
+            stored_hash.startswith('$2b$') or 
+            stored_hash.startswith('$2y$')):
+        _log.error(
+            f"AUTH ERROR: Stored hash for user '{username}' is not valid bcrypt format. "
+            f"Hash starts with: '{stored_hash[:10]}...'. "
+            f"Regenerate hash using: python -c \"from services.auth_service import hash_password; print(hash_password('yourpassword'))\""
+        )
+        return (False, "")
+    
+    # Standard bcrypt hash length check (60 chars for most bcrypt implementations)
+    if len(stored_hash) < 50:
+        _log.error(
+            f"AUTH ERROR: Stored hash for user '{username}' appears truncated. "
+            f"Length: {len(stored_hash)}, expected ~60 chars."
+        )
+        return (False, "")
+    
+    # Bcrypt verification
+    try:
+        if bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8')):
+            _log.info(f"User '{username}' authenticated successfully")
             return (True, user_data["name"])
-        except VerifyMismatchError:
-            _log.info("argon2 verification failed - wrong password")
+        else:
             return (False, "")
-        except Exception as e:
-            _log.error(f"argon2 check failed: {e}")
-    
-    # Try bcrypt (older streamlit-authenticator)
-    if stored_hash.startswith('$2'):
-        try:
-            import bcrypt
-            if bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8')):
-                _log.info("bcrypt verification succeeded")
-                return (True, user_data["name"])
-        except Exception as e:
-            _log.error(f"bcrypt check failed: {e}")
-    
-    return (False, "")
+    except Exception as e:
+        _log.error(f"AUTH ERROR: bcrypt verification failed for user '{username}': {e}")
+        return (False, "")
+
