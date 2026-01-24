@@ -17,7 +17,6 @@ from components.font_loader import inject_custom_fonts
 from components.styles import inject_global_styles
 from components.sidebar_router import render_sidebar
 from db import init_db, reset_query_counter, log_rerun_stats
-from services.auth_service import get_authenticator
 
 # Import view modules
 from views import dashboard, inventory, scrubbing, investment, tools
@@ -49,97 +48,40 @@ inject_global_styles()
 # =============================================================================
 # AUTHENTICATION GATE
 # =============================================================================
-try:
-    authenticator = get_authenticator()
-except RuntimeError as e:
-    st.error(f"Authentication configuration error: {e}")
-    st.stop()
+from services.auth_service import validate_credentials
 
 if not st.session_state.get("authentication_status"):
-    # Inject scoped CSS for login card styling
-    st.markdown("""
-    <style>
-      /* Hide default Streamlit header/footer for cleaner login */
-      header[data-testid="stHeader"] { display: none; }
-      
-      /* Center the login column content */
-      [data-testid="stVerticalBlock"]:has(.login-card) {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        min-height: 80vh;
-      }
-      
-      /* Login card container styling */
-      .login-card {
-        width: 100%;
-        max-width: 400px;
-        padding: 2rem;
-        border: 2px solid rgba(255,255,255,0.2);
-        border-radius: 12px;
-        background: #0e1117;
-      }
-      
-      .login-title {
-        text-align: center;
-        font-size: 1.4rem;
-        font-weight: 600;
-        margin-bottom: 0.25rem;
-        color: #ffffff;
-      }
-      
-      .login-subtitle {
-        text-align: center;
-        color: rgba(255,255,255,0.6);
-        font-size: 0.9rem;
-        margin-bottom: 1.5rem;
-      }
-      
-      .login-forgot {
-        text-align: center;
-        margin-top: 0.5rem;
-        margin-bottom: 1rem;
-      }
-      
-      .login-forgot a {
-        color: rgba(255,255,255,0.5);
-        font-size: 0.85rem;
-        text-decoration: none;
-      }
-      
-      .login-forgot a:hover {
-        color: rgba(255,255,255,0.8);
-      }
-      
-      /* Full-width button ONLY inside login card */
-      .login-card .stButton > button {
-        width: 100%;
-        padding: 0.75rem;
-        font-size: 1rem;
-      }
-    </style>
-    """, unsafe_allow_html=True)
+    # Center the login using Streamlit columns
+    left, mid, right = st.columns([1, 1.2, 1])
     
-    # Use Streamlit columns to center content (native containment)
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        # All elements inside same Streamlit container region
-        st.markdown('<div class="login-card">', unsafe_allow_html=True)
-        st.markdown('<div class="login-title">Training Catalogue Manager</div>', unsafe_allow_html=True)
-        st.markdown('<div class="login-subtitle">Sign in to continue</div>', unsafe_allow_html=True)
-        
-        # Authenticator widget renders here, inside col2
-        name, auth_status, username = authenticator.login(location="main")
-        
-        # Forgot password link (visual only)
-        st.markdown('<div class="login-forgot"><a href="#">Forgot password?</a></div>', unsafe_allow_html=True)
-        
-        if auth_status is False:
-            st.error("Invalid username or password")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+    with mid:
+        # All elements in ONE container = guaranteed grouping
+        card = st.container()
+        with card:
+            st.markdown("## Training Catalogue Manager")
+            st.caption("Sign in to continue")
+            st.divider()
+            
+            # Native st.form = predictable layout, no widget fragmentation
+            with st.form("login_form", clear_on_submit=False):
+                username = st.text_input("Username", autocomplete="username")
+                password = st.text_input("Password", type="password", autocomplete="current-password")
+                
+                # Forgot password (visual only)
+                st.markdown("<small style='color: rgba(255,255,255,0.5);'><a href='#' style='color: inherit; text-decoration: none;'>Forgot password?</a></small>", unsafe_allow_html=True)
+                
+                # Full-width button using Streamlit's built-in option (no CSS hack)
+                submitted = st.form_submit_button("Log in", use_container_width=True)
+            
+            if submitted:
+                success, display_name = validate_credentials(username, password)
+                if success:
+                    st.session_state["authentication_status"] = True
+                    st.session_state["name"] = display_name
+                    st.session_state["username"] = username
+                    st.rerun()
+                else:
+                    st.error("Invalid username or password")
     
     st.stop()
 

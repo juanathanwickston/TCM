@@ -91,3 +91,73 @@ def hash_password(plaintext: str) -> str:
         python -c "from services.auth_service import hash_password; print(hash_password('your_password'))"
     """
     return stauth.Hasher([plaintext]).generate()[0]
+
+
+def get_credentials():
+    """
+    Load and return credentials dict from environment.
+    Used for direct validation without the authenticator widget.
+    
+    Returns:
+        Dict with structure: {username: {"name": display_name, "password": hashed_password}}
+    """
+    usernames_str = os.environ.get("AUTH_USERNAMES", "")
+    passwords_str = os.environ.get("AUTH_PASSWORDS", "")
+    names_str = os.environ.get("AUTH_NAMES", "")
+    
+    if not all([usernames_str, passwords_str, names_str]):
+        return {}
+    
+    usernames = [u.strip() for u in usernames_str.split(",") if u.strip()]
+    passwords = [p.strip() for p in passwords_str.split(",") if p.strip()]
+    names = [n.strip() for n in names_str.split(",") if n.strip()]
+    
+    if len(usernames) != len(passwords) or len(usernames) != len(names):
+        return {}
+    
+    return {
+        username: {"name": name, "password": password}
+        for username, name, password in zip(usernames, names, passwords)
+    }
+
+
+def validate_credentials(username: str, password: str) -> tuple:
+    """
+    Validate username/password against stored credentials.
+    
+    Args:
+        username: The entered username
+        password: The entered plaintext password
+        
+    Returns:
+        Tuple of (success: bool, display_name: str)
+        On failure, display_name is empty string.
+    """
+    import bcrypt
+    
+    credentials = get_credentials()
+    
+    if not username or not password:
+        return (False, "")
+    
+    user_data = credentials.get(username.strip().lower())
+    if not user_data:
+        # Check case-insensitive
+        for stored_username, data in credentials.items():
+            if stored_username.lower() == username.strip().lower():
+                user_data = data
+                break
+    
+    if not user_data:
+        return (False, "")
+    
+    stored_hash = user_data["password"]
+    
+    # bcrypt comparison
+    try:
+        if bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8')):
+            return (True, user_data["name"])
+    except Exception:
+        pass
+    
+    return (False, "")
