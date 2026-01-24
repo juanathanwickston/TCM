@@ -1,0 +1,197 @@
+{% extends 'tcm_app/base.html' %}
+{% load tcm_tags %}
+
+{% block title %}Dashboard | TCM{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">Dashboard</h1>
+            <p class="text-muted mb-0">Training catalog overview and metrics</p>
+        </div>
+    </div>
+
+    <!-- Submission Overview -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Submission Overview</h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h2 class="display-5 fw-bold mb-0">{{ summary.total|default:0|intcomma }}</h2>
+                        <p class="text-muted mb-0">Total Submissions</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h2 class="display-5 fw-bold mb-0">{{ total_content_items|intcomma }}</h2>
+                        <p class="text-muted mb-0">Total Content Items</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h2 class="display-5 fw-bold mb-0">{{ status.unreviewed|default:0|intcomma }}</h2>
+                        <p class="text-muted mb-0">Items Remaining</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h2 class="display-5 fw-bold mb-0">{{ duplicates|intcomma }}</h2>
+                        <p class="text-muted mb-0">Duplicates</p>
+                        <small class="text-muted">Coming soon</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Breakdown -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Onboarding vs Upskilling</h5>
+                </div>
+                <div class="card-body">
+                    {% with total=summary.total|default:1 %}
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-2">
+                            <strong>Onboarding:</strong>
+                            {{ summary.onboarding|default:0|intcomma }}
+                            <span class="text-muted">({% widthratio summary.onboarding|default:0 total 100 %}%)</span>
+                        </li>
+                        <li class="mb-2">
+                            <strong>Upskilling:</strong>
+                            {{ summary.upskilling|default:0|intcomma }}
+                            <span class="text-muted">({% widthratio summary.upskilling|default:0 total 100 %}%)</span>
+                        </li>
+                        <li>
+                            <strong>Other:</strong>
+                            {{ summary.other|default:0|intcomma }}
+                            <span class="text-muted">({% widthratio summary.other|default:0 total 100 %}%)</span>
+                        </li>
+                    </ul>
+                    {% endwith %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Include vs Modify vs Sunset</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-2"><strong>Include:</strong> {{ status.include|default:0|intcomma }}</li>
+                        <li class="mb-2"><strong>Modify:</strong> {{ status.modify|default:0|intcomma }}</li>
+                        <li><strong>Sunset:</strong> {{ status.sunset|default:0|intcomma }}</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Training Sources -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Training Sources</h5>
+            <small class="text-muted">Where did the training come from?</small>
+        </div>
+        <div class="card-body">
+            {% if sources %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Source</th>
+                            <th class="text-end">Count</th>
+                            <th class="text-end">% of Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in sources %}
+                        <tr>
+                            <td>{{ s.source }}</td>
+                            <td class="text-end">{{ s.count|intcomma }}</td>
+                            <td class="text-end">{{ s.pct|floatformat:0 }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info mb-0">No source data available.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Training Types -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Training Types</h5>
+            <small class="text-muted">What type of training was collected?</small>
+        </div>
+        <div class="card-body">
+            {% if types %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th class="text-end">Count</th>
+                            <th class="text-end">% of Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in types %}
+                        <tr>
+                            <td>{{ t.type|default:"Unknown"|title }}</td>
+                            <td class="text-end">{{ t.count|intcomma }}</td>
+                            <td class="text-end">{{ t.pct|floatformat:0 }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info mb-0">No training type data available.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Sales-Tagged Content -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Sales-Tagged Content by Stage</h5>
+            <small class="text-muted">Only includes content where a Sales Stage has been assigned.</small>
+        </div>
+        <div class="card-body">
+            {% if stages %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Stage</th>
+                            <th class="text-end">Resources</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in stages %}
+                        <tr>
+                            <td>{{ s.label }}</td>
+                            <td class="text-end">{{ s.count|intcomma }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info mb-0">No sales-tagged content yet. Assign Sales Stage during Scrubbing.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

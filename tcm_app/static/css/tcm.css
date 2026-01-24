@@ -1,0 +1,36 @@
+/*
+ * TCM Django - Custom Styles
+ * Minor branding tweaks only. Bootstrap 5 handles layout.
+ */
+
+/* Navbar brand */
+.navbar-brand {
+    font-weight: 600;
+}
+
+/* Card shadows */
+.card {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+/* KPI display numbers */
+.display-5 {
+    color: #1a1a2e;
+}
+
+/* Table hover */
+.table-hover tbody tr:hover {
+    background-color: rgba(0,0,0,0.02);
+}
+
+/* Badge styles */
+.badge.bg-primary {
+    background-color: #667eea !important;
+}
+
+/* Alert info styling */
+.alert-info {
+    background-color: #e8f4fd;
+    border-color: #b8daff;
+    color: #084298;
+}

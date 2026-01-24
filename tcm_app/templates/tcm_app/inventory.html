@@ -1,0 +1,151 @@
+{% extends 'tcm_app/base.html' %}
+{% load tcm_tags %}
+
+{% block title %}Inventory | TCM{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">Inventory</h1>
+            <p class="text-muted mb-0">Browse and filter training content</p>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <label for="department" class="form-label">Department</label>
+                    <select class="form-select" id="department" name="department" onchange="this.form.submit()">
+                        <option value="">All Departments</option>
+                        {% for dept in departments %}
+                        <option value="{{ dept }}" {% if current_department==dept %}selected{% endif %}>{{ dept }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="training_type" class="form-label">Training Type</label>
+                    <select class="form-select" id="training_type" name="training_type" onchange="this.form.submit()">
+                        <option value="">All Types</option>
+                        {% for tt in training_types %}
+                        <option value="{{ tt }}" {% if current_training_type==tt %}selected{% endif %}>
+                            {{ training_type_labels|get_item:tt|default:tt }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="sales_stage" class="form-label">Sales Stage</label>
+                    <select class="form-select" id="sales_stage" name="sales_stage" onchange="this.form.submit()">
+                        <option value="">All</option>
+                        <option value="untagged" {% if current_sales_stage=='untagged' %}selected{% endif %}>Untagged
+                        </option>
+                        {% for stage_key, stage_label in sales_stages %}
+                        <option value="{{ stage_key }}" {% if current_sales_stage==stage_key %}selected{% endif %}>
+                            {{ stage_label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="audience" class="form-label">Audience</label>
+                    <select class="form-select" id="audience" name="audience" onchange="this.form.submit()">
+                        <option value="">All</option>
+                        <option value="unassigned" {% if current_audience=='unassigned' %}selected{% endif %}>Unassigned
+                        </option>
+                        {% for aud in audiences %}
+                        <option value="{{ aud }}" {% if current_audience==aud %}selected{% endif %}>{{ aud }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Summary Header -->
+    <div class="d-flex align-items-center gap-3 mb-3">
+        <h4 class="mb-0">Total resources ({{ total_resources|intcomma }})</h4>
+        <span class="badge bg-secondary">
+            {% if current_department %}{{ current_department }}{% endif %}
+            {% if current_training_type %} / {{
+            training_type_labels|get_item:current_training_type|default:current_training_type }}{% endif %}
+            {% if not current_department and not current_training_type %}All Resources{% endif %}
+        </span>
+    </div>
+    <p class="text-muted mb-4">Items inside folders: {{ items_inside_folders|intcomma }}</p>
+
+    <!-- Container Table -->
+    {% if containers %}
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="min-width: 280px;">Name</th>
+                            <th style="width: 70px;">Type</th>
+                            <th style="width: 140px;">Audience</th>
+                            <th style="width: 80px;">Contents</th>
+                            <th>Path</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in containers %}
+                        <tr>
+                            <td>{{ c.display_name }}</td>
+                            <td>
+                                {% if c.container_type == 'folder' %}
+                                <span class="badge bg-primary">FOLDER</span>
+                                {% elif c.container_type == 'link' %}
+                                <span class="badge bg-info">LINK</span>
+                                {% else %}
+                                <span class="badge bg-secondary">FILE</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <!-- Inline audience edit form -->
+                                <form method="post" action="{% url 'update_audience' %}" class="d-flex gap-1">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="container_key" value="{{ c.container_key }}">
+                                    <!-- Preserve filter state -->
+                                    <input type="hidden" name="department" value="{{ current_department }}">
+                                    <input type="hidden" name="training_type" value="{{ current_training_type }}">
+                                    <input type="hidden" name="sales_stage" value="{{ current_sales_stage }}">
+                                    <input type="hidden" name="audience_filter" value="{{ current_audience }}">
+
+                                    <select name="audience" class="form-select form-select-sm" style="width: 120px;"
+                                        onchange="this.form.submit()">
+                                        <option value="">-</option>
+                                        {% for aud in audiences %}
+                                        <option value="{{ aud }}" {% if c.audience==aud %}selected{% endif %}>{{ aud }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </form>
+                            </td>
+                            <td>
+                                {% if c.container_type == 'folder' %}
+                                {{ c.contents_count|default:0 }}
+                                {% else %}
+                                Single File
+                                {% endif %}
+                            </td>
+                            <td><small class="text-muted">{{ c.relative_path }}</small></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <h5 class="alert-heading">No resources found</h5>
+        <p class="mb-0">Adjust filters or sync content from the Tools page.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
