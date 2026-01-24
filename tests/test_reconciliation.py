@@ -7,10 +7,21 @@ Both use the same canonical predicate:
     WHERE is_archived = 0 AND is_placeholder = 0
 
 Both use SUM(resource_count).
+
+Run with DATABASE_URL set to test against real database.
 """
 
+import os
 import sys
+import pytest
+
 sys.path.insert(0, '.')
+
+# Skip if no database connection
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("DATABASE_URL"),
+    reason="DATABASE_URL not set - integration test requires real database"
+)
 
 
 def test_inventory_dashboard_reconciliation():
