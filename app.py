@@ -50,42 +50,50 @@ inject_global_styles()
 # =============================================================================
 from services.auth_service import get_authenticator
 
-# Create authenticator
 try:
     authenticator = get_authenticator()
 except RuntimeError as e:
     st.error(f"Authentication configuration error: {e}")
     st.stop()
 
-# STEP 1: Check auth status by calling login with 'unrendered' - reads cookie without rendering
-name, auth_status, username = authenticator.login(location="unrendered")
-
-# STEP 2: Gate based on auth_status
-if auth_status is not True:
-    # NOT AUTHENTICATED - render centered login card
+# Check if already authenticated (from previous rerun after successful login)
+if st.session_state.get("authentication_status") is True:
+    # ALREADY AUTHENTICATED - skip login UI entirely, proceed to app
+    name = st.session_state.get("name")
+    username = st.session_state.get("username")
+else:
+    # NOT AUTHENTICATED - render login card
     left, mid, right = st.columns([1, 1.5, 1])
-    
-    with mid:
-        st.markdown("## Training Catalogue Manager")
-        st.caption("Sign in to continue")
-        st.divider()
-        
-        # Render the actual login widget inside the centered card
-        authenticator.login(location="main")
-        
-        # Visual element below form
-        st.markdown("<small style='color: rgba(255,255,255,0.5);'>Forgot password?</small>", 
-                    unsafe_allow_html=True)
-    
-    # Error message for failed login
-    if auth_status is False:
-        st.error("Invalid username or password")
-    
-    st.stop()  # HARD STOP - no app content when unauthenticated
 
-# AUTHENTICATED - get user info from session state
-name = st.session_state.get("name")
-username = st.session_state.get("username")
+    with mid:
+        card = st.container()
+
+        with card:
+            # Render wrapper FIRST (traditional layout)
+            st.markdown("## Training Catalogue Manager")
+            st.caption("Sign in to continue")
+            st.divider()
+
+            # SINGLE login call (cookie-backed)
+            name, auth_status, username = authenticator.login(location="main")
+
+            st.markdown(
+                "<small style='color: rgba(255,255,255,0.5);'>Forgot password?</small>",
+                unsafe_allow_html=True
+            )
+
+    # Gate AFTER call
+    if auth_status is True:
+        # Just logged in - rerun to clear login UI and enter authenticated branch
+        st.rerun()
+
+    if auth_status is False:
+        with mid:
+            st.error("Invalid username or password")
+        st.stop()
+
+    # auth_status is None (awaiting login)
+    st.stop()
 
 
 
