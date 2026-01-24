@@ -48,42 +48,46 @@ inject_global_styles()
 # =============================================================================
 # AUTHENTICATION GATE
 # =============================================================================
-from services.auth_service import validate_credentials
+from services.auth_service import get_authenticator
 
-if not st.session_state.get("authentication_status"):
-    # Center the login using Streamlit columns
-    left, mid, right = st.columns([1, 1.2, 1])
-    
-    with mid:
-        # All elements in ONE container = guaranteed grouping
-        card = st.container()
-        with card:
-            st.markdown("## Training Catalogue Manager")
-            st.caption("Sign in to continue")
-            st.divider()
-            
-            # Native st.form = predictable layout, no widget fragmentation
-            with st.form("login_form", clear_on_submit=False):
-                username = st.text_input("Username", autocomplete="username")
-                password = st.text_input("Password", type="password", autocomplete="current-password")
-                
-                # Forgot password (visual only)
-                st.markdown("<small style='color: rgba(255,255,255,0.5);'><a href='#' style='color: inherit; text-decoration: none;'>Forgot password?</a></small>", unsafe_allow_html=True)
-                
-                # Full-width button using Streamlit's built-in option (no CSS hack)
-                submitted = st.form_submit_button("Log in", use_container_width=True)
-            
-            if submitted:
-                success, display_name = validate_credentials(username, password)
-                if success:
-                    st.session_state["authentication_status"] = True
-                    st.session_state["name"] = display_name
-                    st.session_state["username"] = username
-                    st.rerun()
-                else:
-                    st.error("Invalid username or password")
-    
+# Create authenticator (reads cookie, sets session_state)
+try:
+    authenticator = get_authenticator()
+except RuntimeError as e:
+    st.error(f"Authentication configuration error: {e}")
     st.stop()
+
+# Initialize variables before layout to prevent NameError
+name = None
+auth_status = None
+username = None
+
+# Centered login card using Streamlit primitives
+left, mid, right = st.columns([1, 1.5, 1])
+
+with mid:
+    st.markdown("## Training Catalogue Manager")
+    st.caption("Sign in to continue")
+    st.divider()
+    
+    # Authenticator handles cookie set/read
+    name, auth_status, username = authenticator.login(location="main")
+    
+    # Visual element below form
+    st.markdown("<small style='color: rgba(255,255,255,0.5);'>Forgot password?</small>", 
+                unsafe_allow_html=True)
+
+# Gate logic
+if auth_status is False:
+    st.error("Invalid username or password")
+    st.stop()
+
+if auth_status is None:
+    st.stop()
+
+# Authenticated - store for convenience
+st.session_state["name"] = name
+st.session_state["username"] = username
 
 
 # =============================================================================
@@ -110,16 +114,11 @@ _rerun_start = time.time()
 reset_query_counter()
 
 try:
-
-    # Read user identity from session_state (set during login)
-    user_name = st.session_state.get("name") or st.session_state.get("username") or "Signed In"
-    user_username = st.session_state.get("username") or ""
-    
     # Render sidebar (mode toggle + nav/assistant routing)
     render_sidebar(
-        name=user_name,
-        username=user_username,
-        authenticator=None,  # No longer using authenticator widget
+        name=name,
+        username=username,
+        authenticator=authenticator,
         pages=PAGES
     )
 
