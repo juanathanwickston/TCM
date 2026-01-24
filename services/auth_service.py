@@ -124,23 +124,21 @@ def get_credentials():
 def validate_credentials(username: str, password: str) -> tuple:
     """
     Validate username/password against stored credentials.
-    
-    Args:
-        username: The entered username
-        password: The entered plaintext password
-        
-    Returns:
-        Tuple of (success: bool, display_name: str)
-        On failure, display_name is empty string.
     """
+    import logging
     import bcrypt
     
+    _log = logging.getLogger("auth")
     credentials = get_credentials()
     
+    _log.info(f"validate_credentials: username='{username}', credentials_count={len(credentials)}")
+    
     if not username or not password:
+        _log.warning("Empty username or password")
         return (False, "")
     
     if not credentials:
+        _log.warning("No credentials loaded")
         return (False, "")
     
     # Case-insensitive username lookup
@@ -148,22 +146,26 @@ def validate_credentials(username: str, password: str) -> tuple:
     user_data = None
     
     for stored_username, data in credentials.items():
+        _log.info(f"Checking stored username: '{stored_username}'")
         if stored_username.lower() == entered_username:
             user_data = data
+            _log.info(f"Found matching user: {stored_username}")
             break
     
     if not user_data:
+        _log.warning(f"User '{username}' not found")
         return (False, "")
     
     stored_hash = user_data["password"]
+    _log.info(f"Stored hash starts with: {stored_hash[:20]}...")
     
     # bcrypt comparison
     try:
-        if bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8')):
+        result = bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8'))
+        _log.info(f"bcrypt.checkpw result: {result}")
+        if result:
             return (True, user_data["name"])
     except Exception as e:
-        # Log the error for debugging
-        import logging
-        logging.getLogger("auth").error(f"bcrypt check failed: {e}")
+        _log.error(f"bcrypt check failed: {e}")
     
     return (False, "")
