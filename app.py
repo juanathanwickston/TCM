@@ -111,11 +111,15 @@ reset_query_counter()
 
 try:
 
+    # Read user identity from session_state (set during login)
+    user_name = st.session_state.get("name") or st.session_state.get("username") or "Signed In"
+    user_username = st.session_state.get("username") or ""
+    
     # Render sidebar (mode toggle + nav/assistant routing)
     render_sidebar(
-        name=name,
-        username=username,
-        authenticator=authenticator,
+        name=user_name,
+        username=user_username,
+        authenticator=None,  # No longer using authenticator widget
         pages=PAGES
     )
 

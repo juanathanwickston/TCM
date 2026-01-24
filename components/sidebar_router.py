@@ -180,8 +180,11 @@ def render_sidebar(
         
         # 4. LOGOUT (after nav, visually separated)
         st.markdown("---")
-        st.markdown('<div class="tcm-sidebar-logout">', unsafe_allow_html=True)
-        authenticator.logout("Logout", "sidebar", key="logout_btn")
-        st.markdown('</div>', unsafe_allow_html=True)
+        if st.button("Logout", key="logout_btn", use_container_width=True):
+            # Clear auth session state
+            st.session_state["authentication_status"] = False
+            st.session_state["name"] = None
+            st.session_state["username"] = None
+            st.rerun()
 
 
