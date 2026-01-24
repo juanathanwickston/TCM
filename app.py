@@ -56,52 +56,91 @@ except RuntimeError as e:
     st.stop()
 
 if not st.session_state.get("authentication_status"):
+    # Inject scoped CSS for login card styling
     st.markdown("""
     <style>
-      .login-shell{
-        min-height: 100vh;
-        display:flex;
-        align-items:center;
-        justify-content:center;
+      /* Hide default Streamlit header/footer for cleaner login */
+      header[data-testid="stHeader"] { display: none; }
+      
+      /* Center the login column content */
+      [data-testid="stVerticalBlock"]:has(.login-card) {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 80vh;
       }
-      .login-container{
-        width:100%;
-        max-width:420px;
-        padding:2rem;
-        border:1px solid rgba(255,255,255,0.12);
-        border-radius:12px;
-        background:#0e1117;
+      
+      /* Login card container styling */
+      .login-card {
+        width: 100%;
+        max-width: 400px;
+        padding: 2rem;
+        border: 2px solid rgba(255,255,255,0.2);
+        border-radius: 12px;
+        background: #0e1117;
       }
-      .login-title{
-        text-align:center;
-        font-size:1.5rem;
-        font-weight:600;
-        margin-bottom:0.25rem;
+      
+      .login-title {
+        text-align: center;
+        font-size: 1.4rem;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+        color: #ffffff;
       }
-      .login-subtitle{
-        text-align:center;
-        color:rgba(255,255,255,0.6);
-        font-size:0.95rem;
-        margin-bottom:1.5rem;
+      
+      .login-subtitle {
+        text-align: center;
+        color: rgba(255,255,255,0.6);
+        font-size: 0.9rem;
+        margin-bottom: 1.5rem;
       }
-      .login-container .stButton > button{
-        width:100%;
-        padding:0.75rem;
-        font-size:1rem;
+      
+      .login-forgot {
+        text-align: center;
+        margin-top: 0.5rem;
+        margin-bottom: 1rem;
+      }
+      
+      .login-forgot a {
+        color: rgba(255,255,255,0.5);
+        font-size: 0.85rem;
+        text-decoration: none;
+      }
+      
+      .login-forgot a:hover {
+        color: rgba(255,255,255,0.8);
+      }
+      
+      /* Full-width button ONLY inside login card */
+      .login-card .stButton > button {
+        width: 100%;
+        padding: 0.75rem;
+        font-size: 1rem;
       }
     </style>
     """, unsafe_allow_html=True)
-
-    st.markdown('<div class="login-shell"><div class="login-container">', unsafe_allow_html=True)
-    st.markdown('<div class="login-title">Training Catalogue Manager</div>', unsafe_allow_html=True)
-    st.markdown('<div class="login-subtitle">Sign in to continue</div>', unsafe_allow_html=True)
-
-    name, auth_status, username = authenticator.login(location="main")
-
-    if auth_status is False:
-        st.error("Invalid username or password")
-
-    st.markdown('</div></div>', unsafe_allow_html=True)
+    
+    # Use Streamlit columns to center content (native containment)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        # All elements inside same Streamlit container region
+        st.markdown('<div class="login-card">', unsafe_allow_html=True)
+        st.markdown('<div class="login-title">Training Catalogue Manager</div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-subtitle">Sign in to continue</div>', unsafe_allow_html=True)
+        
+        # Authenticator widget renders here, inside col2
+        name, auth_status, username = authenticator.login(location="main")
+        
+        # Forgot password link (visual only)
+        st.markdown('<div class="login-forgot"><a href="#">Forgot password?</a></div>', unsafe_allow_html=True)
+        
+        if auth_status is False:
+            st.error("Invalid username or password")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+    
     st.stop()
 
 
