@@ -124,17 +124,14 @@ def get_credentials():
 def validate_credentials(username: str, password: str) -> tuple:
     """
     Validate username/password against stored credentials.
+    Supports both argon2 (newer streamlit-authenticator) and bcrypt (older).
     """
     import logging
-    import bcrypt
-    
     _log = logging.getLogger("auth")
+    
     credentials = get_credentials()
     
-    _log.info(f"validate_credentials: username='{username}', credentials_count={len(credentials)}")
-    
     if not username or not password:
-        _log.warning("Empty username or password")
         return (False, "")
     
     if not credentials:
@@ -146,10 +143,8 @@ def validate_credentials(username: str, password: str) -> tuple:
     user_data = None
     
     for stored_username, data in credentials.items():
-        _log.info(f"Checking stored username: '{stored_username}'")
         if stored_username.lower() == entered_username:
             user_data = data
-            _log.info(f"Found matching user: {stored_username}")
             break
     
     if not user_data:
@@ -159,13 +154,29 @@ def validate_credentials(username: str, password: str) -> tuple:
     stored_hash = user_data["password"]
     _log.info(f"Stored hash starts with: {stored_hash[:20]}...")
     
-    # bcrypt comparison
-    try:
-        result = bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8'))
-        _log.info(f"bcrypt.checkpw result: {result}")
-        if result:
+    # Try argon2 first (newer streamlit-authenticator default)
+    if stored_hash.startswith('$argon2'):
+        try:
+            from argon2 import PasswordHasher
+            from argon2.exceptions import VerifyMismatchError
+            ph = PasswordHasher()
+            ph.verify(stored_hash, password)
+            _log.info("argon2 verification succeeded")
             return (True, user_data["name"])
-    except Exception as e:
-        _log.error(f"bcrypt check failed: {e}")
+        except VerifyMismatchError:
+            _log.info("argon2 verification failed - wrong password")
+            return (False, "")
+        except Exception as e:
+            _log.error(f"argon2 check failed: {e}")
+    
+    # Try bcrypt (older streamlit-authenticator)
+    if stored_hash.startswith('$2'):
+        try:
+            import bcrypt
+            if bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8')):
+                _log.info("bcrypt verification succeeded")
+                return (True, user_data["name"])
+        except Exception as e:
+            _log.error(f"bcrypt check failed: {e}")
     
     return (False, "")
