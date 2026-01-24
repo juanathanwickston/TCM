@@ -85,12 +85,18 @@ def get_authenticator():
 
 def hash_password(plaintext: str) -> str:
     """
-    Hash a plaintext password for use in AUTH_PASSWORDS.
+    Hash a plaintext password using bcrypt.
     
-    Usage: 
+    BCRYPT-ONLY. No streamlit-authenticator dependency.
+    
+    Usage (secure, no echo): 
+        python -c "import bcrypt, getpass; pw=getpass.getpass('Password: ').encode(); print(bcrypt.hashpw(pw, bcrypt.gensalt()).decode())"
+    
+    Usage (direct):
         python -c "from services.auth_service import hash_password; print(hash_password('your_password'))"
     """
-    return stauth.Hasher([plaintext]).generate()[0]
+    import bcrypt
+    return bcrypt.hashpw(plaintext.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 
 def get_credentials():
