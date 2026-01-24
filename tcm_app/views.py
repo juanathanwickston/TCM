@@ -167,6 +167,28 @@ def inventory_view(request):
     return render(request, 'tcm_app/inventory.html', context)
 
 
+def _redirect_with_filters(request, view_name='inventory'):
+    """
+    Helper to redirect while preserving filter state from POST params.
+    Reusable for any POST action that needs to return to a filtered view.
+    """
+    from urllib.parse import urlencode
+    
+    params = {}
+    if request.POST.get('department'):
+        params['department'] = request.POST.get('department')
+    if request.POST.get('training_type'):
+        params['training_type'] = request.POST.get('training_type')
+    if request.POST.get('sales_stage'):
+        params['sales_stage'] = request.POST.get('sales_stage')
+    if request.POST.get('audience_filter'):
+        params['audience'] = request.POST.get('audience_filter')
+    
+    if params:
+        return redirect(f'/{view_name}/?{urlencode(params)}')
+    return redirect(view_name)
+
+
 @login_required
 @require_http_methods(["POST"])
 def update_audience_view(request):
@@ -181,37 +203,25 @@ def update_audience_view(request):
     container_key = request.POST.get('container_key', '').strip()
     new_audience = request.POST.get('audience', '').strip()
     
-    # Validate inputs
+    # Validate inputs - preserve filter state on error redirects
     if not container_key:
         messages.error(request, 'Invalid container key')
-        return redirect('inventory')
+        return _redirect_with_filters(request)
     
     if not new_audience:
         messages.error(request, 'Audience cannot be empty')
-        return redirect('inventory')
+        return _redirect_with_filters(request)
     
     if new_audience not in CANONICAL_AUDIENCES:
         messages.error(request, f'Invalid audience value: {new_audience}')
-        return redirect('inventory')
+        return _redirect_with_filters(request)
     
     # Call frozen backend function - exactly one container
     update_audience_bulk([container_key], new_audience)
     
     messages.success(request, f'Audience updated to "{new_audience}"')
     
-    # Preserve filter state in redirect
-    redirect_url = '/inventory/?'
-    params = []
-    if request.POST.get('department'):
-        params.append(f"department={request.POST.get('department')}")
-    if request.POST.get('training_type'):
-        params.append(f"training_type={request.POST.get('training_type')}")
-    if request.POST.get('sales_stage'):
-        params.append(f"sales_stage={request.POST.get('sales_stage')}")
-    if request.POST.get('audience_filter'):
-        params.append(f"audience={request.POST.get('audience_filter')}")
-    
-    return redirect(redirect_url + '&'.join(params) if params else 'inventory')
+    return _redirect_with_filters(request)
 
 
 @login_required
