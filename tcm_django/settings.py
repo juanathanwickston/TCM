@@ -34,15 +34,19 @@ if _is_production:
     SECRET_KEY = os.environ.get('SECRET_KEY')
     if not SECRET_KEY:
         raise RuntimeError("SECRET_KEY environment variable is required in production")
-    # Allow DEBUG override for troubleshooting (default False)
-    DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes')
+    # DEBUG is always False in production - no override allowed
+    DEBUG = False
     # ALLOWED_HOSTS must be explicitly set
     _hosts = os.environ.get('ALLOWED_HOSTS', '')
     if not _hosts:
         raise RuntimeError("ALLOWED_HOSTS environment variable is required in production")
     ALLOWED_HOSTS = [h.strip() for h in _hosts.split(',') if h.strip()]
-    # CSRF trusted origins (required for POST forms behind Railway proxy)
-    CSRF_TRUSTED_ORIGINS = [f'https://{h}' for h in ALLOWED_HOSTS]
+    # CSRF trusted origins - explicit env var required (scheme + domain)
+    # Set to: https://tcm-demoonly.up.railway.app
+    _csrf_origins = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
+    if not _csrf_origins:
+        raise RuntimeError("CSRF_TRUSTED_ORIGINS environment variable is required in production (e.g., https://your-app.railway.app)")
+    CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins.split(',') if o.strip()]
 else:
     # LOCAL DEVELOPMENT: Permissive defaults
     SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-dev-only-local-testing')
