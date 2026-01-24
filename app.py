@@ -75,7 +75,9 @@ if not st.session_state.get("authentication_status"):
         
         # Authenticator handles cookie set/read
         # Current API: login(location=...) - form_name is deprecated, use fields dict if needed
+        st.write("DEBUG: about to render authenticator.login")
         name, auth_status, username = authenticator.login(location="main")
+        st.write("DEBUG: rendered authenticator.login, auth_status=", auth_status)
         
         # Visual element below form
         st.markdown("<small style='color: rgba(255,255,255,0.5);'>Forgot password?</small>", 
