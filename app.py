@@ -57,37 +57,38 @@ except RuntimeError as e:
     st.error(f"Authentication configuration error: {e}")
     st.stop()
 
-# Initialize variables before layout to prevent NameError
+# Initialize variables
 name = None
 auth_status = None
 username = None
 
-# Centered login card using Streamlit primitives
-left, mid, right = st.columns([1, 1.5, 1])
-
-with mid:
-    st.markdown("## Training Catalogue Manager")
-    st.caption("Sign in to continue")
-    st.divider()
+# Check if already authenticated (from cookie)
+# authenticator will have set session_state when reading cookie
+if not st.session_state.get("authentication_status"):
+    # NOT AUTHENTICATED - render login UI
+    left, mid, right = st.columns([1, 1.5, 1])
     
-    # Authenticator handles cookie set/read
-    name, auth_status, username = authenticator.login(location="main")
+    with mid:
+        st.markdown("## Training Catalogue Manager")
+        st.caption("Sign in to continue")
+        st.divider()
+        
+        # Authenticator handles cookie set/read
+        name, auth_status, username = authenticator.login(location="main")
+        
+        # Visual element below form
+        st.markdown("<small style='color: rgba(255,255,255,0.5);'>Forgot password?</small>", 
+                    unsafe_allow_html=True)
     
-    # Visual element below form
-    st.markdown("<small style='color: rgba(255,255,255,0.5);'>Forgot password?</small>", 
-                unsafe_allow_html=True)
+    # Gate logic for unauthenticated path
+    if auth_status is False:
+        st.error("Invalid username or password")
+    
+    st.stop()  # HARD STOP - no app content when unauthenticated
 
-# Gate logic
-if auth_status is False:
-    st.error("Invalid username or password")
-    st.stop()
-
-if auth_status is None:
-    st.stop()
-
-# Authenticated - store for convenience
-st.session_state["name"] = name
-st.session_state["username"] = username
+# AUTHENTICATED - set session state for convenience
+name = st.session_state.get("name")
+username = st.session_state.get("username")
 
 
 # =============================================================================
