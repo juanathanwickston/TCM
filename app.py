@@ -74,8 +74,8 @@ if not st.session_state.get("authentication_status"):
         st.divider()
         
         # Authenticator handles cookie set/read
-        # For streamlit-authenticator 0.3.2: login(form_name, location)
-        name, auth_status, username = authenticator.login('Login', 'main')
+        # Current API: login(location=...) - form_name is deprecated, use fields dict if needed
+        name, auth_status, username = authenticator.login(location="main")
         
         # Visual element below form
         st.markdown("<small style='color: rgba(255,255,255,0.5);'>Forgot password?</small>", 
