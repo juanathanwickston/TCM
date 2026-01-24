@@ -140,13 +140,17 @@ def validate_credentials(username: str, password: str) -> tuple:
     if not username or not password:
         return (False, "")
     
-    user_data = credentials.get(username.strip().lower())
-    if not user_data:
-        # Check case-insensitive
-        for stored_username, data in credentials.items():
-            if stored_username.lower() == username.strip().lower():
-                user_data = data
-                break
+    if not credentials:
+        return (False, "")
+    
+    # Case-insensitive username lookup
+    entered_username = username.strip().lower()
+    user_data = None
+    
+    for stored_username, data in credentials.items():
+        if stored_username.lower() == entered_username:
+            user_data = data
+            break
     
     if not user_data:
         return (False, "")
@@ -157,7 +161,9 @@ def validate_credentials(username: str, password: str) -> tuple:
     try:
         if bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8')):
             return (True, user_data["name"])
-    except Exception:
-        pass
+    except Exception as e:
+        # Log the error for debugging
+        import logging
+        logging.getLogger("auth").error(f"bcrypt check failed: {e}")
     
     return (False, "")
