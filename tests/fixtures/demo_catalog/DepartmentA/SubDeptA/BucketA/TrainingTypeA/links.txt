@@ -1,0 +1,4 @@
+# demo links
+https://example.com/a
+http://example.com/b
+not-a-url

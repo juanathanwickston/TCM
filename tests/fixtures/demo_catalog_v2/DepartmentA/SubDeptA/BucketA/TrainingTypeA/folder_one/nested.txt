@@ -1,0 +1,2 @@
+This is nested content inside folder_one.
+This folder should count as 1 resource (the folder itself).

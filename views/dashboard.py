@@ -55,9 +55,8 @@ def render():
         from db import get_active_containers
         from services.container_service import compute_file_count
         active_containers = get_active_containers()
-        # Filter same as KPI service: is_archived=0, is_placeholder=0
-        filtered_containers = [c for c in active_containers if not c.get('is_placeholder')]
-        total_content_items = sum(compute_file_count(c) for c in filtered_containers)
+        # get_active_containers() now enforces is_archived=0 AND is_placeholder=0 at SQL level
+        total_content_items = sum(compute_file_count(c) for c in active_containers)
         
         c1, c2, c3, c4 = st.columns(4)
         
