@@ -40,6 +40,8 @@ if _is_production:
     if not _hosts:
         raise RuntimeError("ALLOWED_HOSTS environment variable is required in production")
     ALLOWED_HOSTS = [h.strip() for h in _hosts.split(',') if h.strip()]
+    # CSRF trusted origins (required for POST forms behind Railway proxy)
+    CSRF_TRUSTED_ORIGINS = [f'https://{h}' for h in ALLOWED_HOSTS]
 else:
     # LOCAL DEVELOPMENT: Permissive defaults
     SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-dev-only-local-testing')
