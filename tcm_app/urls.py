@@ -14,5 +14,6 @@ urlpatterns = [
     path('scrubbing/', views.scrubbing_view, name='scrubbing'),
     path('scrubbing/save/', views.save_scrub_view, name='save_scrub'),
     path('investment/', views.investment_view, name='investment'),
+    path('investment/save/', views.save_investment_view, name='save_investment'),
     path('tools/', views.tools_view, name='tools'),
 ]

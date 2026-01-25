@@ -1,28 +1,131 @@
-{% extends 'tcm_app/base.html' %}
+{% extends "tcm_app/base.html" %}
+{% load static %}
 
 {% block title %}Investment | TCM{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h1 class="h3 mb-0">Investment Planning</h1>
-            <p class="text-muted mb-0">Plan build/buy/assign decisions</p>
-        </div>
+<div class="container-fluid py-4">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h1 class="h3 mb-1">Investment Planning</h1>
+      <div class="text-muted">Build/Buy/Assign decisions for Modify and Gap items</div>
     </div>
+  </div>
 
-    <div class="alert alert-info">
-        <h5 class="alert-heading"><i class="bi bi-info-circle me-2"></i>Phase 1 - Read Only</h5>
-        <p class="mb-0">Investment functionality will be implemented in Phase 4. This page currently shows a
-            placeholder.</p>
-    </div>
-
-    <div class="card">
-        <div class="card-body text-center py-5">
-            <i class="bi bi-graph-up display-1 text-muted"></i>
-            <h4 class="mt-4">Coming Soon</h4>
-            <p class="text-muted">The Build / Buy / Assign SME workflow will be available in a future phase.</p>
+  <!-- Summary KPIs -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <div class="h4 mb-1">{{ total_count }}</div>
+          <div class="text-muted small">Total Queue</div>
         </div>
+      </div>
     </div>
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <div class="h4 mb-1">{{ modify_count }}</div>
+          <div class="text-muted small">Modify</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <div class="h4 mb-1">{{ gap_count }}</div>
+          <div class="text-muted small">Gap</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <div class="h4 mb-1">{{ decided_count }} / {{ pending_count }}</div>
+          <div class="text-muted small">Decided / Pending</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <form method="get" class="d-flex align-items-center gap-3 mb-4">
+    <label class="form-label mb-0 text-muted">Scrub Status:</label>
+    <select name="scrub_filter" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+      {% for opt in scrub_options %}
+        <option value="{{ opt }}" {% if filter_scrub == opt %}selected{% endif %}>{{ opt }}</option>
+      {% endfor %}
+    </select>
+    <label class="form-label mb-0 text-muted ms-3">Decision:</label>
+    <select name="decision_filter" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+      {% for opt in decision_options %}
+        <option value="{{ opt }}" {% if filter_decision == opt %}selected{% endif %}>{{ opt|title }}</option>
+      {% endfor %}
+    </select>
+    <span class="text-muted small ms-3">Showing {{ containers|length }} items</span>
+  </form>
+
+  <!-- Container Table -->
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th style="width:100px;">Scrub Status</th>
+            <th style="width:130px;">Decision</th>
+            <th style="width:130px;">Owner</th>
+            <th style="width:120px;">Effort/Cost</th>
+            <th style="width:200px;">Notes</th>
+            <th style="width:80px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for c in containers %}
+          <tr>
+            <td>
+              <div class="fw-semibold">{{ c.display_name }}</div>
+              <div class="text-muted small">{{ c.relative_path }}</div>
+            </td>
+            <td>
+              <span class="badge {% if c.scrub_status == 'modify' %}bg-warning text-dark{% elif c.scrub_status == 'gap' %}bg-danger{% else %}bg-secondary{% endif %}">
+                {{ c.scrub_status|title }}
+              </span>
+            </td>
+            <td>
+              <form method="post" action="{% url 'save_investment' %}" class="d-flex gap-1 align-items-center invest-form">
+                {% csrf_token %}
+                <input type="hidden" name="container_key" value="{{ c.container_key }}">
+                <input type="hidden" name="scrub_filter" value="{{ filter_scrub }}">
+                <input type="hidden" name="decision_filter" value="{{ filter_decision }}">
+                <select name="decision" class="form-select form-select-sm" style="width:auto;">
+                  <option value="" {% if not c.invest_decision %}selected{% endif %}>-</option>
+                  <option value="build" {% if c.invest_decision == 'build' %}selected{% endif %}>Build</option>
+                  <option value="buy" {% if c.invest_decision == 'buy' %}selected{% endif %}>Buy</option>
+                  <option value="assign_sme" {% if c.invest_decision == 'assign_sme' %}selected{% endif %}>Assign SME</option>
+                  <option value="defer" {% if c.invest_decision == 'defer' %}selected{% endif %}>Defer</option>
+                </select>
+            </td>
+            <td>
+              <input type="text" name="owner" class="form-control form-control-sm" value="{{ c.invest_owner|default_if_none:'' }}" placeholder="Owner">
+            </td>
+            <td>
+              <input type="text" name="effort" class="form-control form-control-sm" value="{{ c.invest_effort|default_if_none:'' }}" placeholder="e.g., 2 weeks">
+            </td>
+            <td>
+              <input type="text" name="notes" class="form-control form-control-sm" value="{{ c.invest_notes|default_if_none:'' }}" placeholder="Notes">
+            </td>
+            <td class="text-end">
+              <button type="submit" class="btn btn-sm btn-primary">Save</button>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="text-center text-muted py-4">No items in this queue. Complete Scrubbing to add Modify or Gap items.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>
 {% endblock %}

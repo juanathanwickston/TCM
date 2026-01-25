@@ -363,11 +363,111 @@ def save_scrub_view(request):
 def investment_view(request):
     """
     Investment - Build/Buy/Assign decisions.
-    Phase 1: Placeholder, full implementation in Phase 4.
+    
+    CANONICAL READ: Uses get_containers_by_scrub_status(['modify', 'gap'])
+    which applies is_archived=0, is_placeholder=0.
+    
+    PARITY CONTRACT:
+    - Shows containers with scrub_status in ['modify', 'gap']
+    - Filters: scrub_status, invest_decision
+    - No new validation gates
     """
-    return render(request, 'tcm_app/investment.html', {
-        'phase': 'Phase 1 - Coming in Phase 4',
-    })
+    from db import get_containers_by_scrub_status
+    from models.enums import InvestDecision
+    
+    # CANONICAL READ: Same function as legacy Streamlit
+    containers = get_containers_by_scrub_status(['modify', 'gap'])
+    
+    # Read filter params
+    filter_scrub = request.GET.get('scrub_filter', 'All')
+    filter_decision = request.GET.get('decision_filter', 'All')
+    
+    # Apply filters
+    filtered = containers
+    if filter_scrub != 'All':
+        filtered = [c for c in filtered if c.get('scrub_status') == filter_scrub]
+    if filter_decision != 'All':
+        if filter_decision == 'pending':
+            filtered = [c for c in filtered if not c.get('invest_decision')]
+        else:
+            filtered = [c for c in filtered if c.get('invest_decision') == filter_decision]
+    
+    # Queue counts
+    modify_count = len([c for c in containers if c.get('scrub_status') == 'modify'])
+    gap_count = len([c for c in containers if c.get('scrub_status') == 'gap'])
+    decided_count = len([c for c in containers if c.get('invest_decision')])
+    pending_count = len(containers) - decided_count
+    
+    # InvestDecision choices
+    invest_choices = InvestDecision.choices()
+    invest_labels = InvestDecision.display_labels()
+    
+    context = {
+        'containers': filtered,
+        'total_count': len(containers),
+        'modify_count': modify_count,
+        'gap_count': gap_count,
+        'decided_count': decided_count,
+        'pending_count': pending_count,
+        'invest_choices': invest_choices,
+        'invest_labels': invest_labels,
+        'filter_scrub': filter_scrub,
+        'filter_decision': filter_decision,
+        'scrub_options': ['All', 'modify', 'gap'],
+        'decision_options': ['All', 'pending'] + invest_choices,
+    }
+    
+    return render(request, 'tcm_app/investment.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def save_investment_view(request):
+    """
+    Save investment decision for a single container.
+    
+    PARITY CONTRACT:
+    - Calls update_container_invest with (container_key, decision, owner, effort, notes)
+    - Does NOT enforce extra validation gates beyond what legacy did
+    - Preserves filter state on redirect
+    """
+    from db import update_container_invest
+    from models.enums import InvestDecision
+    
+    container_key = request.POST.get('container_key', '').strip()
+    decision = request.POST.get('decision', '').strip() or None
+    owner = request.POST.get('owner', '').strip() or ''
+    effort = request.POST.get('effort', '').strip() or None
+    notes = request.POST.get('notes', '').strip() or None
+    
+    # Preserve filters for redirect
+    scrub_filter = request.POST.get('scrub_filter', 'All')
+    decision_filter = request.POST.get('decision_filter', 'All')
+    
+    # Validate container_key
+    if not container_key:
+        messages.error(request, 'Invalid container key')
+        return redirect(f'/investment/?scrub_filter={scrub_filter}&decision_filter={decision_filter}')
+    
+    # Validate decision if provided
+    valid_decisions = InvestDecision.choices()
+    if decision and decision not in valid_decisions:
+        messages.warning(request, f'Invalid decision "{decision}" ignored')
+        decision = None
+    
+    # Call frozen backend: update_container_invest
+    update_container_invest(
+        container_key=container_key,
+        decision=decision,
+        owner=owner,
+        effort=effort,
+        notes=notes,
+    )
+    
+    messages.success(request, 'Saved')
+    
+    # Redirect back with filters preserved
+    return redirect(f'/investment/?scrub_filter={scrub_filter}&decision_filter={decision_filter}')
 
 
 @login_required
@@ -383,3 +483,4 @@ def tools_view(request):
     return render(request, 'tcm_app/tools.html', {
         'phase': 'Phase 1 - Coming in Phase 5',
     })
+
