@@ -67,27 +67,42 @@ def dashboard_view(request):
     """
     Dashboard - Executive metrics overview.
     
-    LOCKED SPEC (2026-01-25):
+    LOCKED SPEC (2026-01-25 FINAL):
     - All counts use SUM(resource_count) for FILE + LINK only
     - No row counts, no len(), no sum(1 for ...)
     - Status uses normalize_status()
     - Bucket uses normalize_bucket()
-    - Donut must sum to 100% (onboarding + upskilling + other)
-    - No Training Sources (removed)
-    - Audience Breakdown (added)
+    - Donut: 3 segments (onboarding/upskilling/other), center text = "Total" + number
+    - Training Types: human-readable labels (title case, underscores to spaces)
+    - Audience: 8 fixed rows in order, always show (including Unassigned)
+    - Decision bar: collapse if all 0
+    - No Training Sources
     """
     import re
     from collections import defaultdict
     from db import get_active_containers
-    from services.scrub_rules import normalize_status, CANONICAL_AUDIENCES
+    from services.scrub_rules import normalize_status
     
     # -------------------------------------------------------------------------
-    # LOCAL HELPERS (per locked spec)
+    # FIXED AUDIENCE ORDER (per locked spec)
+    # -------------------------------------------------------------------------
+    AUDIENCE_ORDER = [
+        'Direct',
+        'Indirect',
+        'Integration',
+        'FI',
+        'Partner Management',
+        'Operations',
+        'Compliance',
+        'Unassigned',
+    ]
+    
+    # -------------------------------------------------------------------------
+    # LOCAL HELPERS
     # -------------------------------------------------------------------------
     def normalize_bucket(raw: str) -> str:
         """Normalize bucket field to 'onboarding', 'upskilling', or ''."""
         s = (raw or '').strip().lower()
-        # Remove common numeric prefixes like "01_" or "1-"
         s = re.sub(r'^\d+\s*[_-]\s*', '', s)
         if s.startswith('onboarding'):
             return 'onboarding'
@@ -98,6 +113,16 @@ def dashboard_view(request):
     def is_resource(c):
         """A resource is a FILE or LINK container."""
         return c.get('container_type') in ('file', 'link')
+    
+    def humanize_label(raw: str) -> str:
+        """Convert 'instructor_led_virtual' to 'Instructor Led Virtual'."""
+        s = (raw or 'Unknown').strip()
+        s = s.replace('_', ' ')
+        return s.title()
+    
+    def is_unassigned(aud: str) -> bool:
+        """Check if audience is unassigned (NULL, empty, or whitespace)."""
+        return not (aud or '').strip()
     
     # -------------------------------------------------------------------------
     # FETCH DATA
@@ -154,10 +179,10 @@ def dashboard_view(request):
         for c in active
         if is_resource(c) and normalize_bucket(c.get('bucket')) == 'upskilling'
     )
-    # Other = anything not onboarding/upskilling
+    # Other = anything not onboarding/upskilling (clamp at 0)
     other_count = max(total_resources - onboarding_count - upskilling_count, 0)
     
-    # Percentages (must sum to 100, avoid divide-by-zero)
+    # Percentages (must sum to 100, guard divide-by-zero)
     if total_resources > 0:
         onboarding_pct = round((onboarding_count / total_resources) * 100, 1)
         upskilling_pct = round((upskilling_count / total_resources) * 100, 1)
@@ -173,47 +198,59 @@ def dashboard_view(request):
     offset_upskilling = donut_start - onboarding_pct
     offset_other = donut_start - onboarding_pct - upskilling_pct
     
+    # Donut breakdown table (under donut, not legend)
+    donut_breakdown = [
+        {'label': 'Onboarding', 'count': onboarding_count, 'pct': onboarding_pct, 'color': '#0d6efd'},
+        {'label': 'Upskilling', 'count': upskilling_count, 'pct': upskilling_pct, 'color': '#198754'},
+        {'label': 'Other', 'count': other_count, 'pct': other_pct, 'color': '#6c757d'},
+    ]
+    
     # -------------------------------------------------------------------------
-    # TRAINING TYPES TABLE (group, sum, sort by count desc then label asc)
+    # TRAINING TYPES TABLE (human-readable labels, sort by count desc then label asc)
     # -------------------------------------------------------------------------
     type_agg = defaultdict(int)
     for c in active:
         if is_resource(c):
-            label = (c.get('training_type') or 'Unknown').strip()
-            type_agg[label] += c.get('resource_count', 0)
+            raw_label = (c.get('training_type') or 'Unknown').strip()
+            type_agg[raw_label] += c.get('resource_count', 0)
     
     training_types = [
         {
-            'type': label,
+            'type': humanize_label(raw_label),
             'count': count,
-            'pct': round(count / total_resources * 100, 1) if total_resources > 0 else 0
+            'pct': round((count / total_resources) * 100, 1) if total_resources > 0 else 0.0
         }
-        for label, count in type_agg.items()
+        for raw_label, count in type_agg.items()
     ]
-    # Sort: count desc, then label asc
     training_types.sort(key=lambda x: (-x['count'], x['type']))
     
     # -------------------------------------------------------------------------
-    # AUDIENCE BREAKDOWN TABLE (replaces Training Sources)
+    # AUDIENCE BREAKDOWN (8 fixed rows in order, always show including Unassigned)
     # -------------------------------------------------------------------------
     audience_agg = defaultdict(int)
+    unassigned_count = 0
+    
     for c in active:
         if is_resource(c):
             aud = (c.get('audience') or '').strip()
-            if aud:
+            if is_unassigned(aud):
+                unassigned_count += c.get('resource_count', 0)
+            else:
                 audience_agg[aud] += c.get('resource_count', 0)
     
-    audience_breakdown = [
-        {
-            'audience': label,
+    # Build fixed-order audience rows (always 8 rows)
+    audience_breakdown = []
+    for aud_label in AUDIENCE_ORDER:
+        if aud_label == 'Unassigned':
+            count = unassigned_count
+        else:
+            count = audience_agg.get(aud_label, 0)
+        
+        audience_breakdown.append({
+            'audience': aud_label,
             'count': count,
-            'pct': round(count / total_resources * 100, 1) if total_resources > 0 else 0
-        }
-        for label, count in audience_agg.items()
-        if count > 0  # Hide zero rows
-    ]
-    # Sort: count desc, then label asc
-    audience_breakdown.sort(key=lambda x: (-x['count'], x['audience']))
+            'pct': round((count / total_resources) * 100, 1) if total_resources > 0 else 0.0
+        })
     
     # -------------------------------------------------------------------------
     # CONTEXT
@@ -234,6 +271,7 @@ def dashboard_view(request):
         'offset_onboarding': offset_onboarding,
         'offset_upskilling': offset_upskilling,
         'offset_other': offset_other,
+        'donut_breakdown': donut_breakdown,
         'training_types': training_types,
         'audience_breakdown': audience_breakdown,
     }
