@@ -63,9 +63,11 @@
             <td>
                 <select name="sales_stage" class="form-select form-select-sm" style="width:auto;">
                   <option value="" {% if not c.sales_stage %}selected{% endif %}>-</option>
-                  {% for key, label in sales_stages %}
-                    <option value="{{ key }}" {% if c.sales_stage == key %}selected{% endif %}>{{ label }}</option>
-                  {% endfor %}
+                  {% if sales_stages %}
+                    {% for key, label in sales_stages %}
+                      <option value="{{ key }}" {% if c.sales_stage == key %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  {% endif %}
                 </select>
             </td>
             <td><input type="text" name="notes" class="form-control form-control-sm" value="{{ c.scrub_notes|default_if_none:'' }}"></td>

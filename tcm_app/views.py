@@ -331,10 +331,10 @@ def save_scrub_view(request):
         messages.error(request, f'Invalid audience: {audience}')
         return redirect(f'/scrubbing/?queue_filter={queue_filter}')
     
-    # Validate sales_stage if provided (optional - no gate)
+    # Validate sales_stage if provided - sanitize invalid to None with warning
     if sales_stage and sales_stage not in SALES_STAGE_KEYS:
-        messages.error(request, f'Invalid sales stage: {sales_stage}')
-        return redirect(f'/scrubbing/?queue_filter={queue_filter}')
+        messages.warning(request, f'Invalid sales stage "{sales_stage}" ignored')
+        sales_stage = None
     
     # Call frozen backend: update_container_scrub with owner='' (Streamlit parity)
     update_container_scrub(
