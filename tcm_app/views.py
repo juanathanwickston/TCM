@@ -228,11 +228,135 @@ def update_audience_view(request):
 def scrubbing_view(request):
     """
     Scrubbing - Queue-based triage workflow.
-    Phase 1: Placeholder, full implementation in Phase 4.
+    
+    PARITY CONTRACT:
+    - Read: get_active_containers() only
+    - Filter: QUEUE_FILTERS = ["Unreviewed", "Include", "Modify", "Sunset", "All"]
+    - Sort: resource_count DESC, relative_path ASC
+    - No new validation gates (Streamlit didn't gate on owner/audience/notes)
     """
-    return render(request, 'tcm_app/scrubbing.html', {
-        'phase': 'Phase 1 - Coming in Phase 4',
-    })
+    # Import backend functions (frozen - do not modify)
+    from db import get_active_containers
+    from services.scrub_rules import normalize_status, CANONICAL_SCRUB_STATUSES, CANONICAL_AUDIENCES
+    from services.sales_stage import SALES_STAGES
+    
+    # Queue filter options (exact Streamlit parity)
+    QUEUE_FILTERS = ["Unreviewed", "Include", "Modify", "Sunset", "All"]
+    
+    # Get filter from GET params
+    queue_filter = request.GET.get('queue_filter', 'Unreviewed')
+    if queue_filter not in QUEUE_FILTERS:
+        queue_filter = 'Unreviewed'
+    
+    # Fetch all active containers (same as Streamlit)
+    containers = get_active_containers()
+    
+    # Compute queue counts using normalize_status
+    queue_counts = {'Unreviewed': 0, 'Include': 0, 'Modify': 0, 'Sunset': 0, 'total': len(containers)}
+    for c in containers:
+        normalized = normalize_status(c.get('scrub_status'))
+        if normalized in queue_counts:
+            queue_counts[normalized] += 1
+    
+    # Filter containers using normalize_status (exact Streamlit logic)
+    if queue_filter == "All":
+        filtered = containers
+    else:
+        filtered = [c for c in containers if normalize_status(c.get('scrub_status')) == queue_filter]
+    
+    # Sort: resource_count DESC, then relative_path ASC (exact Streamlit sort)
+    filtered = sorted(filtered, key=lambda c: (-(c.get('resource_count') or 0), c.get('relative_path', '')))
+    
+    # Add normalized status to each container for display
+    for c in filtered:
+        c['normalized_status'] = normalize_status(c.get('scrub_status'))
+    
+    context = {
+        'containers': filtered,
+        'queue_filters': QUEUE_FILTERS,
+        'queue_counts': queue_counts,
+        'current_queue_filter': queue_filter,
+        'scrub_statuses': CANONICAL_SCRUB_STATUSES,
+        'audiences': CANONICAL_AUDIENCES,
+        'sales_stages': SALES_STAGES,
+        'total_count': queue_counts['total'],
+        'reviewed_count': queue_counts['total'] - queue_counts['Unreviewed'],
+    }
+    
+    return render(request, 'tcm_app/scrubbing.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def save_scrub_view(request):
+    """
+    Save scrub decision for a single container.
+    
+    PARITY CONTRACT:
+    - Calls update_container_scrub with owner='' ALWAYS (Streamlit behavior)
+    - Maps "Unreviewed" → 'not_reviewed' for storage
+    - Does NOT gate on missing audience/notes/owner (Streamlit didn't)
+    - Calls update_sales_stage if sales_stage provided
+    """
+    from db import update_container_scrub, update_sales_stage
+    from services.scrub_rules import VALID_SCRUB_DECISIONS, CANONICAL_AUDIENCES
+    from services.sales_stage import SALES_STAGE_KEYS
+    from urllib.parse import urlencode
+    
+    container_key = request.POST.get('container_key', '').strip()
+    decision_input = request.POST.get('decision', '').strip()
+    notes = request.POST.get('notes', '').strip() or None
+    audience = request.POST.get('audience', '').strip() or None
+    sales_stage = request.POST.get('sales_stage', '').strip() or None
+    queue_filter = request.POST.get('queue_filter', 'Unreviewed')
+    
+    # Validate container_key
+    if not container_key:
+        messages.error(request, 'Invalid container key')
+        return redirect(f'/scrubbing/?queue_filter={queue_filter}')
+    
+    # Map "Unreviewed" → 'not_reviewed' for storage
+    if decision_input == 'Unreviewed':
+        decision = 'not_reviewed'
+    else:
+        decision = decision_input  # Include, Modify, Sunset as-is
+    
+    # Validate decision
+    if decision not in VALID_SCRUB_DECISIONS:
+        messages.error(request, f'Invalid decision: {decision_input}')
+        return redirect(f'/scrubbing/?queue_filter={queue_filter}')
+    
+    # Validate audience if provided (optional - no gate)
+    if audience and audience not in CANONICAL_AUDIENCES:
+        messages.error(request, f'Invalid audience: {audience}')
+        return redirect(f'/scrubbing/?queue_filter={queue_filter}')
+    
+    # Validate sales_stage if provided (optional - no gate)
+    if sales_stage and sales_stage not in SALES_STAGE_KEYS:
+        messages.error(request, f'Invalid sales stage: {sales_stage}')
+        return redirect(f'/scrubbing/?queue_filter={queue_filter}')
+    
+    # Call frozen backend: update_container_scrub with owner='' (Streamlit parity)
+    update_container_scrub(
+        container_key=container_key,
+        decision=decision,
+        owner='',  # ALWAYS empty string (Streamlit behavior)
+        notes=notes,
+        reasons=None,  # Not used in current workflow
+        resource_count_override=None,
+        audience=audience,
+    )
+    
+    # Call frozen backend: update_sales_stage (None clears it)
+    update_sales_stage(
+        container_key=container_key,
+        stage=sales_stage,
+    )
+    
+    messages.success(request, 'Saved')
+    
+    # Redirect back to queue with filter preserved
+    return redirect(f'/scrubbing/?queue_filter={queue_filter}')
 
 
 @login_required

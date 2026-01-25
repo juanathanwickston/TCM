@@ -4,25 +4,133 @@
 
 {% block content %}
 <div class="container-fluid">
+    <!-- Header with filter and progress -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h1 class="h3 mb-0">Scrubbing</h1>
             <p class="text-muted mb-0">Queue-based triage workflow</p>
         </div>
+        <div class="d-flex align-items-center gap-3">
+            <!-- Queue Filter -->
+            <form method="GET" class="d-flex align-items-center gap-2">
+                <label class="form-label mb-0 text-muted">Filter:</label>
+                <select name="queue_filter" class="form-select form-select-sm" onchange="this.form.submit()"
+                    style="width: auto;">
+                    <option value="Unreviewed" {% if current_queue_filter=='Unreviewed' %}selected{% endif %}>Unreviewed
+                        ({{ queue_counts.Unreviewed }})</option>
+                    <option value="Include" {% if current_queue_filter=='Include' %}selected{% endif %}>Include ({{
+                        queue_counts.Include }})</option>
+                    <option value="Modify" {% if current_queue_filter=='Modify' %}selected{% endif %}>Modify ({{
+                        queue_counts.Modify }})</option>
+                    <option value="Sunset" {% if current_queue_filter=='Sunset' %}selected{% endif %}>Sunset ({{
+                        queue_counts.Sunset }})</option>
+                    <option value="All" {% if current_queue_filter=='All' %}selected{% endif %}>All ({{
+                        queue_counts.total }})</option>
+                </select>
+            </form>
+            <!-- Progress -->
+            <span class="badge bg-secondary">
+                <strong>{{ reviewed_count }}</strong> / {{ total_count }} reviewed
+            </span>
+        </div>
     </div>
 
-    <div class="alert alert-info">
-        <h5 class="alert-heading"><i class="bi bi-info-circle me-2"></i>Phase 1 - Read Only</h5>
-        <p class="mb-0">Scrubbing functionality will be implemented in Phase 4. This page currently shows a placeholder.
-        </p>
+    <!-- Django Messages -->
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show"
+        role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
+    {% endfor %}
+    {% endif %}
 
+    <!-- Queue Table -->
+    {% if containers %}
+    <div class="card">
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 30%;">Name</th>
+                        <th style="width: 8%;">Count</th>
+                        <th style="width: 10%;">Status</th>
+                        <th style="width: 12%;">Decision</th>
+                        <th style="width: 15%;">Audience</th>
+                        <th style="width: 15%;">Notes</th>
+                        <th style="width: 10%;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for container in containers %}
+                    <tr>
+                        <form method="POST" action="{% url 'save_scrub' %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="container_key" value="{{ container.container_key }}">
+                            <input type="hidden" name="queue_filter" value="{{ current_queue_filter }}">
+
+                            <td>
+                                <div class="fw-medium text-truncate" style="max-width: 300px;"
+                                    title="{{ container.display_name }}">
+                                    {{ container.display_name }}
+                                </div>
+                                <small class="text-muted text-truncate d-block" style="max-width: 300px;"
+                                    title="{{ container.relative_path }}">
+                                    {{ container.relative_path }}
+                                </small>
+                            </td>
+                            <td>
+                                <span class="badge bg-primary">{{ container.resource_count|default:0 }}</span>
+                            </td>
+                            <td>
+                                <span
+                                    class="badge {% if container.normalized_status == 'Include' %}bg-success{% elif container.normalized_status == 'Modify' %}bg-warning text-dark{% elif container.normalized_status == 'Sunset' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                    {{ container.normalized_status }}
+                                </span>
+                            </td>
+                            <td>
+                                <select name="decision" class="form-select form-select-sm">
+                                    <option value="Unreviewed" {% if container.normalized_status=='Unreviewed'
+                                        %}selected{% endif %}>Unreviewed</option>
+                                    {% for status in scrub_statuses %}
+                                    <option value="{{ status }}" {% if container.normalized_status==status %}selected{%
+                                        endif %}>{{ status }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <select name="audience" class="form-select form-select-sm">
+                                    <option value="">-- None --</option>
+                                    {% for aud in audiences %}
+                                    <option value="{{ aud }}" {% if container.audience==aud %}selected{% endif %}>{{ aud
+                                        }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <input type="text" name="notes" class="form-control form-control-sm"
+                                    value="{{ container.scrub_notes|default:'' }}" placeholder="Notes...">
+                            </td>
+                            <td>
+                                <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                            </td>
+                        </form>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
     <div class="card">
         <div class="card-body text-center py-5">
             <i class="bi bi-check2-square display-1 text-muted"></i>
-            <h4 class="mt-4">Coming Soon</h4>
-            <p class="text-muted">The Include / Modify / Sunset workflow will be available in the next phase.</p>
+            <h4 class="mt-4">No items in "{{ current_queue_filter }}"</h4>
+            <p class="text-muted">Try a different filter or check the Dashboard for status.</p>
+            <a href="{% url 'scrubbing' %}?queue_filter=All" class="btn btn-outline-secondary">View All</a>
         </div>
     </div>
+    {% endif %}
 </div>
 {% endblock %}
