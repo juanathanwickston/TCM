@@ -13,6 +13,8 @@ A Streamlit dashboard app that analyzes training catalog folder submissions and 
 pip install -r requirements.txt
 ```
 
+> **⚠️ Deployment Note**: Production uses `requirements.txt`. Local legacy (Streamlit) uses `requirements-dev.txt`. **Do not add Streamlit packages to `requirements.txt`**—this is enforced by CI tests in `tests/test_requirements.py`.
+
 ### 2. Run the App
 
 ```bash

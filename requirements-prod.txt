@@ -1,6 +1,6 @@
 # Production Dependencies (Django only)
 # This file is used by Railway for deployment.
-# Full requirements.txt still exists for local dev with Streamlit.
+# For local dev with Streamlit, use requirements-dev.txt
 
 # Database
 psycopg2-binary==2.9.9
