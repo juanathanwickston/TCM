@@ -506,60 +506,64 @@ def import_zip_view(request):
     Import containers from ZIP file.
     
     SUPERUSER ONLY.
-    50MB size limit enforced server-side.
+    250MB size limit enforced server-side.
     PRG pattern with Django messages.
+    NEVER 500s - all errors handled with message + redirect.
     """
     # Superuser gate
     if not request.user.is_superuser:
         return HttpResponseForbidden("Access denied. Superuser required.")
     
-    from services.container_service import import_from_zip
-    from pathlib import Path
-    import tempfile
-    
-    # Check file present
-    if 'zipfile' not in request.FILES:
-        messages.error(request, 'No file uploaded')
-        return redirect('tools')
-    
-    uploaded = request.FILES['zipfile']
-    
-    # 250MB limit (250 * 1024 * 1024 = 262144000 bytes)
-    max_size = 250 * 1024 * 1024
-    if uploaded.size > max_size:
-        messages.error(request, f'File too large ({uploaded.size // (1024*1024)}MB). Maximum is 250MB.')
-        return redirect('tools')
-    
-    # Validate extension
-    if not uploaded.name.lower().endswith('.zip'):
-        messages.error(request, 'Only .zip files are allowed')
-        return redirect('tools')
-    
     try:
+        from services.container_service import import_from_zip
+        from pathlib import Path
+        import tempfile
+        
+        # Check file present (use .get() to avoid KeyError)
+        uploaded = request.FILES.get('zipfile')
+        if not uploaded:
+            messages.error(request, 'No file uploaded')
+            return redirect('tools')
+        
+        # Validate extension first (cheap check)
+        if not uploaded.name.lower().endswith('.zip'):
+            messages.error(request, 'Only .zip files are allowed')
+            return redirect('tools')
+        
+        # 250MB limit (250 * 1024 * 1024 = 262144000 bytes)
+        max_size = 250 * 1024 * 1024
+        if uploaded.size > max_size:
+            messages.error(request, f'File too large ({uploaded.size // (1024*1024)}MB). Maximum is 250MB.')
+            return redirect('tools')
+        
         # Save to temp file with unique name (no path traversal possible)
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp:
-            for chunk in uploaded.chunks():
-                tmp.write(chunk)
-            temp_path = tmp.name
-        
-        # Import via frozen backend
-        result = import_from_zip(temp_path)
-        
-        # Clean up temp file
-        Path(temp_path).unlink(missing_ok=True)
-        
-        # Success message with stats
-        messages.success(
-            request,
-            f"Import complete: {result.get('new_containers', 0)} new, "
-            f"{result.get('updated_containers', 0)} updated, "
-            f"{result.get('skipped', 0)} skipped"
-        )
-        
-        # Show errors if any
-        for err in result.get('errors', [])[:3]:
-            messages.warning(request, err)
+        temp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp:
+                for chunk in uploaded.chunks():
+                    tmp.write(chunk)
+                temp_path = tmp.name
             
+            # Import via frozen backend
+            result = import_from_zip(temp_path)
+            
+            # Success message with stats
+            messages.success(
+                request,
+                f"Import complete: {result.get('new_containers', 0)} new, "
+                f"{result.get('updated_containers', 0)} updated, "
+                f"{result.get('skipped', 0)} skipped"
+            )
+            
+            # Show errors if any
+            for err in result.get('errors', [])[:3]:
+                messages.warning(request, err)
+                
+        finally:
+            # Always clean up temp file
+            if temp_path:
+                Path(temp_path).unlink(missing_ok=True)
+                
     except Exception as e:
         messages.error(request, f'Import failed: {str(e)}')
     

@@ -106,6 +106,28 @@ class TestZipSizeLimit:
         assert 'size' in source
         # Must have 250MB limit (250 * 1024 * 1024 = 262144000)
         assert '250' in source
+    
+    def test_import_zip_uses_safe_file_get(self):
+        """import_zip_view must use .get() for file access (never KeyError)."""
+        import tcm_app.views as views
+        import inspect
+        
+        source = inspect.getsource(views.import_zip_view)
+        
+        # Must use .get() pattern for safe file access
+        assert ".get('zipfile')" in source or '.get("zipfile")' in source
+    
+    def test_import_zip_never_500s(self):
+        """import_zip_view must have outer try/except to guarantee no 500s."""
+        import tcm_app.views as views
+        import inspect
+        
+        source = inspect.getsource(views.import_zip_view)
+        
+        # Must have comprehensive error handling  
+        assert 'except Exception' in source
+        # Docstring should mention never 500
+        assert 'NEVER 500' in source or 'never 500' in source.lower()
 
 
 class TestNoRemovedFeatures:

@@ -29,7 +29,7 @@
                 <!-- ZIP Upload -->
                 <div class="col-md-6">
                     <h6>Import from ZIP</h6>
-                    <p class="text-muted small mb-3">Upload a training catalog ZIP file (max 50MB)</p>
+                    <p class="text-muted small mb-3">Upload a training catalog ZIP file (max 250MB)</p>
                     <form method="post" action="{% url 'import_zip' %}" enctype="multipart/form-data">
                         {% csrf_token %}
                         <div class="input-group mb-2">
