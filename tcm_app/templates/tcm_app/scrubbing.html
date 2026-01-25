@@ -3,108 +3,71 @@
 
 {% block content %}
 <div class="container-fluid py-4">
-    <div class="d-flex align-items-center justify-content-between mb-3">
-        <div>
-            <h1 class="h3 mb-1">Scrubbing</h1>
-            <div class="text-muted">Review and classify training content</div>
-        </div>
-
-        <form method="get" class="d-flex align-items-center gap-2">
-            <label class="form-label mb-0 text-muted">Filter:</label>
-            <select name="queue_filter" class="form-select form-select-sm" onchange="this.form.submit()"
-                style="width:auto;">
-                <option value="Unreviewed" {% if current_queue_filter=='Unreviewed' %}selected{% endif %}>
-                    Unreviewed ({{ queue_counts.Unreviewed }})
-                </option>
-                <option value="Include" {% if current_queue_filter=='Include' %}selected{% endif %}>
-                    Include ({{ queue_counts.Include }})
-                </option>
-                <option value="Modify" {% if current_queue_filter=='Modify' %}selected{% endif %}>
-                    Modify ({{ queue_counts.Modify }})
-                </option>
-                <option value="Sunset" {% if current_queue_filter=='Sunset' %}selected{% endif %}>
-                    Sunset ({{ queue_counts.Sunset }})
-                </option>
-                <option value="All" {% if current_queue_filter=='All' %}selected{% endif %}>
-                    All ({{ queue_counts.total }})
-                </option>
-            </select>
-        </form>
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h1 class="h3 mb-1">Scrubbing</h1>
+      <div class="text-muted">Review and classify training content</div>
     </div>
 
-    <div class="card">
-        <div class="table-responsive">
-            <table class="table table-hover mb-0 align-middle">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th style="width:120px;">Status</th>
-                        <th style="width:220px;">Audience</th>
-                        <th style="width:360px;">Notes</th>
-                        <th style="width:120px;"></th>
-                    </tr>
-                </thead>
+    <form method="get" class="d-flex align-items-center gap-2">
+      <label class="form-label mb-0 text-muted">Filter:</label>
+      <select name="queue_filter" class="form-select form-select-sm" onchange="this.form.submit()" style="width:auto;">
+        <option value="Unreviewed" {% if current_queue_filter == 'Unreviewed' %}selected{% endif %}>Unreviewed ({{ queue_counts.Unreviewed }})</option>
+        <option value="Include" {% if current_queue_filter == 'Include' %}selected{% endif %}>Include ({{ queue_counts.Include }})</option>
+        <option value="Modify" {% if current_queue_filter == 'Modify' %}selected{% endif %}>Modify ({{ queue_counts.Modify }})</option>
+        <option value="Sunset" {% if current_queue_filter == 'Sunset' %}selected{% endif %}>Sunset ({{ queue_counts.Sunset }})</option>
+        <option value="All" {% if current_queue_filter == 'All' %}selected{% endif %}>All ({{ queue_counts.total }})</option>
+      </select>
+    </form>
+  </div>
 
-                <tbody>
-                    {% for c in containers %}
-                    <tr>
-                        <td>
-                            <div class="fw-semibold">{{ c.display_name }}</div>
-                            <div class="text-muted small">{{ c.relative_path }}</div>
-                        </td>
-
-                        <td>
-                            <span class="badge bg-secondary">{{ c.normalized_status }}</span>
-                        </td>
-
-                        <td>
-                            <form method="post" action="{% url 'save_scrub' %}" class="d-flex gap-2 align-items-center">
-                                {% csrf_token %}
-                                <input type="hidden" name="container_key" value="{{ c.container_key }}">
-                                <input type="hidden" name="queue_filter" value="{{ current_queue_filter }}">
-
-                                <select name="decision" class="form-select form-select-sm" style="width:auto;">
-                                    <option value="Unreviewed" {% if c.normalized_status=='Unreviewed' %}selected{%
-                                        endif %}>Unreviewed</option>
-                                    <option value="Include" {% if c.normalized_status=='Include' %}selected{% endif %}>
-                                        Include</option>
-                                    <option value="Modify" {% if c.normalized_status=='Modify' %}selected{% endif %}>
-                                        Modify</option>
-                                    <option value="Sunset" {% if c.normalized_status=='Sunset' %}selected{% endif %}>
-                                        Sunset</option>
-                                </select>
-
-                                <select name="audience" class="form-select form-select-sm" style="width:auto;">
-                                    <option value="" {% if not c.audience %}selected{% endif %}>-</option>
-                                    {% for aud in audiences %}
-                                    <option value="{{ aud }}" {% if c.audience==aud %}selected{% endif %}>{{ aud }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-
-                        </td>
-
-                        <td>
-                            <input type="text" name="notes" class="form-control form-control-sm"
-                                value="{{ c.scrub_notes|default_if_none:'' }}">
-                        </td>
-
-                        <td class="text-end">
-                            <button type="submit" class="btn btn-sm btn-primary">Save</button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="5" class="text-center text-muted py-4">
-                            No items in this queue.
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-
-            </table>
-        </div>
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th style="width:120px;">Status</th>
+            <th style="width:220px;">Audience</th>
+            <th style="width:360px;">Notes</th>
+            <th style="width:120px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for c in containers %}
+          <tr>
+            <td>
+              <div class="fw-semibold">{{ c.display_name }}</div>
+              <div class="text-muted small">{{ c.relative_path }}</div>
+            </td>
+            <td><span class="badge bg-secondary">{{ c.normalized_status }}</span></td>
+            <td>
+              <form method="post" action="{% url 'save_scrub' %}" class="d-flex gap-2 align-items-center">
+                {% csrf_token %}
+                <input type="hidden" name="container_key" value="{{ c.container_key }}">
+                <input type="hidden" name="queue_filter" value="{{ current_queue_filter }}">
+                <select name="decision" class="form-select form-select-sm" style="width:auto;">
+                  <option value="Unreviewed" {% if c.normalized_status == 'Unreviewed' %}selected{% endif %}>Unreviewed</option>
+                  <option value="Include" {% if c.normalized_status == 'Include' %}selected{% endif %}>Include</option>
+                  <option value="Modify" {% if c.normalized_status == 'Modify' %}selected{% endif %}>Modify</option>
+                  <option value="Sunset" {% if c.normalized_status == 'Sunset' %}selected{% endif %}>Sunset</option>
+                </select>
+                <select name="audience" class="form-select form-select-sm" style="width:auto;">
+                  <option value="" {% if not c.audience %}selected{% endif %}>-</option>
+                  {% for aud in audiences %}
+                    <option value="{{ aud }}" {% if c.audience == aud %}selected{% endif %}>{{ aud }}</option>
+                  {% endfor %}
+                </select>
+            </td>
+            <td><input type="text" name="notes" class="form-control form-control-sm" value="{{ c.scrub_notes|default_if_none:'' }}"></td>
+            <td class="text-end"><button type="submit" class="btn btn-sm btn-primary">Save</button></form></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="text-center text-muted py-4">No items in this queue.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
     </div>
+  </div>
 </div>
 {% endblock %}
