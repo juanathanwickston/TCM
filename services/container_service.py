@@ -273,39 +273,83 @@ def import_from_zip(zip_path: str) -> Dict[str, Any]:
             
             # Determine container type and check if leaf
             if filename.lower() == "links.txt":
-                container_type = "links"
+                # SPECIAL: links.txt → individual LINK containers per URL
+                # Check if this is at leaf depth first
+                parent_path = '/'.join(parts[1:-1])
+                if not is_leaf_container(parent_path, False, filename):
+                    results['skipped'] += 1
+                    continue
+                
+                # Parse path for metadata (from parent folder)
+                parsed = parse_path(parent_path)
+                
+                try:
+                    content = zf.read(entry).decode('utf-8', errors='ignore')
+                    links_data = parse_links_content(content)
+                    urls = links_data.get('urls', [])
+                    
+                    # Create individual LINK container for each URL
+                    for url in urls:
+                        # Generate unique key per URL
+                        url_hash = hashlib.sha256(url.encode()).hexdigest()[:8]
+                        # Handle empty parent_path edge case
+                        if parent_path:
+                            link_relative_path = f"{parent_path}/links.txt#{url_hash}"
+                        else:
+                            link_relative_path = f"links.txt#{url_hash}"
+                        
+                        container_key = make_container_key(
+                            relative_path=link_relative_path,
+                            container_type="link"
+                        )
+                        
+                        is_new = upsert_container(
+                            container_key=container_key,
+                            relative_path=link_relative_path,
+                            container_type="link",
+                            bucket=parsed['bucket'],
+                            primary_department=parsed['primary_department'],
+                            sub_department=parsed['sub_department'],
+                            training_type=parsed['training_type'],
+                            display_name=url,
+                            web_url=url,
+                            resource_count=1,
+                            valid_link_count=1,
+                            is_placeholder=False,
+                            source="zip"
+                        )
+                        
+                        if is_new:
+                            results['new_containers'] += 1
+                        else:
+                            results['updated_containers'] += 1
+                    
+                    # If 0 valid URLs, create 0 containers (no placeholders)
+                    if not urls:
+                        results['skipped'] += 1
+                        
+                except Exception as e:
+                    results['errors'].append(f"Error reading {entry}: {e}")
+                
+                continue  # links.txt itself is never a container
+            
             elif is_folder:
-                container_type = "folder"
+                # SKIP: Folders are structural, not resources
+                # Only their contents (files underneath) count
+                continue
+            
             else:
                 container_type = "file"
             
-            # Check if this is a leaf container
-            parent_path = '/'.join(parts[1:-1]) if not is_folder else relative_path.rstrip('/')
+            # Check if this is a leaf container (files only at this point)
+            parent_path = '/'.join(parts[1:-1])
             
-            if not is_leaf_container(parent_path if container_type != "folder" else relative_path, 
-                                      is_folder, filename):
+            if not is_leaf_container(parent_path, False, filename):
                 results['skipped'] += 1
                 continue
             
             # Parse path for metadata
-            parsed = parse_path(parent_path if container_type != "folder" else relative_path.rstrip('/'))
-            
-            # For links.txt, parse content
-            resource_count = 1
-            valid_link_count = 0
-            is_placeholder = False
-            
-            if container_type == "links":
-                try:
-                    content = zf.read(entry).decode('utf-8', errors='ignore')
-                    links_data = parse_links_content(content)
-                    valid_link_count = links_data['valid_link_count']
-                    is_placeholder = links_data['is_placeholder']
-                    resource_count = links_data['resource_count']
-                except Exception as e:
-                    results['errors'].append(f"Error reading {entry}: {e}")
-                    is_placeholder = True
-                    resource_count = 0
+            parsed = parse_path(parent_path)
             
             # Generate deterministic key
             container_key = make_container_key(
@@ -323,9 +367,9 @@ def import_from_zip(zip_path: str) -> Dict[str, Any]:
                 sub_department=parsed['sub_department'],
                 training_type=parsed['training_type'],
                 display_name=filename,
-                resource_count=resource_count,
-                valid_link_count=valid_link_count,
-                is_placeholder=is_placeholder,
+                resource_count=1,
+                valid_link_count=0,
+                is_placeholder=False,
                 source="zip"
             )
             
