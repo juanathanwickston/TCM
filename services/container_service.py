@@ -57,7 +57,7 @@ TRAINING_TYPE_LABELS = {
 # OS metadata and template files excluded from ingestion.
 # Explicit denylist - these NEVER create resource_containers.
 # Compare with filename.lower().
-EXCLUDED_FILENAMES = frozenset({"desktop.ini", ".ds_store", "thumbs.db", "instructions.txt"})
+EXCLUDED_FILENAMES = frozenset({"desktop.ini", ".ds_store", "thumbs.db", "instructions.txt", "instructions.pdf"})
 
 
 def compute_file_count(container: dict) -> int:
