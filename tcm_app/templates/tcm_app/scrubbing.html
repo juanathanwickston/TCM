@@ -29,8 +29,8 @@
             <th>Name</th>
             <th style="width:120px;">Status</th>
             <th style="width:180px;">Audience</th>
-            <th style="width:150px;">Sales Stage</th>
-            <th style="width:280px;">Notes</th>
+            <th style="width:180px;">Sales Stage</th>
+            <th style="width:250px;">Notes</th>
             <th style="width:80px;"></th>
           </tr>
         </thead>
@@ -63,8 +63,8 @@
             <td>
                 <select name="sales_stage" class="form-select form-select-sm" style="width:auto;">
                   <option value="" {% if not c.sales_stage %}selected{% endif %}>-</option>
-                  {% for stage in sales_stages %}
-                    <option value="{{ stage }}" {% if c.sales_stage == stage %}selected{% endif %}>{{ stage }}</option>
+                  {% for key, label in sales_stages %}
+                    <option value="{{ key }}" {% if c.sales_stage == key %}selected{% endif %}>{{ label }}</option>
                   {% endfor %}
                 </select>
             </td>
