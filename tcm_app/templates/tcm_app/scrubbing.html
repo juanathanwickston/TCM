@@ -16,15 +16,15 @@
                 <label class="form-label mb-0 text-muted">Filter:</label>
                 <select name="queue_filter" class="form-select form-select-sm" onchange="this.form.submit()"
                     style="width: auto;">
-                    <option value="Unreviewed" {% if current_queue_filter == 'Unreviewed' %}selected{% endif %}>Unreviewed
+                    <option value="Unreviewed" {% if current_queue_filter=='Unreviewed' %}selected{% endif %}>Unreviewed
                         ({{ queue_counts.Unreviewed }})</option>
-                    <option value="Include" {% if current_queue_filter == 'Include' %}selected{% endif %}>Include ({{
+                    <option value="Include" {% if current_queue_filter=='Include' %}selected{% endif %}>Include ({{
                         queue_counts.Include }})</option>
-                    <option value="Modify" {% if current_queue_filter == 'Modify' %}selected{% endif %}>Modify ({{
+                    <option value="Modify" {% if current_queue_filter=='Modify' %}selected{% endif %}>Modify ({{
                         queue_counts.Modify }})</option>
-                    <option value="Sunset" {% if current_queue_filter == 'Sunset' %}selected{% endif %}>Sunset ({{
+                    <option value="Sunset" {% if current_queue_filter=='Sunset' %}selected{% endif %}>Sunset ({{
                         queue_counts.Sunset }})</option>
-                    <option value="All" {% if current_queue_filter == 'All' %}selected{% endif %}>All ({{
+                    <option value="All" {% if current_queue_filter=='All' %}selected{% endif %}>All ({{
                         queue_counts.total }})</option>
                 </select>
             </form>
@@ -69,34 +69,36 @@
                             {% csrf_token %}
                             <input type="hidden" name="container_key" value="{{ container.container_key }}">
                             <input type="hidden" name="queue_filter" value="{{ current_queue_filter }}">
-
                             <td>
                                 <div class="fw-medium text-truncate" style="max-width: 300px;"
-                                    title="{{ container.display_name }}">
-                                    {{ container.display_name }}
-                                </div>
+                                    title="{{ container.display_name }}">{{ container.display_name }}</div>
                                 <small class="text-muted text-truncate d-block" style="max-width: 300px;"
-                                    title="{{ container.relative_path }}">
-                                    {{ container.relative_path }}
-                                </small>
+                                    title="{{ container.relative_path }}">{{ container.relative_path }}</small>
                             </td>
                             <td>
                                 <span class="badge bg-primary">{{ container.resource_count|default:0 }}</span>
                             </td>
                             <td>
-                                <span
-                                    class="badge {% if container.normalized_status == 'Include' %}bg-success{% elif container.normalized_status == 'Modify' %}bg-warning text-dark{% elif container.normalized_status == 'Sunset' %}bg-danger{% else %}bg-secondary{% endif %}">
-                                    {{ container.normalized_status }}
-                                </span>
+                                {% if container.normalized_status == 'Include' %}
+                                <span class="badge bg-success">{{ container.normalized_status }}</span>
+                                {% elif container.normalized_status == 'Modify' %}
+                                <span class="badge bg-warning text-dark">{{ container.normalized_status }}</span>
+                                {% elif container.normalized_status == 'Sunset' %}
+                                <span class="badge bg-danger">{{ container.normalized_status }}</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ container.normalized_status }}</span>
+                                {% endif %}
                             </td>
                             <td>
                                 <select name="decision" class="form-select form-select-sm">
                                     <option value="Unreviewed" {% if container.normalized_status=='Unreviewed'
                                         %}selected{% endif %}>Unreviewed</option>
-                                    {% for status in scrub_statuses %}
-                                    <option value="{{ status }}" {% if container.normalized_status==status %}selected{%
-                                        endif %}>{{ status }}</option>
-                                    {% endfor %}
+                                    <option value="Include" {% if container.normalized_status=='Include' %}selected{%
+                                        endif %}>Include</option>
+                                    <option value="Modify" {% if container.normalized_status=='Modify' %}selected{%
+                                        endif %}>Modify</option>
+                                    <option value="Sunset" {% if container.normalized_status=='Sunset' %}selected{%
+                                        endif %}>Sunset</option>
                                 </select>
                             </td>
                             <td>
