@@ -5,43 +5,76 @@
 
 {% block content %}
 <style>
-    /* Dashboard Locked Spec Styles - Compact, No Dead Space */
+    /* Dashboard - Single Page Layout (No Scroll) */
 
-    /* Compact KPI Cards */
+    /* Tight Container */
+    .dashboard-container {
+        padding: 0.5rem 1rem;
+    }
+
+    /* Compact Header */
+    .dashboard-header {
+        margin-bottom: 0.5rem;
+    }
+
+    .dashboard-header h1 {
+        font-size: 1.25rem;
+        margin-bottom: 0;
+    }
+
+    .dashboard-header .text-muted {
+        font-size: 0.75rem;
+    }
+
+    /* Ultra-Compact KPI Cards */
     .kpi-card {
         text-align: center;
-        padding: 1rem 0.75rem;
+        padding: 0.5rem;
     }
 
     .kpi-value {
-        font-size: 2.5rem;
+        font-size: 1.75rem;
         font-weight: 700;
-        line-height: 1.1;
-        margin-bottom: 0.25rem;
+        line-height: 1;
+        margin-bottom: 0.1rem;
     }
 
     .kpi-value-lg {
-        font-size: 3rem;
+        font-size: 2rem;
     }
 
     .kpi-label {
         color: #6c757d;
-        font-size: 0.9rem;
+        font-size: 0.75rem;
         margin: 0;
     }
 
-    /* SVG Donut Chart */
+    /* Compact Card */
+    .card-header-sm {
+        padding: 0.4rem 0.75rem;
+    }
+
+    .card-header-sm h6 {
+        font-size: 0.8rem;
+        margin: 0;
+    }
+
+    .card-body-sm {
+        padding: 0.5rem 0.75rem;
+    }
+
+    /* Smaller Donut */
     .donut-container {
         display: flex;
-        flex-direction: column;
         align-items: center;
-        padding: 1rem 0.5rem;
+        gap: 1rem;
+        padding: 0.25rem;
     }
 
     .donut-chart {
-        width: 220px;
-        height: 220px;
-        max-width: 100%;
+        width: 120px;
+        height: 120px;
+        flex-shrink: 0;
     }
 
     .donut-ring {
@@ -69,30 +102,27 @@
     }
 
     .donut-text-label {
-        font-size: 0.22rem;
+        font-size: 0.2rem;
         fill: #6c757d;
         text-anchor: middle;
     }
 
     .donut-text-value {
-        font-size: 0.55rem;
+        font-size: 0.4rem;
         font-weight: 700;
         text-anchor: middle;
-        dominant-baseline: middle;
     }
 
-    /* Donut Breakdown Table (under donut) */
+    /* Donut Breakdown (inline, beside donut) */
     .donut-breakdown {
-        width: 100%;
-        max-width: 240px;
-        margin-top: 0.75rem;
-        font-size: 0.85rem;
+        font-size: 0.75rem;
+        flex: 1;
     }
 
     .donut-breakdown-row {
         display: flex;
         justify-content: space-between;
-        padding: 0.25rem 0;
+        padding: 0.15rem 0;
         border-bottom: 1px solid #f0f0f0;
     }
 
@@ -103,25 +133,31 @@
     .donut-breakdown-label {
         display: flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 0.35rem;
     }
 
     .donut-breakdown-dot {
-        width: 10px;
-        height: 10px;
+        width: 8px;
+        height: 8px;
         border-radius: 50%;
     }
 
-    .donut-breakdown-value {
-        text-align: right;
-        color: #495057;
+    /* Compact Tables */
+    .table-compact {
+        font-size: 0.75rem;
+        margin-bottom: 0;
+    }
+
+    .table-compact th,
+    .table-compact td {
+        padding: 0.2rem 0.4rem;
     }
 
     /* Stacked Bar */
     .stacked-bar {
         display: flex;
-        height: 40px;
-        border-radius: 6px;
+        height: 28px;
+        border-radius: 4px;
         overflow: hidden;
         background: #e9ecef;
     }
@@ -132,8 +168,7 @@
         justify-content: center;
         color: white;
         font-weight: 600;
-        font-size: 0.85rem;
-        min-width: 0;
+        font-size: 0.7rem;
     }
 
     .stacked-bar-segment.include {
@@ -151,28 +186,30 @@
     .stacked-bar-label {
         display: flex;
         justify-content: space-between;
-        margin-top: 0.5rem;
-        font-size: 0.8rem;
+        margin-top: 0.25rem;
+        font-size: 0.7rem;
         color: #6c757d;
     }
 
-    /* Compact Cards */
-    .card-body-compact {
-        padding: 0.75rem 1rem;
+    /* Row Spacing */
+    .row-tight {
+        margin-bottom: 0.5rem;
+    }
+
+    .g-2 {
+        gap: 0.5rem;
     }
 </style>
 
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <div>
-            <h1 class="h4 mb-0">Dashboard</h1>
-            <p class="text-muted mb-0 small">Training catalog overview</p>
-        </div>
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <h1>Dashboard</h1>
+        <span class="text-muted">Training catalog overview</span>
     </div>
 
-    <!-- ROW 1: KPI Strip (Compact) -->
-    <div class="row g-3 mb-3">
-        <div class="col-md-6">
+    <!-- ROW 1: KPI Strip -->
+    <div class="row g-2 row-tight">
+        <div class="col-6">
             <div class="card">
                 <div class="card-body kpi-card">
                     <div class="kpi-value kpi-value-lg">{{ total_resources|intcomma }}</div>
@@ -180,7 +217,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-6">
+        <div class="col-6">
             <div class="card">
                 <div class="card-body kpi-card">
                     <div class="kpi-value">{{ items_remaining|intcomma }}</div>
@@ -190,20 +227,17 @@
         </div>
     </div>
 
-    <!-- ROW 2: Composition -->
-    <div class="row g-3 mb-3">
-        <!-- Donut Card -->
-        <div class="col-md-6">
+    <!-- ROW 2: Donut + Training Types -->
+    <div class="row g-2 row-tight">
+        <div class="col-md-5">
             <div class="card h-100">
-                <div class="card-header py-2">
-                    <h6 class="card-title mb-0">Onboarding vs Upskilling</h6>
+                <div class="card-header card-header-sm">
+                    <h6>Onboarding vs Upskilling</h6>
                 </div>
-                <div class="card-body card-body-compact">
+                <div class="card-body card-body-sm">
                     <div class="donut-container">
                         <svg class="donut-chart" viewBox="0 0 36 36">
-                            <!-- Background ring -->
                             <circle class="donut-ring" cx="18" cy="18" r="15.9155" />
-
                             {% if total_resources > 0 %}
                             {% if onboarding_pct > 0 %}
                             <circle class="donut-segment-onboarding" cx="18" cy="18" r="15.9155"
@@ -221,21 +255,17 @@
                                 stroke-dashoffset="{{ offset_other }}" />
                             {% endif %}
                             {% endif %}
-
-                            <!-- Center text: "Total" + number -->
-                            <text x="18" y="16" class="donut-text-label">Total</text>
+                            <text x="18" y="16.5" class="donut-text-label">Total</text>
                             <text x="18" y="20" class="donut-text-value">{{ total_resources }}</text>
                         </svg>
-
-                        <!-- Breakdown table under donut (replaces legend) -->
                         <div class="donut-breakdown">
                             {% for item in donut_breakdown %}
                             <div class="donut-breakdown-row">
                                 <span class="donut-breakdown-label">
-                                    <span class="donut-breakdown-dot" style="background: {{ item.color }};"></span>
+                                    <span class="donut-breakdown-dot" style="background:{{ item.color }};"></span>
                                     {{ item.label }}
                                 </span>
-                                <span class="donut-breakdown-value">{{ item.count|intcomma }} ({{ item.pct }}%)</span>
+                                <span>{{ item.count|intcomma }} ({{ item.pct }}%)</span>
                             </div>
                             {% endfor %}
                         </div>
@@ -243,108 +273,99 @@
                 </div>
             </div>
         </div>
-
-        <!-- Training Types Card -->
-        <div class="col-md-6">
+        <div class="col-md-7">
             <div class="card h-100">
-                <div class="card-header py-2">
-                    <h6 class="card-title mb-0">Training Types</h6>
+                <div class="card-header card-header-sm">
+                    <h6>Training Types</h6>
                 </div>
-                <div class="card-body card-body-compact">
+                <div class="card-body card-body-sm">
                     {% if training_types %}
-                    <div class="table-responsive">
-                        <table class="table table-sm mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Training Type</th>
-                                    <th class="text-end">Count</th>
-                                    <th class="text-end">%</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for t in training_types %}
-                                <tr>
-                                    <td>{{ t.type }}</td>
-                                    <td class="text-end">{{ t.count|intcomma }}</td>
-                                    <td class="text-end">{{ t.pct }}%</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
+                    <table class="table table-compact">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th class="text-end">Count</th>
+                                <th class="text-end">%</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for t in training_types %}
+                            <tr>
+                                <td>{{ t.type }}</td>
+                                <td class="text-end">{{ t.count|intcomma }}</td>
+                                <td class="text-end">{{ t.pct }}%</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                     {% else %}
-                    <div class="text-muted small">No training type data</div>
+                    <div class="text-muted small">No data</div>
                     {% endif %}
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- ROW 3: Decision Status (collapse if all 0) -->
-    {% if show_decision_bar %}
-    <div class="row g-3 mb-3">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header py-2">
-                    <h6 class="card-title mb-0">Include / Modify / Sunset</h6>
+    <!-- ROW 3: Decision + Audience side-by-side -->
+    <div class="row g-2">
+        <!-- Decision Bar -->
+        <div class="col-md-5">
+            <div class="card h-100">
+                <div class="card-header card-header-sm">
+                    <h6>Include / Modify / Sunset</h6>
                 </div>
-                <div class="card-body card-body-compact">
+                <div class="card-body card-body-sm">
+                    {% if show_decision_bar %}
                     <div class="stacked-bar">
                         {% if include_count > 0 %}
-                        <div class="stacked-bar-segment include" style="flex: {{ include_count }};">
-                            {{ include_count }}
+                        <div class="stacked-bar-segment include" style="flex:{{ include_count }};">{{ include_count }}
                         </div>
                         {% endif %}
                         {% if modify_count > 0 %}
-                        <div class="stacked-bar-segment modify" style="flex: {{ modify_count }};">
-                            {{ modify_count }}
+                        <div class="stacked-bar-segment modify" style="flex:{{ modify_count }};">{{ modify_count }}
                         </div>
                         {% endif %}
                         {% if sunset_count > 0 %}
-                        <div class="stacked-bar-segment sunset" style="flex: {{ sunset_count }};">
-                            {{ sunset_count }}
+                        <div class="stacked-bar-segment sunset" style="flex:{{ sunset_count }};">{{ sunset_count }}
                         </div>
                         {% endif %}
                     </div>
                     <div class="stacked-bar-label">
-                        <span><span style="color:#198754;">●</span> Include: {{ include_count|intcomma }}</span>
-                        <span><span style="color:#fd7e14;">●</span> Modify: {{ modify_count|intcomma }}</span>
-                        <span><span style="color:#dc3545;">●</span> Sunset: {{ sunset_count|intcomma }}</span>
+                        <span><span style="color:#198754;">●</span> Inc: {{ include_count }}</span>
+                        <span><span style="color:#fd7e14;">●</span> Mod: {{ modify_count }}</span>
+                        <span><span style="color:#dc3545;">●</span> Sun: {{ sunset_count }}</span>
                     </div>
+                    {% else %}
+                    <div class="text-muted small">No decisions recorded yet</div>
+                    {% endif %}
                 </div>
             </div>
         </div>
-    </div>
-    {% endif %}
-
-    <!-- ROW 4: Audience Breakdown (ALWAYS show 8 rows) -->
-    <div class="row g-3">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header py-2">
-                    <h6 class="card-title mb-0">Audience Breakdown</h6>
+        <!-- Audience -->
+        <div class="col-md-7">
+            <div class="card h-100">
+                <div class="card-header card-header-sm">
+                    <h6>Audience Breakdown</h6>
                 </div>
-                <div class="card-body card-body-compact">
-                    <div class="table-responsive">
-                        <table class="table table-sm mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Audience</th>
-                                    <th class="text-end">Count</th>
-                                    <th class="text-end">%</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for a in audience_breakdown %}
-                                <tr>
-                                    <td>{{ a.audience }}</td>
-                                    <td class="text-end">{{ a.count|intcomma }}</td>
-                                    <td class="text-end">{{ a.pct }}%</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
+                <div class="card-body card-body-sm">
+                    <table class="table table-compact">
+                        <thead>
+                            <tr>
+                                <th>Audience</th>
+                                <th class="text-end">Count</th>
+                                <th class="text-end">%</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for a in audience_breakdown %}
+                            <tr>
+                                <td>{{ a.audience }}</td>
+                                <td class="text-end">{{ a.count|intcomma }}</td>
+                                <td class="text-end">{{ a.pct }}%</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
