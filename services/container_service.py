@@ -54,10 +54,10 @@ TRAINING_TYPE_LABELS = {
     "resources": "Resources",
 }
 
-# OS metadata files excluded from ingestion.
+# OS metadata and template files excluded from ingestion.
 # Explicit denylist - these NEVER create resource_containers.
 # Compare with filename.lower().
-EXCLUDED_FILENAMES = frozenset({"desktop.ini", ".ds_store", "thumbs.db"})
+EXCLUDED_FILENAMES = frozenset({"desktop.ini", ".ds_store", "thumbs.db", "instructions.txt"})
 
 
 def compute_file_count(container: dict) -> int:
@@ -264,6 +264,10 @@ def import_from_zip(zip_path: str) -> Dict[str, Any]:
             is_folder = entry.endswith('/')
             path = entry.rstrip('/')
             filename = Path(path).name
+            
+            # Skip excluded files (OS metadata, template files)
+            if filename.lower() in EXCLUDED_FILENAMES:
+                continue
             
             # Get relative path (strip root folder)
             parts = path.split('/')
