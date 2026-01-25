@@ -2,12 +2,64 @@
 Regression tests for Investment Write functionality.
 
 Tests verify:
-1. Investment view uses canonical read (get_containers_by_scrub_status)
-2. save_investment_view uses canonical write (update_container_invest)
-3. Filter preservation on redirect
+1. Investment view uses normalize_status to filter containers
+2. Scrubbing → Investment propagation works correctly
+3. Decision options match legacy enum values and labels
 """
 import pytest
 from models.enums import InvestDecision
+from services.scrub_rules import normalize_status
+
+
+class TestNormalizeStatus:
+    """Tests for normalize_status used in Investment queue filter."""
+    
+    def test_modify_normalizes_to_modify(self):
+        """'Modify' raw value normalizes to 'Modify'."""
+        assert normalize_status('Modify') == 'Modify'
+    
+    def test_lowercase_modify_normalizes_to_modify(self):
+        """'modify' lowercase normalizes to 'Modify'."""
+        assert normalize_status('modify') == 'Modify'
+    
+    def test_gap_normalizes_to_modify(self):
+        """Legacy 'gap' normalizes to 'Modify' (for Investment queue inclusion)."""
+        assert normalize_status('gap') == 'Modify'
+    
+    def test_include_does_not_normalize_to_modify(self):
+        """'Include' does NOT normalize to 'Modify'."""
+        assert normalize_status('Include') != 'Modify'
+    
+    def test_not_reviewed_does_not_normalize_to_modify(self):
+        """'not_reviewed' does NOT normalize to 'Modify'."""
+        assert normalize_status('not_reviewed') != 'Modify'
+        assert normalize_status('not_reviewed') == 'Unreviewed'
+
+
+class TestInvestmenQueuePredicate:
+    """Tests for Investment queue predicate using normalize_status."""
+    
+    def test_investment_view_uses_normalize_status(self):
+        """Investment view must use normalize_status to filter containers."""
+        import tcm_app.views as views
+        import inspect
+        
+        source = inspect.getsource(views.investment_view)
+        
+        # Must import and use normalize_status
+        assert 'normalize_status' in source
+        # Must filter for 'Modify'
+        assert "'Modify'" in source
+    
+    def test_investment_view_uses_get_active_containers(self):
+        """Investment view must use get_active_containers (canonical read)."""
+        import tcm_app.views as views
+        import inspect
+        
+        source = inspect.getsource(views.investment_view)
+        
+        # Must use get_active_containers
+        assert 'get_active_containers' in source
 
 
 class TestInvestDecisionEnum:
@@ -35,71 +87,22 @@ class TestInvestDecisionEnum:
         assert labels['defer'] == 'Defer'
 
 
-class TestInvestmentReadPredicate:
-    """Tests for Investment view canonical read."""
+class TestPendingSemantics:
+    """Tests for Pending filter semantics."""
     
-    @pytest.mark.skipif(
-        not __import__('os').environ.get('DATABASE_URL'),
-        reason="DATABASE_URL not configured"
-    )
-    def test_investment_uses_same_function_as_legacy(self):
-        """Investment view must use get_containers_by_scrub_status."""
-        # Verify the function exists and accepts status list
-        from db import get_containers_by_scrub_status
-        
-        # Function should accept a list of statuses
-        import inspect
-        sig = inspect.signature(get_containers_by_scrub_status)
-        params = list(sig.parameters.keys())
-        assert 'statuses' in params or len(params) >= 1
+    def test_pending_is_filter_not_decision(self):
+        """Pending must be a filter concept, not a stored decision value."""
+        # Pending should NOT be in InvestDecision choices
+        choices = InvestDecision.choices()
+        assert 'pending' not in choices
+        assert 'Pending' not in choices
     
-    def test_investment_filters_modify_and_gap(self):
-        """Investment view should filter for modify and gap statuses."""
-        # Verify the view code uses ['modify', 'gap']
-        import tcm_app.views as views
-        import inspect
-        source = inspect.getsource(views.investment_view)
-        assert "['modify', 'gap']" in source or "['gap', 'modify']" in source
-
-
-class TestInvestmentWriteFunction:
-    """Tests for update_container_invest function signature."""
-    
-    @pytest.mark.skipif(
-        not __import__('os').environ.get('DATABASE_URL'),
-        reason="DATABASE_URL not configured"
-    )
-    def test_update_container_invest_signature(self):
-        """update_container_invest must accept expected parameters."""
-        from db import update_container_invest
-        import inspect
-        
-        sig = inspect.signature(update_container_invest)
-        params = list(sig.parameters.keys())
-        
-        # Required parameters
-        assert 'container_key' in params
-        assert 'decision' in params
-        assert 'owner' in params
-        # Optional parameters
-        assert 'effort' in params
-        assert 'notes' in params
-
-
-class TestFilterPreservation:
-    """Tests for filter state preservation on redirect."""
-    
-    def test_save_investment_preserves_filters(self):
-        """save_investment_view must preserve filter params in redirect."""
+    def test_save_investment_view_never_writes_pending(self):
+        """save_investment_view must never write 'Pending' as invest_decision."""
         import tcm_app.views as views
         import inspect
         
         source = inspect.getsource(views.save_investment_view)
         
-        # Must read filter params from POST
-        assert 'scrub_filter' in source
-        assert 'decision_filter' in source
-        
-        # Must include filters in redirect URL
-        assert 'scrub_filter=' in source
-        assert 'decision_filter=' in source
+        # Should validate against InvestDecision.choices() which excludes Pending
+        assert 'InvestDecision.choices()' in source

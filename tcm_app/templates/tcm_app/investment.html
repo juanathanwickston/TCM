@@ -8,13 +8,13 @@
   <div class="d-flex align-items-center justify-content-between mb-3">
     <div>
       <h1 class="h3 mb-1">Investment Planning</h1>
-      <div class="text-muted">Build/Buy/Assign decisions for Modify and Gap items</div>
+      <div class="text-muted">Build/Buy/Assign decisions for Modify items</div>
     </div>
   </div>
 
   <!-- Summary KPIs -->
   <div class="row g-3 mb-4">
-    <div class="col-md-3">
+    <div class="col-md-4">
       <div class="card text-center">
         <div class="card-body">
           <div class="h4 mb-1">{{ total_count }}</div>
@@ -22,27 +22,19 @@
         </div>
       </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-4">
       <div class="card text-center">
         <div class="card-body">
-          <div class="h4 mb-1">{{ modify_count }}</div>
-          <div class="text-muted small">Modify</div>
+          <div class="h4 mb-1">{{ decided_count }}</div>
+          <div class="text-muted small">Decided</div>
         </div>
       </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-4">
       <div class="card text-center">
         <div class="card-body">
-          <div class="h4 mb-1">{{ gap_count }}</div>
-          <div class="text-muted small">Gap</div>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card text-center">
-        <div class="card-body">
-          <div class="h4 mb-1">{{ decided_count }} / {{ pending_count }}</div>
-          <div class="text-muted small">Decided / Pending</div>
+          <div class="h4 mb-1">{{ pending_count }}</div>
+          <div class="text-muted small">Pending</div>
         </div>
       </div>
     </div>
@@ -50,16 +42,10 @@
 
   <!-- Filters -->
   <form method="get" class="d-flex align-items-center gap-3 mb-4">
-    <label class="form-label mb-0 text-muted">Scrub Status:</label>
-    <select name="scrub_filter" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
-      {% for opt in scrub_options %}
-        <option value="{{ opt }}" {% if filter_scrub == opt %}selected{% endif %}>{{ opt }}</option>
-      {% endfor %}
-    </select>
-    <label class="form-label mb-0 text-muted ms-3">Decision:</label>
+    <label class="form-label mb-0 text-muted">Decision:</label>
     <select name="decision_filter" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
-      {% for opt in decision_options %}
-        <option value="{{ opt }}" {% if filter_decision == opt %}selected{% endif %}>{{ opt|title }}</option>
+      {% for value, label in decision_options %}
+        <option value="{{ value }}" {% if filter_decision == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
     <span class="text-muted small ms-3">Showing {{ containers|length }} items</span>
@@ -72,7 +58,6 @@
         <thead>
           <tr>
             <th>Name</th>
-            <th style="width:100px;">Scrub Status</th>
             <th style="width:130px;">Decision</th>
             <th style="width:130px;">Owner</th>
             <th style="width:120px;">Effort/Cost</th>
@@ -88,22 +73,15 @@
               <div class="text-muted small">{{ c.relative_path }}</div>
             </td>
             <td>
-              <span class="badge {% if c.scrub_status == 'modify' %}bg-warning text-dark{% elif c.scrub_status == 'gap' %}bg-danger{% else %}bg-secondary{% endif %}">
-                {{ c.scrub_status|title }}
-              </span>
-            </td>
-            <td>
               <form method="post" action="{% url 'save_investment' %}" class="d-flex gap-1 align-items-center invest-form">
                 {% csrf_token %}
                 <input type="hidden" name="container_key" value="{{ c.container_key }}">
-                <input type="hidden" name="scrub_filter" value="{{ filter_scrub }}">
                 <input type="hidden" name="decision_filter" value="{{ filter_decision }}">
                 <select name="decision" class="form-select form-select-sm" style="width:auto;">
                   <option value="" {% if not c.invest_decision %}selected{% endif %}>-</option>
-                  <option value="build" {% if c.invest_decision == 'build' %}selected{% endif %}>Build</option>
-                  <option value="buy" {% if c.invest_decision == 'buy' %}selected{% endif %}>Buy</option>
-                  <option value="assign_sme" {% if c.invest_decision == 'assign_sme' %}selected{% endif %}>Assign SME</option>
-                  <option value="defer" {% if c.invest_decision == 'defer' %}selected{% endif %}>Defer</option>
+                  {% for key, label in invest_choices %}
+                    <option value="{{ key }}" {% if c.invest_decision == key %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
                 </select>
             </td>
             <td>
@@ -121,7 +99,7 @@
             </td>
           </tr>
         {% empty %}
-          <tr><td colspan="7" class="text-center text-muted py-4">No items in this queue. Complete Scrubbing to add Modify or Gap items.</td></tr>
+          <tr><td colspan="6" class="text-center text-muted py-4">No items in this queue. Complete Scrubbing to add Modify items.</td></tr>
         {% endfor %}
         </tbody>
       </table>

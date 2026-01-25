@@ -364,57 +364,58 @@ def investment_view(request):
     """
     Investment - Build/Buy/Assign decisions.
     
-    CANONICAL READ: Uses get_containers_by_scrub_status(['modify', 'gap'])
-    which applies is_archived=0, is_placeholder=0.
-    
     PARITY CONTRACT:
-    - Shows containers with scrub_status in ['modify', 'gap']
-    - Filters: scrub_status, invest_decision
+    - Investment queue = containers where normalize_status(scrub_status) == 'Modify'
+    - This includes raw values: 'Modify', 'modify', 'gap' (all normalize to 'Modify')
+    - Uses get_active_containers() with the canonical is_archived=0, is_placeholder=0 predicate
     - No new validation gates
     """
-    from db import get_containers_by_scrub_status
+    from db import get_active_containers
+    from services.scrub_rules import normalize_status
     from models.enums import InvestDecision
     
-    # CANONICAL READ: Same function as legacy Streamlit
-    containers = get_containers_by_scrub_status(['modify', 'gap'])
+    # CANONICAL READ: get_active_containers (same predicate as everywhere else)
+    all_containers = get_active_containers()
+    
+    # Investment queue = containers whose normalize_status == 'Modify'
+    # This includes raw 'Modify', 'modify', and legacy 'gap'
+    containers = [
+        c for c in all_containers 
+        if normalize_status(c.get('scrub_status')) == 'Modify'
+    ]
+    
+    # Sort: resource_count desc, relative_path asc (parity with legacy)
+    containers.sort(key=lambda c: (-c.get('resource_count', 1), c.get('relative_path', '')))
     
     # Read filter params
-    filter_scrub = request.GET.get('scrub_filter', 'All')
     filter_decision = request.GET.get('decision_filter', 'All')
     
-    # Apply filters
+    # Apply decision filter only (no scrub filter needed - all are Modify)
     filtered = containers
-    if filter_scrub != 'All':
-        filtered = [c for c in filtered if c.get('scrub_status') == filter_scrub]
     if filter_decision != 'All':
-        if filter_decision == 'pending':
+        if filter_decision == 'Pending':
             filtered = [c for c in filtered if not c.get('invest_decision')]
         else:
             filtered = [c for c in filtered if c.get('invest_decision') == filter_decision]
     
     # Queue counts
-    modify_count = len([c for c in containers if c.get('scrub_status') == 'modify'])
-    gap_count = len([c for c in containers if c.get('scrub_status') == 'gap'])
     decided_count = len([c for c in containers if c.get('invest_decision')])
     pending_count = len(containers) - decided_count
     
-    # InvestDecision choices
-    invest_choices = InvestDecision.choices()
-    invest_labels = InvestDecision.display_labels()
+    # InvestDecision choices - exact parity with legacy enum
+    invest_choices = InvestDecision.choices()  # ['build', 'buy', 'assign_sme', 'defer']
+    invest_labels = InvestDecision.display_labels()  # {'build': 'Build', 'buy': 'Buy', ...}
     
     context = {
         'containers': filtered,
         'total_count': len(containers),
-        'modify_count': modify_count,
-        'gap_count': gap_count,
         'decided_count': decided_count,
         'pending_count': pending_count,
-        'invest_choices': invest_choices,
-        'invest_labels': invest_labels,
-        'filter_scrub': filter_scrub,
+        # invest_choices as list of (value, label) tuples for template iteration
+        'invest_choices': [(c, invest_labels.get(c, c.title())) for c in invest_choices],
         'filter_decision': filter_decision,
-        'scrub_options': ['All', 'modify', 'gap'],
-        'decision_options': ['All', 'pending'] + invest_choices,
+        # Decision dropdown options: All, Pending (filter concept, not stored), then enum values
+        'decision_options': [('All', 'All'), ('Pending', 'Pending')] + [(c, invest_labels.get(c, c)) for c in invest_choices],
     }
     
     return render(request, 'tcm_app/investment.html', context)
@@ -441,13 +442,12 @@ def save_investment_view(request):
     notes = request.POST.get('notes', '').strip() or None
     
     # Preserve filters for redirect
-    scrub_filter = request.POST.get('scrub_filter', 'All')
     decision_filter = request.POST.get('decision_filter', 'All')
     
     # Validate container_key
     if not container_key:
         messages.error(request, 'Invalid container key')
-        return redirect(f'/investment/?scrub_filter={scrub_filter}&decision_filter={decision_filter}')
+        return redirect(f'/investment/?decision_filter={decision_filter}')
     
     # Validate decision if provided
     valid_decisions = InvestDecision.choices()
@@ -467,7 +467,7 @@ def save_investment_view(request):
     messages.success(request, 'Saved')
     
     # Redirect back with filters preserved
-    return redirect(f'/investment/?scrub_filter={scrub_filter}&decision_filter={decision_filter}')
+    return redirect(f'/investment/?decision_filter={decision_filter}')
 
 
 @login_required
