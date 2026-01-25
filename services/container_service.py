@@ -274,11 +274,8 @@ def import_from_zip(zip_path: str) -> Dict[str, Any]:
             # Determine container type and check if leaf
             if filename.lower() == "links.txt":
                 # SPECIAL: links.txt → individual LINK containers per URL
-                # Check if this is at leaf depth first
+                # No depth check - all links.txt files are valid in ZIP import
                 parent_path = '/'.join(parts[1:-1])
-                if not is_leaf_container(parent_path, False, filename):
-                    results['skipped'] += 1
-                    continue
                 
                 # Parse path for metadata (from parent folder)
                 parsed = parse_path(parent_path)
@@ -341,12 +338,9 @@ def import_from_zip(zip_path: str) -> Dict[str, Any]:
             else:
                 container_type = "file"
             
-            # Check if this is a leaf container (files only at this point)
+            # ZIP import: ALL files are valid resources regardless of depth
+            # No is_leaf_container() check - depth is irrelevant
             parent_path = '/'.join(parts[1:-1])
-            
-            if not is_leaf_container(parent_path, False, filename):
-                results['skipped'] += 1
-                continue
             
             # Parse path for metadata
             parsed = parse_path(parent_path)
