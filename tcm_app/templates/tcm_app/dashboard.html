@@ -191,8 +191,7 @@
                             <!-- Center text -->
                             <text x="18" y="16.5" class="donut-text-main">{{ total_resources }}</text>
                             <text x="18" y="19" class="donut-text-sub">resources</text>
-                            <text x="18" y="21.5" class="donut-text-pct">{{ onboarding_pct }}% / {{ upskilling_pct }}%{%
-                                if other_pct > 0 %} / {{ other_pct }}%{% endif %}</text>
+                            <text x="18" y="21.5" class="donut-text-pct">{{ onboarding_pct }}% / {{ upskilling_pct }}%{% if other_pct > 0 %} / {{ other_pct }}%{% endif %}</text>
                             {% else %}
                             <!-- Empty state -->
                             <text x="18" y="17" class="donut-text-main">0</text>
