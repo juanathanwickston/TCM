@@ -67,16 +67,19 @@ def dashboard_view(request):
     """
     Dashboard - Executive metrics overview.
     
-    LOCKED SPEC (2026-01-26):
+    LOCKED SPEC (2026-01-25):
     - All counts use SUM(resource_count) for FILE + LINK only
     - No row counts, no len(), no sum(1 for ...)
     - Status uses normalize_status()
     - Bucket uses normalize_bucket()
+    - Donut must sum to 100% (onboarding + upskilling + other)
+    - No Training Sources (removed)
+    - Audience Breakdown (added)
     """
     import re
     from collections import defaultdict
     from db import get_active_containers
-    from services.scrub_rules import normalize_status
+    from services.scrub_rules import normalize_status, CANONICAL_AUDIENCES
     
     # -------------------------------------------------------------------------
     # LOCAL HELPERS (per locked spec)
@@ -139,7 +142,7 @@ def dashboard_view(request):
     show_decision_bar = (include_count + modify_count + sunset_count) > 0
     
     # -------------------------------------------------------------------------
-    # ONBOARDING VS UPSKILLING
+    # ONBOARDING VS UPSKILLING VS OTHER (donut must sum to 100%)
     # -------------------------------------------------------------------------
     onboarding_count = sum(
         c.get('resource_count', 0)
@@ -151,14 +154,24 @@ def dashboard_view(request):
         for c in active
         if is_resource(c) and normalize_bucket(c.get('bucket')) == 'upskilling'
     )
+    # Other = anything not onboarding/upskilling
+    other_count = max(total_resources - onboarding_count - upskilling_count, 0)
     
-    # Percentages (avoid divide-by-zero)
+    # Percentages (must sum to 100, avoid divide-by-zero)
     if total_resources > 0:
-        onboarding_pct = round(onboarding_count / total_resources * 100, 1)
-        upskilling_pct = round(upskilling_count / total_resources * 100, 1)
+        onboarding_pct = round((onboarding_count / total_resources) * 100, 1)
+        upskilling_pct = round((upskilling_count / total_resources) * 100, 1)
+        other_pct = round(100.0 - onboarding_pct - upskilling_pct, 1)
     else:
-        onboarding_pct = 0
-        upskilling_pct = 0
+        onboarding_pct = 0.0
+        upskilling_pct = 0.0
+        other_pct = 0.0
+    
+    # Donut offsets (continuous segments, start = 25)
+    donut_start = 25
+    offset_onboarding = donut_start
+    offset_upskilling = donut_start - onboarding_pct
+    offset_other = donut_start - onboarding_pct - upskilling_pct
     
     # -------------------------------------------------------------------------
     # TRAINING TYPES TABLE (group, sum, sort by count desc then label asc)
@@ -181,24 +194,26 @@ def dashboard_view(request):
     training_types.sort(key=lambda x: (-x['count'], x['type']))
     
     # -------------------------------------------------------------------------
-    # TRAINING SOURCES TABLE (group, sum, sort by count desc then label asc)
+    # AUDIENCE BREAKDOWN TABLE (replaces Training Sources)
     # -------------------------------------------------------------------------
-    source_agg = defaultdict(int)
+    audience_agg = defaultdict(int)
     for c in active:
         if is_resource(c):
-            label = (c.get('source') or 'Unknown').strip()
-            source_agg[label] += c.get('resource_count', 0)
+            aud = (c.get('audience') or '').strip()
+            if aud:
+                audience_agg[aud] += c.get('resource_count', 0)
     
-    training_sources = [
+    audience_breakdown = [
         {
-            'source': label,
+            'audience': label,
             'count': count,
             'pct': round(count / total_resources * 100, 1) if total_resources > 0 else 0
         }
-        for label, count in source_agg.items()
+        for label, count in audience_agg.items()
+        if count > 0  # Hide zero rows
     ]
     # Sort: count desc, then label asc
-    training_sources.sort(key=lambda x: (-x['count'], x['source']))
+    audience_breakdown.sort(key=lambda x: (-x['count'], x['audience']))
     
     # -------------------------------------------------------------------------
     # CONTEXT
@@ -212,10 +227,15 @@ def dashboard_view(request):
         'show_decision_bar': show_decision_bar,
         'onboarding_count': onboarding_count,
         'upskilling_count': upskilling_count,
+        'other_count': other_count,
         'onboarding_pct': onboarding_pct,
         'upskilling_pct': upskilling_pct,
+        'other_pct': other_pct,
+        'offset_onboarding': offset_onboarding,
+        'offset_upskilling': offset_upskilling,
+        'offset_other': offset_other,
         'training_types': training_types,
-        'training_sources': training_sources,
+        'audience_breakdown': audience_breakdown,
     }
     
     return render(request, 'tcm_app/dashboard.html', context)

@@ -33,12 +33,12 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 1rem;
+        padding: 2rem 1rem;
     }
 
     .donut-chart {
-        width: 180px;
-        height: 180px;
+        width: 200px;
+        height: 200px;
     }
 
     .donut-ring {
@@ -51,51 +51,37 @@
         fill: none;
         stroke: #0d6efd;
         stroke-width: 3;
-        stroke-linecap: round;
     }
 
     .donut-segment-upskilling {
         fill: none;
         stroke: #198754;
         stroke-width: 3;
-        stroke-linecap: round;
     }
 
-    .donut-text {
-        font-size: 0.35rem;
-        font-weight: 600;
+    .donut-segment-other {
+        fill: none;
+        stroke: #6c757d;
+        stroke-width: 3;
+    }
+
+    .donut-text-main {
+        font-size: 0.5rem;
+        font-weight: 700;
         text-anchor: middle;
         dominant-baseline: middle;
     }
 
-    .donut-text-small {
+    .donut-text-sub {
         font-size: 0.2rem;
         fill: #6c757d;
+        text-anchor: middle;
     }
 
-    .donut-legend {
-        margin-left: 1.5rem;
-    }
-
-    .donut-legend-item {
-        display: flex;
-        align-items: center;
-        margin-bottom: 0.75rem;
-    }
-
-    .donut-legend-color {
-        width: 16px;
-        height: 16px;
-        border-radius: 3px;
-        margin-right: 0.5rem;
-    }
-
-    .donut-legend-color.onboarding {
-        background: #0d6efd;
-    }
-
-    .donut-legend-color.upskilling {
-        background: #198754;
+    .donut-text-pct {
+        font-size: 0.18rem;
+        fill: #495057;
+        text-anchor: middle;
     }
 
     /* Stacked Bar */
@@ -176,53 +162,43 @@
                 </div>
                 <div class="card-body">
                     <div class="donut-container">
-                        {% if total_resources > 0 %}
                         <svg class="donut-chart" viewBox="0 0 36 36">
-                            <!-- Background ring -->
+                            <!-- Background ring (always visible) -->
                             <circle class="donut-ring" cx="18" cy="18" r="15.9155" />
 
+                            {% if total_resources > 0 %}
                             {% if onboarding_pct > 0 %}
                             <!-- Onboarding segment -->
                             <circle class="donut-segment-onboarding" cx="18" cy="18" r="15.9155"
-                                stroke-dasharray="{{ onboarding_pct }} {{ 100|add:onboarding_pct|add:'-'|slice:'1:' }}"
-                                stroke-dashoffset="25" />
+                                stroke-dasharray="{{ onboarding_pct }} {{ 100|add:'-'|add:onboarding_pct }}"
+                                stroke-dashoffset="{{ offset_onboarding }}" />
                             {% endif %}
 
                             {% if upskilling_pct > 0 %}
                             <!-- Upskilling segment -->
                             <circle class="donut-segment-upskilling" cx="18" cy="18" r="15.9155"
-                                stroke-dasharray="{{ upskilling_pct }} {{ 100|add:upskilling_pct|add:'-'|slice:'1:' }}"
-                                stroke-dashoffset="{% widthratio onboarding_pct 1 -1 %}" />
+                                stroke-dasharray="{{ upskilling_pct }} {{ 100|add:'-'|add:upskilling_pct }}"
+                                stroke-dashoffset="{{ offset_upskilling }}" />
+                            {% endif %}
+
+                            {% if other_pct > 0 %}
+                            <!-- Other segment -->
+                            <circle class="donut-segment-other" cx="18" cy="18" r="15.9155"
+                                stroke-dasharray="{{ other_pct }} {{ 100|add:'-'|add:other_pct }}"
+                                stroke-dashoffset="{{ offset_other }}" />
                             {% endif %}
 
                             <!-- Center text -->
-                            <text x="18" y="17" class="donut-text">{{ total_resources }}</text>
-                            <text x="18" y="20" class="donut-text donut-text-small">resources</text>
+                            <text x="18" y="16.5" class="donut-text-main">{{ total_resources }}</text>
+                            <text x="18" y="19" class="donut-text-sub">resources</text>
+                            <text x="18" y="21.5" class="donut-text-pct">{{ onboarding_pct }}% / {{ upskilling_pct }}%{%
+                                if other_pct > 0 %} / {{ other_pct }}%{% endif %}</text>
+                            {% else %}
+                            <!-- Empty state -->
+                            <text x="18" y="17" class="donut-text-main">0</text>
+                            <text x="18" y="20" class="donut-text-sub">resources</text>
+                            {% endif %}
                         </svg>
-                        {% else %}
-                        <svg class="donut-chart" viewBox="0 0 36 36">
-                            <circle class="donut-ring" cx="18" cy="18" r="15.9155" />
-                            <text x="18" y="18" class="donut-text">0</text>
-                        </svg>
-                        {% endif %}
-
-                        <div class="donut-legend">
-                            {% if onboarding_count > 0 %}
-                            <div class="donut-legend-item">
-                                <div class="donut-legend-color onboarding"></div>
-                                <span>Onboarding: {{ onboarding_count }} ({{ onboarding_pct }}%)</span>
-                            </div>
-                            {% endif %}
-                            {% if upskilling_count > 0 %}
-                            <div class="donut-legend-item">
-                                <div class="donut-legend-color upskilling"></div>
-                                <span>Upskilling: {{ upskilling_count }} ({{ upskilling_pct }}%)</span>
-                            </div>
-                            {% endif %}
-                            {% if onboarding_count == 0 and upskilling_count == 0 %}
-                            <div class="text-muted">No data</div>
-                            {% endif %}
-                        </div>
                     </div>
                 </div>
             </div>
@@ -271,7 +247,6 @@
                     <h5 class="card-title mb-0">Include / Modify / Sunset</h5>
                 </div>
                 <div class="card-body">
-                    {% with decision_total=include_count|add:modify_count|add:sunset_count %}
                     <div class="stacked-bar">
                         {% if include_count > 0 %}
                         <div class="stacked-bar-segment include" style="flex: {{ include_count }};">
@@ -294,44 +269,43 @@
                         <span><span style="color:#fd7e14;">●</span> Modify</span>
                         <span><span style="color:#dc3545;">●</span> Sunset</span>
                     </div>
-                    {% endwith %}
                 </div>
             </div>
         </div>
     </div>
     {% endif %}
 
-    <!-- ROW 4: Training Sources -->
+    <!-- ROW 4: Audience Breakdown -->
     <div class="row g-4">
         <div class="col-12">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="card-title mb-0">Training Sources</h5>
+                    <h5 class="card-title mb-0">Audience Breakdown</h5>
                 </div>
                 <div class="card-body">
-                    {% if training_sources %}
+                    {% if audience_breakdown %}
                     <div class="table-responsive">
                         <table class="table table-sm mb-0">
                             <thead>
                                 <tr>
-                                    <th>Source</th>
+                                    <th>Audience</th>
                                     <th class="text-end">Count</th>
                                     <th class="text-end">% of Total</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for s in training_sources %}
+                                {% for a in audience_breakdown %}
                                 <tr>
-                                    <td>{{ s.source }}</td>
-                                    <td class="text-end">{{ s.count|intcomma }}</td>
-                                    <td class="text-end">{{ s.pct }}%</td>
+                                    <td>{{ a.audience }}</td>
+                                    <td class="text-end">{{ a.count|intcomma }}</td>
+                                    <td class="text-end">{{ a.pct }}%</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
                     </div>
                     {% else %}
-                    <div class="text-muted">No source data</div>
+                    <div class="text-muted">No audience data assigned yet</div>
                     {% endif %}
                 </div>
             </div>
