@@ -524,10 +524,10 @@ def import_zip_view(request):
     
     uploaded = request.FILES['zipfile']
     
-    # 50MB limit (50 * 1024 * 1024 = 52428800 bytes)
-    max_size = 50 * 1024 * 1024
+    # 250MB limit (250 * 1024 * 1024 = 262144000 bytes)
+    max_size = 250 * 1024 * 1024
     if uploaded.size > max_size:
-        messages.error(request, f'File too large ({uploaded.size // (1024*1024)}MB). Maximum is 50MB.')
+        messages.error(request, f'File too large ({uploaded.size // (1024*1024)}MB). Maximum is 250MB.')
         return redirect('tools')
     
     # Validate extension

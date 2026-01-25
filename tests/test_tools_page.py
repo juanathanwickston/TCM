@@ -96,7 +96,7 @@ class TestZipSizeLimit:
     """Tests for ZIP upload size limit."""
     
     def test_import_zip_enforces_size_limit(self):
-        """import_zip_view must enforce 50MB limit server-side."""
+        """import_zip_view must enforce 250MB limit server-side."""
         import tcm_app.views as views
         import inspect
         
@@ -104,8 +104,8 @@ class TestZipSizeLimit:
         
         # Must check file size
         assert 'size' in source
-        # Must have some limit (50MB = 52428800 or calculation)
-        assert '50' in source or '52428800' in source
+        # Must have 250MB limit (250 * 1024 * 1024 = 262144000)
+        assert '250' in source
 
 
 class TestNoRemovedFeatures:
