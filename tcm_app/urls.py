@@ -15,5 +15,11 @@ urlpatterns = [
     path('scrubbing/save/', views.save_scrub_view, name='save_scrub'),
     path('investment/', views.investment_view, name='investment'),
     path('investment/save/', views.save_investment_view, name='save_investment'),
+    
+    # Tools
     path('tools/', views.tools_view, name='tools'),
+    path('tools/import/zip/', views.import_zip_view, name='import_zip'),
+    path('tools/sync/sharepoint/', views.sync_sharepoint_view, name='sync_sharepoint'),
+    path('tools/danger/clear/', views.clear_all_data_view, name='clear_all_data'),
 ]
+

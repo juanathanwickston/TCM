@@ -3,27 +3,118 @@
 {% block title %}Tools | TCM{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
+<div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h1 class="h3 mb-0">Tools</h1>
-            <p class="text-muted mb-0">Import, export, and maintenance utilities</p>
+            <p class="text-muted mb-0">Import and admin utilities</p>
         </div>
-        <span class="badge bg-warning text-dark">Superuser Only</span>
-    </div>
-
-    <div class="alert alert-info">
-        <h5 class="alert-heading"><i class="bi bi-info-circle me-2"></i>Phase 1 - Skeleton</h5>
-        <p class="mb-0">Tools functionality will be fully implemented in Phase 5. This page currently shows a
-            placeholder.</p>
-    </div>
-
-    <div class="card">
-        <div class="card-body text-center py-5">
-            <i class="bi bi-gear display-1 text-muted"></i>
-            <h4 class="mt-4">Coming Soon</h4>
-            <p class="text-muted">Import, Export, Sync, and Maintenance tools will be available in Phase 5.</p>
+        <div>
+            {% if is_superuser %}
+            <span class="badge bg-danger">Superuser</span>
+            {% else %}
+            <span class="badge bg-secondary">Staff</span>
+            {% endif %}
         </div>
     </div>
+
+    <!-- Import Content Card -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-cloud-upload me-2"></i>Import Content</h5>
+        </div>
+        <div class="card-body">
+            {% if is_superuser %}
+            <div class="row g-4">
+                <!-- ZIP Upload -->
+                <div class="col-md-6">
+                    <h6>Import from ZIP</h6>
+                    <p class="text-muted small mb-3">Upload a training catalog ZIP file (max 50MB)</p>
+                    <form method="post" action="{% url 'import_zip' %}" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        <div class="input-group mb-2">
+                            <input type="file" name="zipfile" class="form-control" accept=".zip" required>
+                            <button type="submit" class="btn btn-primary">Import ZIP</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- SharePoint Sync -->
+                <div class="col-md-6">
+                    <h6>SharePoint Sync</h6>
+                    {% if sharepoint_configured %}
+                    <p class="text-muted small mb-3">Sync from SharePoint library</p>
+                    <form method="post" action="{% url 'sync_sharepoint' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline-primary">
+                            <i class="bi bi-cloud-download me-1"></i>Sync SharePoint
+                        </button>
+                    </form>
+                    {% else %}
+                    <p class="text-muted small mb-3">
+                        <i class="bi bi-exclamation-triangle text-warning me-1"></i>
+                        Not configured. Set SHAREPOINT_SYNC_ENABLED and credentials.
+                    </p>
+                    <button class="btn btn-outline-secondary" disabled>
+                        <i class="bi bi-cloud-download me-1"></i>Sync SharePoint
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="alert alert-info mb-0">
+                <i class="bi bi-info-circle me-2"></i>
+                Import actions require superuser access.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Danger Zone Card (Superuser Only) -->
+    {% if is_superuser %}
+    <div class="card border-danger">
+        <div class="card-header bg-danger text-white" data-bs-toggle="collapse" data-bs-target="#dangerZone"
+            style="cursor: pointer;">
+            <h5 class="mb-0">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>Danger Zone
+                <i class="bi bi-chevron-down float-end"></i>
+            </h5>
+        </div>
+        <div id="dangerZone" class="collapse">
+            <div class="card-body">
+                <h6 class="text-danger">Clear All Data</h6>
+                <p class="text-muted small">
+                    This will <strong>permanently delete</strong> all container data.
+                    This action <strong>cannot be undone</strong>.
+                </p>
+                <form method="post" action="{% url 'clear_all_data' %}" id="clearForm">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">Type <code>CLEAR ALL DATA</code> to confirm:</label>
+                        <input type="text" name="confirmation" class="form-control" id="confirmInput" autocomplete="off"
+                            placeholder="CLEAR ALL DATA">
+                    </div>
+                    <button type="submit" class="btn btn-danger" id="clearButton" disabled>
+                        <i class="bi bi-trash me-1"></i>Delete All Data
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
+
+<script>
+    // Client-side confirmation validation
+    document.addEventListener('DOMContentLoaded', function () {
+        const confirmInput = document.getElementById('confirmInput');
+        const clearButton = document.getElementById('clearButton');
+
+        if (confirmInput && clearButton) {
+            confirmInput.addEventListener('input', function () {
+                clearButton.disabled = (this.value.trim() !== 'CLEAR ALL DATA');
+            });
+        }
+    });
+</script>
 {% endblock %}

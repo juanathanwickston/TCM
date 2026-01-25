@@ -470,17 +470,181 @@ def save_investment_view(request):
     return redirect(f'/investment/?decision_filter={decision_filter}')
 
 
+# =============================================================================
+# TOOLS VIEWS (Phase 5)
+# =============================================================================
+
 @login_required
 def tools_view(request):
     """
-    Tools - Import, export, admin utilities.
-    SUPERUSER ONLY (John).
+    Tools - Import, sync, and admin utilities.
+    
+    GET always returns 200 (no service calls).
+    Any authenticated user can view.
+    All POST actions require superuser.
     """
-    # HARD 403 GATE
+    import os
+    
+    # SharePoint configuration check (for UI display only - never 500)
+    sharepoint_enabled = os.environ.get('SHAREPOINT_SYNC_ENABLED', '').lower() == 'true'
+    sharepoint_tenant = os.environ.get('SHAREPOINT_TENANT_ID', '')
+    sharepoint_client = os.environ.get('SHAREPOINT_CLIENT_ID', '')
+    sharepoint_configured = sharepoint_enabled and sharepoint_tenant and sharepoint_client
+    
+    context = {
+        'is_superuser': request.user.is_superuser,
+        'sharepoint_configured': sharepoint_configured,
+    }
+    
+    return render(request, 'tcm_app/tools.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def import_zip_view(request):
+    """
+    Import containers from ZIP file.
+    
+    SUPERUSER ONLY.
+    50MB size limit enforced server-side.
+    PRG pattern with Django messages.
+    """
+    # Superuser gate
     if not request.user.is_superuser:
         return HttpResponseForbidden("Access denied. Superuser required.")
     
-    return render(request, 'tcm_app/tools.html', {
-        'phase': 'Phase 1 - Coming in Phase 5',
-    })
+    from services.container_service import import_from_zip
+    from pathlib import Path
+    import tempfile
+    
+    # Check file present
+    if 'zipfile' not in request.FILES:
+        messages.error(request, 'No file uploaded')
+        return redirect('tools')
+    
+    uploaded = request.FILES['zipfile']
+    
+    # 50MB limit (50 * 1024 * 1024 = 52428800 bytes)
+    max_size = 50 * 1024 * 1024
+    if uploaded.size > max_size:
+        messages.error(request, f'File too large ({uploaded.size // (1024*1024)}MB). Maximum is 50MB.')
+        return redirect('tools')
+    
+    # Validate extension
+    if not uploaded.name.lower().endswith('.zip'):
+        messages.error(request, 'Only .zip files are allowed')
+        return redirect('tools')
+    
+    try:
+        # Save to temp file with unique name (no path traversal possible)
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp:
+            for chunk in uploaded.chunks():
+                tmp.write(chunk)
+            temp_path = tmp.name
+        
+        # Import via frozen backend
+        result = import_from_zip(temp_path)
+        
+        # Clean up temp file
+        Path(temp_path).unlink(missing_ok=True)
+        
+        # Success message with stats
+        messages.success(
+            request,
+            f"Import complete: {result.get('new_containers', 0)} new, "
+            f"{result.get('updated_containers', 0)} updated, "
+            f"{result.get('skipped', 0)} skipped"
+        )
+        
+        # Show errors if any
+        for err in result.get('errors', [])[:3]:
+            messages.warning(request, err)
+            
+    except Exception as e:
+        messages.error(request, f'Import failed: {str(e)}')
+    
+    return redirect('tools')
+
+
+@login_required
+@require_http_methods(["POST"])
+def sync_sharepoint_view(request):
+    """
+    Sync containers from SharePoint.
+    
+    SUPERUSER ONLY.
+    ENV-GATED: Only runs if SHAREPOINT_SYNC_ENABLED=true and creds exist.
+    Fail-closed with message if not configured.
+    """
+    import os
+    
+    # Superuser gate
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("Access denied. Superuser required.")
+    
+    # Re-check env gating server-side (fail-closed)
+    sharepoint_enabled = os.environ.get('SHAREPOINT_SYNC_ENABLED', '').lower() == 'true'
+    sharepoint_tenant = os.environ.get('SHAREPOINT_TENANT_ID', '')
+    sharepoint_client = os.environ.get('SHAREPOINT_CLIENT_ID', '')
+    
+    if not (sharepoint_enabled and sharepoint_tenant and sharepoint_client):
+        messages.error(request, 'SharePoint sync not configured. Set SHAREPOINT_SYNC_ENABLED=true and required credentials.')
+        return redirect('tools')
+    
+    try:
+        from services.sharepoint_service import sync_from_sharepoint, is_sharepoint_enabled
+        
+        # Second guard: service-level check
+        if not is_sharepoint_enabled():
+            messages.error(request, 'SharePoint sync is disabled at service level.')
+            return redirect('tools')
+        
+        result = sync_from_sharepoint()
+        
+        messages.success(
+            request,
+            f"SharePoint sync complete: {result.get('added', 0)} added, "
+            f"{result.get('archived', 0)} archived, "
+            f"{result.get('total', 0)} active"
+        )
+        
+        if result.get('scope_violations', 0) > 0:
+            messages.warning(request, f"{result['scope_violations']} scope violations detected (see logs)")
+            
+    except Exception as e:
+        messages.error(request, f'SharePoint sync failed: {str(e)}')
+    
+    return redirect('tools')
+
+
+@login_required
+@require_http_methods(["POST"])
+def clear_all_data_view(request):
+    """
+    Clear all container data (HARD DELETE).
+    
+    SUPERUSER ONLY.
+    Requires exact typed confirmation: "CLEAR ALL DATA".
+    This action cannot be undone.
+    """
+    # Superuser gate
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("Access denied. Superuser required.")
+    
+    from db import clear_containers
+    
+    confirmation = request.POST.get('confirmation', '').strip()
+    
+    # Server-side confirmation check (exact match required)
+    if confirmation != 'CLEAR ALL DATA':
+        messages.error(request, 'Confirmation text did not match. No data was deleted.')
+        return redirect('tools')
+    
+    try:
+        clear_containers()
+        messages.success(request, 'All container data has been permanently deleted.')
+    except Exception as e:
+        messages.error(request, f'Clear failed: {str(e)}')
+    
+    return redirect('tools')
 
