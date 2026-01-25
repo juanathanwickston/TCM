@@ -118,6 +118,15 @@ DATABASES = {
 
 
 # =============================================================================
+# FILE UPLOAD SETTINGS (for large ZIP imports)
+# Larger uploads spool to disk instead of memory to prevent parsing timeouts
+# =============================================================================
+
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5MB - above this goes to disk
+DATA_UPLOAD_MAX_MEMORY_SIZE = 300 * 1024 * 1024  # 300MB - total request limit
+
+
+# =============================================================================
 # PASSWORD VALIDATION
 # =============================================================================
 
