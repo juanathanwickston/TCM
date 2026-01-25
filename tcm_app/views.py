@@ -66,39 +66,156 @@ def logout_view(request):
 def dashboard_view(request):
     """
     Dashboard - Executive metrics overview.
-    Calls: kpi_service functions.
+    
+    LOCKED SPEC (2026-01-26):
+    - All counts use SUM(resource_count) for FILE + LINK only
+    - No row counts, no len(), no sum(1 for ...)
+    - Status uses normalize_status()
+    - Bucket uses normalize_bucket()
     """
-    # Import backend functions (frozen - do not modify)
-    from services.kpi_service import (
-        get_submission_summary,
-        get_scrub_status_breakdown,
-        get_source_breakdown,
-        get_training_type_breakdown,
-        get_duplicate_count,
+    import re
+    from collections import defaultdict
+    from db import get_active_containers
+    from services.scrub_rules import normalize_status
+    
+    # -------------------------------------------------------------------------
+    # LOCAL HELPERS (per locked spec)
+    # -------------------------------------------------------------------------
+    def normalize_bucket(raw: str) -> str:
+        """Normalize bucket field to 'onboarding', 'upskilling', or ''."""
+        s = (raw or '').strip().lower()
+        # Remove common numeric prefixes like "01_" or "1-"
+        s = re.sub(r'^\d+\s*[_-]\s*', '', s)
+        if s.startswith('onboarding'):
+            return 'onboarding'
+        if s.startswith('upskilling'):
+            return 'upskilling'
+        return ''
+    
+    def is_resource(c):
+        """A resource is a FILE or LINK container."""
+        return c.get('container_type') in ('file', 'link')
+    
+    # -------------------------------------------------------------------------
+    # FETCH DATA
+    # -------------------------------------------------------------------------
+    active = get_active_containers()
+    
+    # -------------------------------------------------------------------------
+    # PRIMARY METRICS (SUM of resource_count)
+    # -------------------------------------------------------------------------
+    total_resources = sum(
+        c.get('resource_count', 0)
+        for c in active
+        if is_resource(c)
     )
-    from db import get_active_containers, get_sales_stage_breakdown
-    from services.container_service import compute_file_count
     
-    # Fetch data via existing backend
-    summary = get_submission_summary()
-    status = get_scrub_status_breakdown()
-    sources = get_source_breakdown()
-    types = get_training_type_breakdown()
-    dupes = get_duplicate_count()
-    stages = get_sales_stage_breakdown()
+    items_remaining = sum(
+        c.get('resource_count', 0)
+        for c in active
+        if is_resource(c) and normalize_status(c.get('scrub_status')) == 'Unreviewed'
+    )
     
-    # Compute total content items
-    active_containers = get_active_containers()
-    total_content_items = sum(compute_file_count(c) for c in active_containers)
+    # -------------------------------------------------------------------------
+    # DECISION BREAKDOWN
+    # -------------------------------------------------------------------------
+    include_count = sum(
+        c.get('resource_count', 0)
+        for c in active
+        if is_resource(c) and normalize_status(c.get('scrub_status')) == 'Include'
+    )
+    modify_count = sum(
+        c.get('resource_count', 0)
+        for c in active
+        if is_resource(c) and normalize_status(c.get('scrub_status')) == 'Modify'
+    )
+    sunset_count = sum(
+        c.get('resource_count', 0)
+        for c in active
+        if is_resource(c) and normalize_status(c.get('scrub_status')) == 'Sunset'
+    )
     
+    # Decision bar collapse rule
+    show_decision_bar = (include_count + modify_count + sunset_count) > 0
+    
+    # -------------------------------------------------------------------------
+    # ONBOARDING VS UPSKILLING
+    # -------------------------------------------------------------------------
+    onboarding_count = sum(
+        c.get('resource_count', 0)
+        for c in active
+        if is_resource(c) and normalize_bucket(c.get('bucket')) == 'onboarding'
+    )
+    upskilling_count = sum(
+        c.get('resource_count', 0)
+        for c in active
+        if is_resource(c) and normalize_bucket(c.get('bucket')) == 'upskilling'
+    )
+    
+    # Percentages (avoid divide-by-zero)
+    if total_resources > 0:
+        onboarding_pct = round(onboarding_count / total_resources * 100, 1)
+        upskilling_pct = round(upskilling_count / total_resources * 100, 1)
+    else:
+        onboarding_pct = 0
+        upskilling_pct = 0
+    
+    # -------------------------------------------------------------------------
+    # TRAINING TYPES TABLE (group, sum, sort by count desc then label asc)
+    # -------------------------------------------------------------------------
+    type_agg = defaultdict(int)
+    for c in active:
+        if is_resource(c):
+            label = (c.get('training_type') or 'Unknown').strip()
+            type_agg[label] += c.get('resource_count', 0)
+    
+    training_types = [
+        {
+            'type': label,
+            'count': count,
+            'pct': round(count / total_resources * 100, 1) if total_resources > 0 else 0
+        }
+        for label, count in type_agg.items()
+    ]
+    # Sort: count desc, then label asc
+    training_types.sort(key=lambda x: (-x['count'], x['type']))
+    
+    # -------------------------------------------------------------------------
+    # TRAINING SOURCES TABLE (group, sum, sort by count desc then label asc)
+    # -------------------------------------------------------------------------
+    source_agg = defaultdict(int)
+    for c in active:
+        if is_resource(c):
+            label = (c.get('source') or 'Unknown').strip()
+            source_agg[label] += c.get('resource_count', 0)
+    
+    training_sources = [
+        {
+            'source': label,
+            'count': count,
+            'pct': round(count / total_resources * 100, 1) if total_resources > 0 else 0
+        }
+        for label, count in source_agg.items()
+    ]
+    # Sort: count desc, then label asc
+    training_sources.sort(key=lambda x: (-x['count'], x['source']))
+    
+    # -------------------------------------------------------------------------
+    # CONTEXT
+    # -------------------------------------------------------------------------
     context = {
-        'summary': summary,
-        'status': status,
-        'sources': sources[:10] if sources else [],
-        'types': types[:10] if types else [],
-        'duplicates': dupes,
-        'stages': stages,
-        'total_content_items': total_content_items,
+        'total_resources': total_resources,
+        'items_remaining': items_remaining,
+        'include_count': include_count,
+        'modify_count': modify_count,
+        'sunset_count': sunset_count,
+        'show_decision_bar': show_decision_bar,
+        'onboarding_count': onboarding_count,
+        'upskilling_count': upskilling_count,
+        'onboarding_pct': onboarding_pct,
+        'upskilling_pct': upskilling_pct,
+        'training_types': training_types,
+        'training_sources': training_sources,
     }
     
     return render(request, 'tcm_app/dashboard.html', context)
