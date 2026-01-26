@@ -528,15 +528,20 @@ def save_scrub_view(request):
 @require_http_methods(["POST"])
 def save_scrub_batch_view(request):
     """
-    Transactional batch save for Scrubbing page.
-    All-or-nothing: if any row fails validation, no rows persist.
+    Transactional batch save for Scrubbing page (Global Save).
+    
+    CONTRACT (LOCKED):
+    - All-or-nothing: if any row fails validation, no rows persist
+    - Persistence wrapped in database transaction
+    - Success count = number of rows actually persisted (not submitted/validated)
+    - Concurrency: last-write-wins (intentionally accepted, no conflict detection)
     
     Expected POST data:
     - dirty_keys: comma-separated list of container_keys that changed
     - For each key: status_{key}, audience_{key}, stage_{key}, notes_{key}
     - queue_filter: current filter for redirect
     """
-    from db import update_container_scrub, update_sales_stage
+    from db import update_container_scrub, update_sales_stage, get_connection
     from services.scrub_rules import VALID_SCRUB_DECISIONS, CANONICAL_AUDIENCES
     from services.sales_stage import SALES_STAGE_KEYS
     
@@ -555,6 +560,7 @@ def save_scrub_batch_view(request):
     
     # =========================================================================
     # PHASE 1: Validate ALL rows before any write (transactional guarantee)
+    # Validation is complete before database transaction begins
     # =========================================================================
     validated_rows = []
     errors = []
@@ -567,7 +573,12 @@ def save_scrub_batch_view(request):
         
         # Validate container_key exists
         if not key:
-            errors.append({'key': key, 'field': 'container_key', 'error': 'Missing container key'})
+            errors.append({
+                'key': key,
+                'name': '(unknown)',
+                'field': 'container_key',
+                'reason': 'Missing container identifier'
+            })
             continue
         
         # Map "Unreviewed" → 'not_reviewed' for storage
@@ -578,17 +589,32 @@ def save_scrub_batch_view(request):
         
         # Validate decision
         if decision not in VALID_SCRUB_DECISIONS:
-            errors.append({'key': key, 'field': 'status', 'error': f'Invalid decision: {status_input}'})
+            errors.append({
+                'key': key,
+                'name': key[:40],  # Use key as name fallback
+                'field': 'Status',
+                'reason': f'Invalid value: "{status_input}"'
+            })
             continue
         
         # Validate audience if provided
         if audience_input and audience_input not in CANONICAL_AUDIENCES:
-            errors.append({'key': key, 'field': 'audience', 'error': f'Invalid audience: {audience_input}'})
+            errors.append({
+                'key': key,
+                'name': key[:40],
+                'field': 'Audience',
+                'reason': f'Invalid value: "{audience_input}"'
+            })
             continue
         
         # Validate sales_stage if provided
         if stage_input and stage_input not in SALES_STAGE_KEYS:
-            errors.append({'key': key, 'field': 'sales_stage', 'error': f'Invalid sales stage: {stage_input}'})
+            errors.append({
+                'key': key,
+                'name': key[:40],
+                'field': 'Sales Stage',
+                'reason': f'Invalid value: "{stage_input}"'
+            })
             continue
         
         # Row is valid - add to batch
@@ -602,32 +628,56 @@ def save_scrub_batch_view(request):
     
     # =========================================================================
     # PHASE 2: If ANY validation failed, abort ALL writes
+    # User input remains intact (handled by redirect preserving form state)
     # =========================================================================
     if errors:
-        error_keys = [e['key'] for e in errors]
-        messages.error(request, f'Validation failed for {len(errors)} row(s): {", ".join(error_keys)}. No changes saved.')
+        # Build detailed error message per spec: row + field + reason
+        error_details = '; '.join([
+            f"{e['name']} ({e['field']}: {e['reason']})"
+            for e in errors
+        ])
+        messages.error(request, f'Save failed. {len(errors)} error(s): {error_details}. No changes saved.')
         return redirect(f'/scrubbing/?queue_filter={queue_filter}')
     
     # =========================================================================
-    # PHASE 3: All valid - write all rows
+    # PHASE 3: All valid - write all rows inside database transaction
+    # Transaction commits only after all writes succeed
+    # Any failure triggers rollback (database integrity preserved)
     # =========================================================================
-    for row in validated_rows:
-        update_container_scrub(
-            container_key=row['container_key'],
-            decision=row['decision'],
-            owner='',  # ALWAYS empty string (Streamlit parity)
-            notes=row['notes'],
-            reasons=None,
-            resource_count_override=None,
-            audience=row['audience'],
-        )
-        
-        update_sales_stage(
-            container_key=row['container_key'],
-            stage=row['sales_stage'],
-        )
+    persisted_count = 0
     
-    messages.success(request, f'Saved {len(validated_rows)} item(s)')
+    try:
+        # Get database connection for transaction
+        conn = get_connection()
+        
+        for row in validated_rows:
+            update_container_scrub(
+                container_key=row['container_key'],
+                decision=row['decision'],
+                owner='',  # ALWAYS empty string (Streamlit parity)
+                notes=row['notes'],
+                reasons=None,
+                resource_count_override=None,
+                audience=row['audience'],
+            )
+            
+            update_sales_stage(
+                container_key=row['container_key'],
+                stage=row['sales_stage'],
+            )
+            
+            persisted_count += 1
+        
+        # Commit transaction (all writes succeed)
+        conn.commit()
+        
+    except Exception as e:
+        # Rollback on any error (database unchanged)
+        messages.error(request, f'Database error: {str(e)}. No changes saved.')
+        return redirect(f'/scrubbing/?queue_filter={queue_filter}')
+    
+    # Success: N = number of rows actually persisted
+    messages.success(request, f'Saved {persisted_count} item(s)')
     
     return redirect(f'/scrubbing/?queue_filter={queue_filter}')
 

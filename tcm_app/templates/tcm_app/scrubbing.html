@@ -104,9 +104,23 @@
 
 <script>
   (function () {
+    /**
+     * SCRUBBING GLOBAL SAVE — CLIENT-SIDE CONTRACT
+     * 
+     * Dirty tracking is LOGICAL, not visual:
+     * - A row is dirty if any field differs from original loaded value
+     * - Visual highlight (table-warning) is derived from logical state
+     * - Visual is NOT source of truth
+     * 
+     * In-flight protection:
+     * - Button disabled and shows "Saving..." during submit
+     * - Double-submit impossible
+     */
     const form = document.getElementById('scrub-form');
     const saveBtn = document.getElementById('global-save');
+    const saveBtnOriginalText = 'Save All Changes';
     const dirtyRows = new Set();
+    let isSaving = false;
 
     // Track changes to editable fields
     document.querySelectorAll('.dirty-track').forEach(function (el) {
@@ -114,7 +128,7 @@
         const row = this.closest('tr');
         const key = row.dataset.containerKey;
 
-        // Get original values
+        // Get original values (source of truth for dirty check)
         const origStatus = row.dataset.originalStatus;
         const origAudience = row.dataset.originalAudience;
         const origStage = row.dataset.originalStage;
@@ -126,35 +140,49 @@
         const currStage = row.querySelector('[name^="stage_"]').value;
         const currNotes = row.querySelector('[name^="notes_"]').value;
 
-        // Check if row is dirty
-        const isDirty = (currStatus ! ==  origStatus) ||
-          (currAudience ! ==  origAudience) ||
-          (currStage ! ==  origStage) ||
-          (currNotes ! ==  origNotes);
+        // Logical dirty check (exact comparison)
+        const isDirty = (currStatus !== origStatus) ||
+          (currAudience !== origAudience) ||
+          (currStage !== origStage) ||
+          (currNotes !== origNotes);
 
         if (isDirty) {
           dirtyRows.add(key);
-          row.classList.add('table-warning');
+          row.classList.add('table-warning');  // Visual derived from logical
         } else {
           dirtyRows.delete(key);
           row.classList.remove('table-warning');
         }
 
         // Enable/disable Global Save button
-        saveBtn.disabled = dirtyRows.size  == = 0;
+        updateSaveButton();
       });
 
-      // Also track input events for text fields (notes)
-      if (el.tagName  == = 'INPUT') {
+      // Track input events for text fields (notes) for real-time feedback
+      if (el.tagName === 'INPUT') {
         el.addEventListener('input', function () {
           this.dispatchEvent(new Event('change'));
         });
       }
     });
 
-    // Global Save click handler
+    function updateSaveButton() {
+      if (isSaving) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+      } else {
+        saveBtn.disabled = dirtyRows.size === 0;
+        saveBtn.textContent = saveBtnOriginalText;
+      }
+    }
+
+    // Global Save click handler with in-flight protection
     saveBtn.addEventListener('click', function () {
-      if (dirtyRows.size  == = 0) return;
+      if (dirtyRows.size === 0 || isSaving) return;
+
+      // In-flight protection: disable button, show saving state
+      isSaving = true;
+      updateSaveButton();
 
       // Collect only dirty rows
       const input = document.createElement('input');
@@ -166,9 +194,9 @@
       form.submit();
     });
 
-    // Navigation warning when dirty
+    // Navigation warning when dirty (only when not saving)
     window.addEventListener('beforeunload', function (e) {
-      if (dirtyRows.size > 0) {
+      if (dirtyRows.size > 0 && !isSaving) {
         e.preventDefault();
         e.returnValue = '';
         return '';
