@@ -1,0 +1,8 @@
+# Nixpacks configuration for Railway deployment
+# Django-only build (no Streamlit)
+
+[phases.build]
+cmds = ["python manage.py collectstatic --noinput"]
+
+[start]
+cmd = "python manage.py migrate --no-input && gunicorn tcm_django.wsgi:application --bind 0.0.0.0:$PORT --timeout 300 --graceful-timeout 120 --keep-alive 5"
