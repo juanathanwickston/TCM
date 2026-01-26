@@ -320,7 +320,6 @@ def inventory_view(request):
     
     # Compute totals - SUM(resource_count) over filtered containers
     total_resources = sum(c.get('resource_count', 0) for c in containers)
-    items_inside_folders = sum(compute_file_count(c) for c in containers)
     
     context = {
         'containers': containers,
@@ -331,7 +330,6 @@ def inventory_view(request):
         'sales_stage_labels': SALES_STAGE_LABELS,
         'audiences': CANONICAL_AUDIENCES,
         'total_resources': total_resources,
-        'items_inside_folders': items_inside_folders,
         # Current filter values (for preserving state after edit)
         'current_department': department,
         'current_training_type': training_type,
