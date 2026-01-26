@@ -198,11 +198,11 @@ def dashboard_view(request):
     offset_upskilling = donut_start - onboarding_pct
     offset_other = donut_start - onboarding_pct - upskilling_pct
     
-    # Donut breakdown table (under donut, not legend)
+    # Donut breakdown table (under donut, not legend) - Payroc colors
     donut_breakdown = [
-        {'label': 'Onboarding', 'count': onboarding_count, 'pct': onboarding_pct, 'color': '#0d6efd'},
-        {'label': 'Upskilling', 'count': upskilling_count, 'pct': upskilling_pct, 'color': '#198754'},
-        {'label': 'Other', 'count': other_count, 'pct': other_pct, 'color': '#6c757d'},
+        {'label': 'Onboarding', 'count': onboarding_count, 'pct': onboarding_pct, 'color': '#0051C2'},  # Cobalt
+        {'label': 'Upskilling', 'count': upskilling_count, 'pct': upskilling_pct, 'color': '#00e0b8'},  # Mint
+        {'label': 'Other', 'count': other_count, 'pct': other_pct, 'color': '#001D4E'},  # Navy
     ]
     
     # -------------------------------------------------------------------------

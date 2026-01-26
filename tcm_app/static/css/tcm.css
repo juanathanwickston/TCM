@@ -1,36 +1,186 @@
 /*
- * TCM Django - Custom Styles
- * Minor branding tweaks only. Bootstrap 5 handles layout.
+ * TCM Django - Payroc Branding
+ * Navy #001D4E | Cobalt #0051C2 | Sky Blue #F4F7FE | Mint #00e0b8
  */
 
-/* Navbar brand */
-.navbar-brand {
+/* ============================================
+   PAYROC COLOR PALETTE (CSS Custom Properties)
+   ============================================ */
+:root {
+    --payroc-navy: #001D4E;
+    --payroc-cobalt: #0051C2;
+    --payroc-sky: #F4F7FE;
+    --payroc-mint: #00e0b8;
+    --payroc-mint-dark: #00c4a0;
+    
+    /* Bootstrap overrides */
+    --bs-primary: #0051C2;
+    --bs-primary-rgb: 0, 81, 194;
+    --bs-success: #00e0b8;
+    --bs-success-rgb: 0, 224, 184;
+    --bs-link-color: #0051C2;
+    --bs-link-hover-color: #003d91;
+}
+
+/* ============================================
+   BODY & BACKGROUNDS
+   ============================================ */
+body {
+    background-color: var(--payroc-sky);
+}
+
+/* ============================================
+   NAVBAR - Navy Blue
+   ============================================ */
+.navbar-dark.bg-dark {
+    background-color: var(--payroc-navy) !important;
+}
+
+.navbar-dark .navbar-brand,
+.navbar-dark .nav-link {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.navbar-dark .nav-link:hover,
+.navbar-dark .nav-link.active {
+    color: #ffffff;
+}
+
+.navbar-dark .nav-link.active {
+    border-bottom: 2px solid var(--payroc-mint);
+}
+
+/* ============================================
+   BUTTONS - Cobalt Primary, Mint Success
+   ============================================ */
+.btn-primary {
+    background-color: var(--payroc-cobalt);
+    border-color: var(--payroc-cobalt);
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+    background-color: #003d91;
+    border-color: #003d91;
+}
+
+.btn-success {
+    background-color: var(--payroc-mint);
+    border-color: var(--payroc-mint);
+    color: var(--payroc-navy);
+}
+
+.btn-success:hover,
+.btn-success:focus {
+    background-color: var(--payroc-mint-dark);
+    border-color: var(--payroc-mint-dark);
+    color: var(--payroc-navy);
+}
+
+.btn-outline-primary {
+    color: var(--payroc-cobalt);
+    border-color: var(--payroc-cobalt);
+}
+
+.btn-outline-primary:hover {
+    background-color: var(--payroc-cobalt);
+    border-color: var(--payroc-cobalt);
+    color: #fff;
+}
+
+/* ============================================
+   LINKS
+   ============================================ */
+a {
+    color: var(--payroc-cobalt);
+}
+
+a:hover {
+    color: #003d91;
+}
+
+/* ============================================
+   CARDS
+   ============================================ */
+.card {
+    box-shadow: 0 1px 3px rgba(0, 29, 78, 0.08);
+    border: 1px solid rgba(0, 29, 78, 0.08);
+}
+
+.card-header {
+    background-color: #ffffff;
+    border-bottom: 1px solid rgba(0, 29, 78, 0.06);
+}
+
+/* ============================================
+   TABLES
+   ============================================ */
+.table thead th {
+    background-color: rgba(0, 29, 78, 0.03);
+    border-bottom-color: rgba(0, 29, 78, 0.1);
+    color: var(--payroc-navy);
     font-weight: 600;
 }
 
-/* Card shadows */
-.card {
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-}
-
-/* KPI display numbers */
-.display-5 {
-    color: #1a1a2e;
-}
-
-/* Table hover */
 .table-hover tbody tr:hover {
-    background-color: rgba(0,0,0,0.02);
+    background-color: rgba(0, 81, 194, 0.04);
 }
 
-/* Badge styles */
+/* ============================================
+   BADGES
+   ============================================ */
 .badge.bg-primary {
-    background-color: #667eea !important;
+    background-color: var(--payroc-cobalt) !important;
 }
 
-/* Alert info styling */
+.badge.bg-success {
+    background-color: var(--payroc-mint) !important;
+    color: var(--payroc-navy) !important;
+}
+
+/* ============================================
+   ALERTS
+   ============================================ */
 .alert-info {
-    background-color: #e8f4fd;
-    border-color: #b8daff;
-    color: #084298;
+    background-color: rgba(0, 81, 194, 0.1);
+    border-color: rgba(0, 81, 194, 0.2);
+    color: var(--payroc-navy);
+}
+
+.alert-success {
+    background-color: rgba(0, 224, 184, 0.15);
+    border-color: rgba(0, 224, 184, 0.3);
+    color: #006b56;
+}
+
+/* ============================================
+   FORM CONTROLS
+   ============================================ */
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--payroc-cobalt);
+    box-shadow: 0 0 0 0.2rem rgba(0, 81, 194, 0.25);
+}
+
+/* ============================================
+   DROPDOWN
+   ============================================ */
+.dropdown-item:active,
+.dropdown-item:focus {
+    background-color: var(--payroc-cobalt);
+}
+
+/* ============================================
+   KPI DISPLAY (Dashboard)
+   ============================================ */
+.display-5,
+.kpi-value {
+    color: var(--payroc-navy);
+}
+
+/* ============================================
+   NAVBAR BRAND
+   ============================================ */
+.navbar-brand {
+    font-weight: 600;
 }
