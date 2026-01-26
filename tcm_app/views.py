@@ -193,7 +193,7 @@ def dashboard_view(request):
     donut_breakdown = [
         {'label': 'Onboarding', 'count': onboarding_count, 'pct': onboarding_pct, 'color': '#0051C2'},  # Cobalt
         {'label': 'Upskilling', 'count': upskilling_count, 'pct': upskilling_pct, 'color': '#00e0b8'},  # Mint
-        {'label': 'Other', 'count': other_count, 'pct': other_pct, 'color': '#001D4E'},  # Navy
+        {'label': 'Not Sure', 'count': other_count, 'pct': other_pct, 'color': '#001D4E'},  # Navy
     ]
     
     # -------------------------------------------------------------------------
