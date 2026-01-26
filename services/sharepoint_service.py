@@ -31,7 +31,7 @@ from msal import ConfidentialClientApplication
 # -----------------------------------------------------------------------------
 # COMPILE-TIME LOCKED SCOPE CONSTANTS (NON-CONFIGURABLE)
 # -----------------------------------------------------------------------------
-SHAREPOINT_SITE_URL = "https://payroccl.sharepoint.com/sites/Roc_UCentral"
+SHAREPOINT_SITE_URL = "https://payrocllc.sharepoint.com/sites/Roc_UCentral"
 SHAREPOINT_LIBRARY_NAME = "Payroc Training Catalogue"
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 
