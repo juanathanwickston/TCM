@@ -519,6 +519,11 @@ def _traverse_folder(
         for item in children:
             item_name = item.get("name", "")
             
+            # DIAGNOSTIC: Progress summary every 50 items
+            total_scanned = stats.get('folders_scanned', 0) + stats.get('files_scanned', 0)
+            if total_scanned > 0 and total_scanned % 50 == 0:
+                _logger.info(f"[SYNC] Progress: {stats.get('folders_scanned', 0)} folders, {stats.get('files_scanned', 0)} files, {stats.get('added', 0)} resources")
+            
             # OS artifact exclusion
             if item_name.lower() in EXCLUDED_FILENAMES:
                 continue
@@ -537,6 +542,10 @@ def _traverse_folder(
             if "folder" in item:
                 # It's a folder - check if leaf container or recurse
                 stats['folders_scanned'] += 1
+                
+                # DIAGNOSTIC: Log folder entry with depth
+                folder_depth = len(item_relative.split('/')) if item_relative else 0
+                _logger.info(f"[SYNC] FOLDER: {item_relative} (depth {folder_depth})")
                 
                 # Check if this folder is a leaf container (L3+1 depth)
                 if is_leaf_container(item_relative, True, item_name):
@@ -568,6 +577,9 @@ def _traverse_folder(
                 
                 # Check if leaf container
                 if not is_leaf_container(parent_path, False, item_name):
+                    # DIAGNOSTIC: Log skipped file with reason
+                    parent_depth = len(parent_path.split('/')) if parent_path else 0
+                    _logger.info(f"[SYNC] SKIP file: {item_name} | parent_depth: {parent_depth} | path: {parent_path}")
                     continue  # Not a leaf, skip
                 
                 # Handle links.txt specially
@@ -580,6 +592,8 @@ def _traverse_folder(
                         sync_started_at=sync_started_at,
                         stats=stats
                     )
+                    # DIAGNOSTIC: Log links.txt processing
+                    _logger.info(f"[SYNC] ADD links.txt: {item_relative}")
                 else:
                     # Regular file
                     _process_file_container(
@@ -589,6 +603,8 @@ def _traverse_folder(
                         sync_started_at=sync_started_at,
                         stats=stats
                     )
+                    # DIAGNOSTIC: Log file added
+                    _logger.info(f"[SYNC] ADD file: {item_name}")
         
         # Pagination: follow nextLink
         url = result.get("@odata.nextLink")
