@@ -184,3 +184,28 @@ a:hover {
 .navbar-brand {
     font-weight: 600;
 }
+
+/* ============================================
+   TCM FIXED-LAYOUT TABLES (scoped, not global)
+   Applied only to inventory/scrubbing/investment
+   ============================================ */
+.tcm-fixed-table {
+    width: 100%;
+    table-layout: fixed;
+}
+
+.tcm-fixed-table th,
+.tcm-fixed-table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.tcm-fixed-table select,
+.tcm-fixed-table input {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
