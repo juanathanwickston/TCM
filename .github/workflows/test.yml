@@ -1,4 +1,4 @@
-name: Django Tests + Deploy
+name: Django Tests
 
 on:
   push:
@@ -37,16 +37,3 @@ jobs:
       
       - name: Run all tests
         run: pytest -v --tb=short
-
-  deploy:
-    needs: test
-    runs-on: ubuntu-latest
-    # Only deploy on push to demo_only (not PRs), and only if tests pass
-    if: github.event_name == 'push' && github.ref == 'refs/heads/demo_only'
-    
-    steps:
-      - name: Trigger Railway Deploy
-        run: |
-          curl -X POST "${{ secrets.RAILWAY_DEPLOY_HOOK }}"
-        env:
-          RAILWAY_DEPLOY_HOOK: ${{ secrets.RAILWAY_DEPLOY_HOOK }}
