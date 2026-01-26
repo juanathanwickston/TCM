@@ -6,7 +6,7 @@ Syncs training resources from SharePoint via Microsoft Graph API.
 MENTAL MODEL: This is os.walk() over HTTPS. Not a SharePoint integration—a filesystem replacement.
 
 SCOPE BOUNDARIES (compile-time locked, non-configurable):
-- Site: https://payroccl.sharepoint.com/sites/Roc_UCentral
+- Site: https://payrocllc.sharepoint.com/sites/Roc_UCentral
 - Library: Payroc Training Catalogue
 - Root: Entire library root
 
@@ -213,10 +213,10 @@ def resolve_site_id(headers: Dict[str, str]) -> str:
     Fail-closed: raises RuntimeError if site cannot be resolved.
     """
     # Extract site path from URL
-    # URL: https://payroccl.sharepoint.com/sites/Roc_UCentral
-    # Graph: /sites/payroccl.sharepoint.com:/sites/Roc_UCentral
+    # URL: https://payrocllc.sharepoint.com/sites/Roc_UCentral
+    # Graph: /sites/payrocllc.sharepoint.com:/sites/Roc_UCentral
     
-    url = f"{GRAPH_BASE_URL}/sites/payroccl.sharepoint.com:/sites/Roc_UCentral"
+    url = f"{GRAPH_BASE_URL}/sites/payrocllc.sharepoint.com:/sites/Roc_UCentral"
     
     result = _make_graph_request(url, headers)
     
