@@ -28,3 +28,20 @@ def intcomma(value):
         return "{:,}".format(int(value))
     except (ValueError, TypeError):
         return value
+
+
+@register.filter
+def split_hash(value):
+    """
+    Strip hash fragment from path for display.
+    Usage: {{ path|split_hash }}
+    
+    Example:
+        Input:  "HR/_General/01_Onboarding/links.txt#96eaa05d"
+        Output: "HR/_General/01_Onboarding/links.txt"
+    
+    This is display-only. Does not affect stored data.
+    """
+    if value is None:
+        return ''
+    return str(value).split('#')[0]
