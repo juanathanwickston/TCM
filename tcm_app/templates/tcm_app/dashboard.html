@@ -226,17 +226,17 @@
                             {% if total_resources > 0 %}
                             {% if onboarding_pct > 0 %}
                             <circle class="donut-segment-onboarding" cx="18" cy="18" r="15.9155"
-                                stroke-dasharray="{{ onboarding_pct }} {{ 100|add:'-'|add:onboarding_pct }}"
+                                stroke-dasharray="{{ onboarding_pct }} {{ onboarding_gap }}"
                                 stroke-dashoffset="{{ offset_onboarding }}" />
                             {% endif %}
                             {% if upskilling_pct > 0 %}
                             <circle class="donut-segment-upskilling" cx="18" cy="18" r="15.9155"
-                                stroke-dasharray="{{ upskilling_pct }} {{ 100|add:'-'|add:upskilling_pct }}"
+                                stroke-dasharray="{{ upskilling_pct }} {{ upskilling_gap }}"
                                 stroke-dashoffset="{{ offset_upskilling }}" />
                             {% endif %}
                             {% if other_pct > 0 %}
                             <circle class="donut-segment-other" cx="18" cy="18" r="15.9155"
-                                stroke-dasharray="{{ other_pct }} {{ 100|add:'-'|add:other_pct }}"
+                                stroke-dasharray="{{ other_pct }} {{ other_gap }}"
                                 stroke-dashoffset="{{ offset_other }}" />
                             {% endif %}
                             {% endif %}

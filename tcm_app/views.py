@@ -189,6 +189,11 @@ def dashboard_view(request):
     offset_upskilling = donut_start - onboarding_pct
     offset_other = donut_start - onboarding_pct - upskilling_pct
     
+    # Donut gap values for stroke-dasharray (segment + gap = 100)
+    onboarding_gap = round(100 - onboarding_pct, 1)
+    upskilling_gap = round(100 - upskilling_pct, 1)
+    other_gap = round(100 - other_pct, 1)
+    
     # Donut breakdown table (under donut, not legend) - Payroc colors
     donut_breakdown = [
         {'label': 'Onboarding', 'count': onboarding_count, 'pct': onboarding_pct, 'color': '#0051C2'},  # Cobalt
@@ -262,6 +267,9 @@ def dashboard_view(request):
         'offset_onboarding': offset_onboarding,
         'offset_upskilling': offset_upskilling,
         'offset_other': offset_other,
+        'onboarding_gap': onboarding_gap,
+        'upskilling_gap': upskilling_gap,
+        'other_gap': other_gap,
         'donut_breakdown': donut_breakdown,
         'training_types': training_types,
         'audience_breakdown': audience_breakdown,
