@@ -1297,6 +1297,95 @@ def get_active_training_types(primary_department: str = None) -> List[str]:
 
 
 # -----------------------------------------------------------------------------
+# Resource-Only Functions (for Inventory - Option A)
+# Resources = files + links only (excludes folders)
+# These functions exist SEPARATELY from container functions to avoid regressions
+# -----------------------------------------------------------------------------
+
+def get_active_resources_filtered(
+    primary_department: str = None,
+    training_type: str = None,
+    sales_stage: str = None
+) -> List[Dict[str, Any]]:
+    """
+    Get active RESOURCES (file/link only, excludes folders) with optional filters.
+    
+    For Inventory page use. Dashboard and other pages use get_active_containers().
+    
+    Canonical predicate: is_archived=0 AND is_placeholder=0 AND container_type IN ('file','link')
+    """
+    query = """
+        SELECT * FROM resource_containers 
+        WHERE is_archived = 0 AND is_placeholder = 0
+          AND container_type IN ('file', 'link')
+    """
+    params = []
+    
+    if primary_department:
+        query += " AND primary_department = ?"
+        params.append(primary_department)
+    
+    if training_type:
+        query += " AND training_type = ?"
+        params.append(training_type)
+    
+    if sales_stage == "untagged":
+        query += " AND sales_stage IS NULL"
+    elif sales_stage:
+        query += " AND sales_stage = ?"
+        params.append(sales_stage)
+    
+    query += " ORDER BY relative_path"
+    
+    rows = execute(query, tuple(params) if params else None, fetch="all")
+    return [dict(row) for row in rows] if rows else []
+
+
+@cached(30)
+def get_active_resource_departments() -> List[str]:
+    """
+    Get distinct departments from active RESOURCES (file/link only).
+    
+    For Inventory filter dropdown. Excludes departments that only contain folders.
+    """
+    rows = execute("""
+        SELECT DISTINCT primary_department
+        FROM resource_containers
+        WHERE is_archived = 0 AND is_placeholder = 0
+          AND container_type IN ('file', 'link')
+          AND primary_department IS NOT NULL
+        ORDER BY primary_department
+    """, fetch="all")
+    return [row['primary_department'] for row in rows] if rows else []
+
+
+@cached(30)
+def get_active_resource_training_types(primary_department: str = None) -> List[str]:
+    """
+    Get distinct training types from active RESOURCES (file/link only).
+    
+    For Inventory filter dropdown. Excludes training types that only exist on folders.
+    """
+    query = """
+        SELECT DISTINCT training_type
+        FROM resource_containers
+        WHERE is_archived = 0 AND is_placeholder = 0
+          AND container_type IN ('file', 'link')
+          AND training_type IS NOT NULL
+    """
+    params = []
+    
+    if primary_department:
+        query += " AND primary_department = ?"
+        params.append(primary_department)
+    
+    query += " ORDER BY training_type"
+    
+    rows = execute(query, tuple(params) if params else None, fetch="all")
+    return [row['training_type'] for row in rows] if rows else []
+
+
+# -----------------------------------------------------------------------------
 # Sales Stage Functions
 # -----------------------------------------------------------------------------
 

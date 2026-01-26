@@ -283,13 +283,13 @@ def dashboard_view(request):
 def inventory_view(request):
     """
     Inventory - Browse and filter training content.
-    GET: Display filtered containers.
+    GET: Display filtered resources (files and links only, excludes folders).
     """
-    # Import backend functions (frozen - do not modify)
+    # Import backend functions - RESOURCES ONLY for Inventory (Option A)
     from db import (
-        get_active_departments,
-        get_active_training_types,
-        get_active_containers_filtered,
+        get_active_resource_departments,
+        get_active_resource_training_types,
+        get_active_resources_filtered,
     )
     from services.container_service import compute_file_count, TRAINING_TYPE_LABELS
     from services.sales_stage import SALES_STAGES, SALES_STAGE_LABELS
@@ -301,12 +301,12 @@ def inventory_view(request):
     sales_stage = request.GET.get('sales_stage', '')
     audience = request.GET.get('audience', '')
     
-    # Fetch filter options
-    departments = get_active_departments()
-    training_types = get_active_training_types(department if department else None)
+    # Fetch filter options - RESOURCES ONLY (excludes folder-only values)
+    departments = get_active_resource_departments()
+    training_types = get_active_resource_training_types(department if department else None)
     
-    # Fetch filtered containers
-    containers = get_active_containers_filtered(
+    # Fetch filtered resources - excludes folders at query layer
+    containers = get_active_resources_filtered(
         primary_department=department if department else None,
         training_type=training_type if training_type else None,
         sales_stage=sales_stage if sales_stage else None,
