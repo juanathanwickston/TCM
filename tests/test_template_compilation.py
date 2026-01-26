@@ -24,8 +24,6 @@ class TestTemplateCompilation:
         """Inventory template MUST compile without TemplateSyntaxError."""
         template = get_template('tcm_app/inventory.html')
         assert template is not None
-        # PROOF TEST B: This will fail CI intentionally
-        assert False, "INTENTIONAL FAILURE FOR PROOF TEST B"
     
     def test_dashboard_template_compiles(self):
         """Dashboard template MUST compile."""
