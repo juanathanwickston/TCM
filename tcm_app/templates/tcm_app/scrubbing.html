@@ -9,76 +9,171 @@
       <div class="text-muted">Review and classify training content</div>
     </div>
 
-    <form method="get" class="d-flex align-items-center gap-2">
-      <label class="form-label mb-0 text-muted">Filter:</label>
-      <select name="queue_filter" class="form-select form-select-sm" onchange="this.form.submit()" style="width:auto;">
-        <option value="Unreviewed" {% if current_queue_filter == 'Unreviewed' %}selected{% endif %}>Unreviewed ({{ queue_counts.Unreviewed }})</option>
-        <option value="Include" {% if current_queue_filter == 'Include' %}selected{% endif %}>Include ({{ queue_counts.Include }})</option>
-        <option value="Modify" {% if current_queue_filter == 'Modify' %}selected{% endif %}>Modify ({{ queue_counts.Modify }})</option>
-        <option value="Sunset" {% if current_queue_filter == 'Sunset' %}selected{% endif %}>Sunset ({{ queue_counts.Sunset }})</option>
-        <option value="All" {% if current_queue_filter == 'All' %}selected{% endif %}>All ({{ queue_counts.total }})</option>
-      </select>
-    </form>
+    <div class="d-flex align-items-center gap-3">
+      <form method="get" class="d-flex align-items-center gap-2">
+        <label class="form-label mb-0 text-muted">Filter:</label>
+        <select name="queue_filter" class="form-select form-select-sm" onchange="this.form.submit()"
+          style="width:auto;">
+          <option value="Unreviewed" {% if current_queue_filter == 'Unreviewed' %}selected{% endif %}>Unreviewed ({{
+            queue_counts.Unreviewed }})</option>
+          <option value="Include" {% if current_queue_filter == 'Include' %}selected{% endif %}>Include ({{
+            queue_counts.Include }})</option>
+          <option value="Modify" {% if current_queue_filter == 'Modify' %}selected{% endif %}>Modify ({{
+            queue_counts.Modify }})</option>
+          <option value="Sunset" {% if current_queue_filter == 'Sunset' %}selected{% endif %}>Sunset ({{
+            queue_counts.Sunset }})</option>
+          <option value="All" {% if current_queue_filter == 'All' %}selected{% endif %}>All ({{ queue_counts.total }})
+          </option>
+        </select>
+      </form>
+      <button type="button" id="global-save" class="btn btn-primary" disabled>Save All Changes</button>
+    </div>
   </div>
 
-  <div class="card">
-    <div class="table-responsive">
-      <table class="table table-hover mb-0 align-middle">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th style="width:120px;">Status</th>
-            <th style="width:180px;">Audience</th>
-            <th style="width:180px;">Sales Stage</th>
-            <th style="width:250px;">Notes</th>
-            <th style="width:80px;"></th>
-          </tr>
-        </thead>
-        <tbody>
-        {% for c in containers %}
-          <tr>
-            <td>
-              <div class="fw-semibold">{{ c.display_name }}</div>
-              <div class="text-muted small">{{ c.relative_path }}</div>
-            </td>
-            <td><span class="badge bg-secondary">{{ c.normalized_status }}</span></td>
-            <td>
-              <form method="post" action="{% url 'save_scrub' %}" class="d-flex gap-2 align-items-center">
-                {% csrf_token %}
-                <input type="hidden" name="container_key" value="{{ c.container_key }}">
-                <input type="hidden" name="queue_filter" value="{{ current_queue_filter }}">
-                <select name="decision" class="form-select form-select-sm" style="width:auto;">
-                  <option value="Unreviewed" {% if c.normalized_status == 'Unreviewed' %}selected{% endif %}>Unreviewed</option>
+  <form id="scrub-form" method="post" action="{% url 'save_scrub_batch' %}">
+    {% csrf_token %}
+    <input type="hidden" name="queue_filter" value="{{ current_queue_filter }}">
+
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th style="width:140px;">Status</th>
+              <th style="width:160px;">Audience</th>
+              <th style="width:160px;">Sales Stage</th>
+              <th style="width:200px;">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in containers %}
+            <tr data-container-key="{{ c.container_key }}" data-original-status="{{ c.normalized_status }}"
+              data-original-audience="{{ c.audience|default:'' }}" data-original-stage="{{ c.sales_stage|default:'' }}"
+              data-original-notes="{{ c.scrub_notes|default:'' }}">
+              <td>
+                <div class="fw-semibold">{{ c.display_name }}</div>
+                <div class="text-muted small">{{ c.relative_path }}</div>
+              </td>
+              <td>
+                <select name="status_{{ c.container_key }}" class="form-select form-select-sm dirty-track"
+                  style="width:auto;">
+                  <option value="Unreviewed" {% if c.normalized_status == 'Unreviewed' %}selected{% endif %}>Unreviewed
+                  </option>
                   <option value="Include" {% if c.normalized_status == 'Include' %}selected{% endif %}>Include</option>
                   <option value="Modify" {% if c.normalized_status == 'Modify' %}selected{% endif %}>Modify</option>
                   <option value="Sunset" {% if c.normalized_status == 'Sunset' %}selected{% endif %}>Sunset</option>
                 </select>
-                <select name="audience" class="form-select form-select-sm" style="width:auto;">
+              </td>
+              <td>
+                <select name="audience_{{ c.container_key }}" class="form-select form-select-sm dirty-track"
+                  style="width:auto;">
                   <option value="" {% if not c.audience %}selected{% endif %}>-</option>
                   {% for aud in audiences %}
-                    <option value="{{ aud }}" {% if c.audience == aud %}selected{% endif %}>{{ aud }}</option>
+                  <option value="{{ aud }}" {% if c.audience == aud %}selected{% endif %}>{{ aud }}</option>
                   {% endfor %}
                 </select>
-            </td>
-            <td>
-                <select name="sales_stage" class="form-select form-select-sm" style="width:auto;">
+              </td>
+              <td>
+                <select name="stage_{{ c.container_key }}" class="form-select form-select-sm dirty-track"
+                  style="width:auto;">
                   <option value="" {% if not c.sales_stage %}selected{% endif %}>-</option>
                   {% if sales_stages %}
-                    {% for key, label in sales_stages %}
-                      <option value="{{ key }}" {% if c.sales_stage == key %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
+                  {% for key, label in sales_stages %}
+                  <option value="{{ key }}" {% if c.sales_stage == key %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
                   {% endif %}
                 </select>
-            </td>
-            <td><input type="text" name="notes" class="form-control form-control-sm" value="{{ c.scrub_notes|default_if_none:'' }}"></td>
-            <td class="text-end"><button type="submit" class="btn btn-sm btn-primary">Save</button></form></td>
-          </tr>
-        {% empty %}
-          <tr><td colspan="6" class="text-center text-muted py-4">No items in this queue.</td></tr>
-        {% endfor %}
-        </tbody>
-      </table>
+              </td>
+              <td>
+                <input type="text" name="notes_{{ c.container_key }}" class="form-control form-control-sm dirty-track"
+                  value="{{ c.scrub_notes|default_if_none:'' }}">
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5" class="text-center text-muted py-4">No items in this queue.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
+  </form>
 </div>
+
+<script>
+  (function () {
+    const form = document.getElementById('scrub-form');
+    const saveBtn = document.getElementById('global-save');
+    const dirtyRows = new Set();
+
+    // Track changes to editable fields
+    document.querySelectorAll('.dirty-track').forEach(function (el) {
+      el.addEventListener('change', function () {
+        const row = this.closest('tr');
+        const key = row.dataset.containerKey;
+
+        // Get original values
+        const origStatus = row.dataset.originalStatus;
+        const origAudience = row.dataset.originalAudience;
+        const origStage = row.dataset.originalStage;
+        const origNotes = row.dataset.originalNotes;
+
+        // Get current values
+        const currStatus = row.querySelector('[name^="status_"]').value;
+        const currAudience = row.querySelector('[name^="audience_"]').value;
+        const currStage = row.querySelector('[name^="stage_"]').value;
+        const currNotes = row.querySelector('[name^="notes_"]').value;
+
+        // Check if row is dirty
+        const isDirty = (currStatus ! ==  origStatus) ||
+          (currAudience ! ==  origAudience) ||
+          (currStage ! ==  origStage) ||
+          (currNotes ! ==  origNotes);
+
+        if (isDirty) {
+          dirtyRows.add(key);
+          row.classList.add('table-warning');
+        } else {
+          dirtyRows.delete(key);
+          row.classList.remove('table-warning');
+        }
+
+        // Enable/disable Global Save button
+        saveBtn.disabled = dirtyRows.size  == = 0;
+      });
+
+      // Also track input events for text fields (notes)
+      if (el.tagName  == = 'INPUT') {
+        el.addEventListener('input', function () {
+          this.dispatchEvent(new Event('change'));
+        });
+      }
+    });
+
+    // Global Save click handler
+    saveBtn.addEventListener('click', function () {
+      if (dirtyRows.size  == = 0) return;
+
+      // Collect only dirty rows
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'dirty_keys';
+      input.value = Array.from(dirtyRows).join(',');
+      form.appendChild(input);
+
+      form.submit();
+    });
+
+    // Navigation warning when dirty
+    window.addEventListener('beforeunload', function (e) {
+      if (dirtyRows.size > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      }
+    });
+  })();
+</script>
 {% endblock %}

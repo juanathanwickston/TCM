@@ -13,6 +13,7 @@ urlpatterns = [
     path('inventory/update-audience/', views.update_audience_view, name='update_audience'),
     path('scrubbing/', views.scrubbing_view, name='scrubbing'),
     path('scrubbing/save/', views.save_scrub_view, name='save_scrub'),
+    path('scrubbing/batch/', views.save_scrub_batch_view, name='save_scrub_batch'),
     path('investment/', views.investment_view, name='investment'),
     path('investment/save/', views.save_investment_view, name='save_investment'),
     

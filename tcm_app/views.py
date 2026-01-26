@@ -525,6 +525,114 @@ def save_scrub_view(request):
 
 
 @login_required
+@require_http_methods(["POST"])
+def save_scrub_batch_view(request):
+    """
+    Transactional batch save for Scrubbing page.
+    All-or-nothing: if any row fails validation, no rows persist.
+    
+    Expected POST data:
+    - dirty_keys: comma-separated list of container_keys that changed
+    - For each key: status_{key}, audience_{key}, stage_{key}, notes_{key}
+    - queue_filter: current filter for redirect
+    """
+    from db import update_container_scrub, update_sales_stage
+    from services.scrub_rules import VALID_SCRUB_DECISIONS, CANONICAL_AUDIENCES
+    from services.sales_stage import SALES_STAGE_KEYS
+    
+    queue_filter = request.POST.get('queue_filter', 'Unreviewed')
+    dirty_keys_str = request.POST.get('dirty_keys', '').strip()
+    
+    if not dirty_keys_str:
+        messages.warning(request, 'No changes to save')
+        return redirect(f'/scrubbing/?queue_filter={queue_filter}')
+    
+    dirty_keys = [k.strip() for k in dirty_keys_str.split(',') if k.strip()]
+    
+    if not dirty_keys:
+        messages.warning(request, 'No changes to save')
+        return redirect(f'/scrubbing/?queue_filter={queue_filter}')
+    
+    # =========================================================================
+    # PHASE 1: Validate ALL rows before any write (transactional guarantee)
+    # =========================================================================
+    validated_rows = []
+    errors = []
+    
+    for key in dirty_keys:
+        status_input = request.POST.get(f'status_{key}', '').strip()
+        audience_input = request.POST.get(f'audience_{key}', '').strip() or None
+        stage_input = request.POST.get(f'stage_{key}', '').strip() or None
+        notes_input = request.POST.get(f'notes_{key}', '').strip() or None
+        
+        # Validate container_key exists
+        if not key:
+            errors.append({'key': key, 'field': 'container_key', 'error': 'Missing container key'})
+            continue
+        
+        # Map "Unreviewed" → 'not_reviewed' for storage
+        if status_input == 'Unreviewed':
+            decision = 'not_reviewed'
+        else:
+            decision = status_input
+        
+        # Validate decision
+        if decision not in VALID_SCRUB_DECISIONS:
+            errors.append({'key': key, 'field': 'status', 'error': f'Invalid decision: {status_input}'})
+            continue
+        
+        # Validate audience if provided
+        if audience_input and audience_input not in CANONICAL_AUDIENCES:
+            errors.append({'key': key, 'field': 'audience', 'error': f'Invalid audience: {audience_input}'})
+            continue
+        
+        # Validate sales_stage if provided
+        if stage_input and stage_input not in SALES_STAGE_KEYS:
+            errors.append({'key': key, 'field': 'sales_stage', 'error': f'Invalid sales stage: {stage_input}'})
+            continue
+        
+        # Row is valid - add to batch
+        validated_rows.append({
+            'container_key': key,
+            'decision': decision,
+            'audience': audience_input,
+            'sales_stage': stage_input,
+            'notes': notes_input,
+        })
+    
+    # =========================================================================
+    # PHASE 2: If ANY validation failed, abort ALL writes
+    # =========================================================================
+    if errors:
+        error_keys = [e['key'] for e in errors]
+        messages.error(request, f'Validation failed for {len(errors)} row(s): {", ".join(error_keys)}. No changes saved.')
+        return redirect(f'/scrubbing/?queue_filter={queue_filter}')
+    
+    # =========================================================================
+    # PHASE 3: All valid - write all rows
+    # =========================================================================
+    for row in validated_rows:
+        update_container_scrub(
+            container_key=row['container_key'],
+            decision=row['decision'],
+            owner='',  # ALWAYS empty string (Streamlit parity)
+            notes=row['notes'],
+            reasons=None,
+            resource_count_override=None,
+            audience=row['audience'],
+        )
+        
+        update_sales_stage(
+            container_key=row['container_key'],
+            stage=row['sales_stage'],
+        )
+    
+    messages.success(request, f'Saved {len(validated_rows)} item(s)')
+    
+    return redirect(f'/scrubbing/?queue_filter={queue_filter}')
+
+
+@login_required
 def investment_view(request):
     """
     Investment - Build/Buy/Assign decisions.
