@@ -18,8 +18,7 @@ def test_no_streamlit_in_production_requirements():
     """
     GUARDRAIL: requirements.txt must NOT contain Streamlit packages.
     
-    Production uses requirements.txt. If you need Streamlit for local dev,
-    add it to requirements-dev.txt instead.
+    Production uses requirements.txt only (Django-only deployment).
     """
     requirements_path = os.path.join(
         os.path.dirname(os.path.dirname(__file__)),
@@ -44,27 +43,6 @@ def test_no_streamlit_in_production_requirements():
             violations.append(forbidden)
     
     assert not violations, (
-        f"FORBIDDEN: Production requirements.txt contains Streamlit packages: {violations}. "
-        f"Use requirements-dev.txt for local development instead."
+        f"FORBIDDEN: Production requirements.txt contains Streamlit packages: {violations}."
     )
 
-
-def test_requirements_prod_matches_requirements():
-    """
-    GUARDRAIL: requirements-prod.txt must be identical to requirements.txt.
-    
-    This ensures Railway build command and Railpack install phase
-    use the same dependencies.
-    """
-    base_dir = os.path.dirname(os.path.dirname(__file__))
-    
-    with open(os.path.join(base_dir, 'requirements.txt'), 'r') as f:
-        req_txt = f.read()
-    
-    with open(os.path.join(base_dir, 'requirements-prod.txt'), 'r') as f:
-        req_prod = f.read()
-    
-    assert req_txt == req_prod, (
-        "requirements.txt and requirements-prod.txt must be identical. "
-        "If you update one, update both."
-    )
