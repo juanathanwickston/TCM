@@ -84,16 +84,17 @@ def dashboard_view(request):
     from services.scrub_rules import normalize_status
     
     # -------------------------------------------------------------------------
-    # FIXED AUDIENCE ORDER (per locked spec)
+    # FIXED AUDIENCE ORDER (must match CANONICAL_AUDIENCES in scrub_rules.py)
     # -------------------------------------------------------------------------
     AUDIENCE_ORDER = [
-        'Direct',
-        'Indirect',
+        'Direct Sales',
+        'Indirect Sales',
         'Integration',
         'FI',
         'Partner Management',
         'Operations',
         'Compliance',
+        'POS',
         'Unassigned',
     ]
     
