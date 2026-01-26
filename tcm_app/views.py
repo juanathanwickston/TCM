@@ -81,22 +81,13 @@ def dashboard_view(request):
     import re
     from collections import defaultdict
     from db import get_active_containers
-    from services.scrub_rules import normalize_status
+    from services.scrub_rules import normalize_status, CANONICAL_AUDIENCES
     
     # -------------------------------------------------------------------------
-    # FIXED AUDIENCE ORDER (must match CANONICAL_AUDIENCES in scrub_rules.py)
+    # AUDIENCE ORDER — Single source of truth from CANONICAL_AUDIENCES
+    # "Unassigned" is appended for display (computed value, not stored)
     # -------------------------------------------------------------------------
-    AUDIENCE_ORDER = [
-        'Direct Sales',
-        'Indirect Sales',
-        'Integration',
-        'FI',
-        'Partner Management',
-        'Operations',
-        'Compliance',
-        'POS',
-        'Unassigned',
-    ]
+    AUDIENCE_ORDER = list(CANONICAL_AUDIENCES) + ['Unassigned']
     
     # -------------------------------------------------------------------------
     # LOCAL HELPERS
