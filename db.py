@@ -225,7 +225,7 @@ def get_pool_stats() -> Dict[str, int]:
 
 
 def reset_query_counter():
-    """Reset the per-rerun counters. Call at start of each Streamlit rerun."""
+    """Reset the per-request counters. Call at start of each request."""
     with _stats_lock:
         _pool_stats["queries_this_rerun"] = 0
         _pool_stats["total_db_time_ms"] = 0

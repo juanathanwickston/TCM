@@ -74,7 +74,7 @@ def test_placeholder_exclusion_sql_enforced():
     # If placeholder leaked, total would be 1007 (5+999+3)
     # This proves the 999-count placeholder is excluded
     
-    print("✓ Placeholder exclusion enforced at SQL level")
+    print("PASS: Placeholder exclusion enforced at SQL level")
     print(f"  - Returned {len(filtered)} containers (excludes 1 placeholder, 1 archived)")
     print(f"  - Total resources: {total_resources} (placeholder's 999 excluded)")
 
@@ -87,5 +87,5 @@ if __name__ == "__main__":
     test_placeholder_exclusion_sql_enforced()
     
     print("\n" + "=" * 60)
-    print("ALL TESTS PASSED ✓")
+    print("ALL TESTS PASSED")
     print("=" * 60 + "\n")

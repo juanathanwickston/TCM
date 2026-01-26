@@ -18,4 +18,3 @@ env/
 db.sqlite3
 .DS_Store
 Payroc Training Catalogue/
-write_template.py

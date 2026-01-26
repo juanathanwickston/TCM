@@ -17,7 +17,7 @@ def test_file_always_counts_as_1():
     from services.container_service import compute_file_count
     result = compute_file_count({"container_type": "file"})
     assert result == 1, f"Expected 1, got {result}"
-    print("  ✓ File counts as 1")
+    print("  PASS: File counts as 1")
 
 
 def test_folder_uses_contents_count():
@@ -25,7 +25,7 @@ def test_folder_uses_contents_count():
     from services.container_service import compute_file_count
     result = compute_file_count({"container_type": "folder", "contents_count": 7})
     assert result == 7, f"Expected 7, got {result}"
-    print("  ✓ Folder uses contents_count")
+    print("  PASS: Folder uses contents_count")
 
 
 def test_folder_null_contents_count_fails_closed():
@@ -33,7 +33,7 @@ def test_folder_null_contents_count_fails_closed():
     from services.container_service import compute_file_count
     result = compute_file_count({"container_type": "folder", "contents_count": None})
     assert result == 0, f"Expected 0, got {result}"
-    print("  ✓ Folder NULL contents_count → 0")
+    print("  PASS: Folder NULL contents_count -> 0")
 
 
 def test_folder_missing_contents_count_fails_closed():
@@ -41,7 +41,7 @@ def test_folder_missing_contents_count_fails_closed():
     from services.container_service import compute_file_count
     result = compute_file_count({"container_type": "folder"})
     assert result == 0, f"Expected 0, got {result}"
-    print("  ✓ Folder missing contents_count → 0")
+    print("  PASS: Folder missing contents_count -> 0")
 
 
 def test_folder_negative_contents_count_clamps():
@@ -49,7 +49,7 @@ def test_folder_negative_contents_count_clamps():
     from services.container_service import compute_file_count
     result = compute_file_count({"container_type": "folder", "contents_count": -3})
     assert result == 0, f"Expected 0, got {result}"
-    print("  ✓ Folder negative contents_count → 0")
+    print("  PASS: Folder negative contents_count -> 0")
 
 
 def test_link_uses_valid_link_count():
@@ -57,7 +57,7 @@ def test_link_uses_valid_link_count():
     from services.container_service import compute_file_count
     result = compute_file_count({"container_type": "link", "valid_link_count": 4})
     assert result == 4, f"Expected 4, got {result}"
-    print("  ✓ Link uses valid_link_count")
+    print("  PASS: Link uses valid_link_count")
 
 
 def test_links_plural_uses_valid_link_count():
@@ -65,7 +65,7 @@ def test_links_plural_uses_valid_link_count():
     from services.container_service import compute_file_count
     result = compute_file_count({"container_type": "links", "valid_link_count": 2})
     assert result == 2, f"Expected 2, got {result}"
-    print("  ✓ Links (plural) uses valid_link_count")
+    print("  PASS: Links (plural) uses valid_link_count")
 
 
 def test_link_null_valid_link_count_fails_closed():
@@ -73,7 +73,7 @@ def test_link_null_valid_link_count_fails_closed():
     from services.container_service import compute_file_count
     result = compute_file_count({"container_type": "link", "valid_link_count": None})
     assert result == 0, f"Expected 0, got {result}"
-    print("  ✓ Link NULL valid_link_count → 0")
+    print("  PASS: Link NULL valid_link_count -> 0")
 
 
 def test_unknown_container_type_fails_closed():
@@ -81,7 +81,7 @@ def test_unknown_container_type_fails_closed():
     from services.container_service import compute_file_count
     result = compute_file_count({"container_type": "weird"})
     assert result == 0, f"Expected 0, got {result}"
-    print("  ✓ Unknown container_type → 0")
+    print("  PASS: Unknown container_type -> 0")
 
 
 def test_non_numeric_counts_do_not_crash():
@@ -99,7 +99,7 @@ def test_non_numeric_counts_do_not_crash():
     result = compute_file_count({"container_type": "folder", "contents_count": "abc"})
     assert result == 0, f"Expected 0 for 'abc', got {result}"
     
-    print("  ✓ Non-numeric counts handled correctly")
+    print("  PASS: Non-numeric counts handled correctly")
 
 
 # =============================================================================
@@ -140,7 +140,7 @@ def test_inventory_totals_with_fixture():
     # file A = 1, folder B = 10, link C = 3, folder D = 0, unknown E = 0
     assert secondary_total == 14, f"Expected secondary=14, got {secondary_total}"
     
-    print("  ✓ Inventory totals: primary=5, secondary=14")
+    print("  PASS: Inventory totals: primary=5, secondary=14")
 
 
 def test_filter_consistency_same_dataset():
@@ -172,7 +172,7 @@ def test_filter_consistency_same_dataset():
     # file A = 1, folder D = 0, unknown E = 0
     assert secondary_total == 1, f"Expected filtered secondary=1, got {secondary_total}"
     
-    print("  ✓ Filter consistency: primary=3, secondary=1")
+    print("  PASS: Filter consistency: primary=3, secondary=1")
 
 
 # =============================================================================
@@ -201,7 +201,7 @@ def run_all_tests():
     test_filter_consistency_same_dataset()
     
     print("\n" + "=" * 60)
-    print("ALL TESTS PASSED ✓")
+    print("ALL TESTS PASSED")
     print("=" * 60 + "\n")
 
 

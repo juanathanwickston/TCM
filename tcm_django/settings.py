@@ -1,7 +1,6 @@
 """
 Django settings for Training Catalogue Manager (TCM).
 
-Demo_Only Branch - Django frontend replacing Streamlit.
 Connects to existing PostgreSQL database via DATABASE_URL.
 
 SECURITY:

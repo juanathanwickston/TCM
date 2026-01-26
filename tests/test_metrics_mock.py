@@ -36,7 +36,7 @@ def test_path_parsing():
     assert result["primary_department"] == "POS", f"Expected POS dept, got {result['primary_department']}"
     assert result["training_type"] == "self_directed", f"Expected self_directed, got {result['training_type']}"
     
-    print("  ✓ Path parsing passed")
+    print("  PASS: Path parsing")
 
 
 def test_links_parsing():
@@ -67,7 +67,7 @@ http://legacy.example.com/old
     assert comment_result["valid_link_count"] == 0
     assert comment_result["is_placeholder"] == True
     
-    print("  ✓ Links parsing passed")
+    print("  PASS: Links parsing")
 
 
 def test_leaf_detection():
@@ -109,7 +109,7 @@ def test_leaf_detection():
         filename="unsorted.pdf"
     ) == True, "File under Not Sure L3 should be container"
     
-    print("  ✓ Leaf detection passed")
+    print("  PASS: Leaf detection")
 
 
 def test_resource_counting():
@@ -203,7 +203,7 @@ def test_resource_counting():
     assert totals["onboarding"] == 3, f"Expected onboarding=3, got {totals['onboarding']}"
     assert totals["upskilling"] == 2, f"Expected upskilling=2, got {totals['upskilling']}"
     
-    print("  ✓ Resource counting passed")
+    print("  PASS: Resource counting")
 
 
 def test_department_assignment():
@@ -244,7 +244,7 @@ def test_department_assignment():
     assert "Operations" in audience_stats, f"Audience should be in stats, got {audience_stats}"
     assert audience_stats["Operations"] == 1, f"Expected Operations=1, got {audience_stats.get('Operations')}"
     
-    print("  ✓ Department assignment passed")
+    print("  PASS: Department assignment")
 
 
 def test_deterministic_keys():
@@ -275,7 +275,7 @@ def test_deterministic_keys():
     )
     assert key1 == key4, "Keys should be case-insensitive"
     
-    print("  ✓ Deterministic keys passed")
+    print("  PASS: Deterministic keys")
 
 
 def run_all_tests():
@@ -292,7 +292,7 @@ def run_all_tests():
     test_deterministic_keys()
     
     print("\n" + "="*50)
-    print("ALL TESTS PASSED ✓")
+    print("ALL TESTS PASSED")
     print("="*50 + "\n")
 
 

@@ -2,7 +2,6 @@
 TCM Django Views
 ================
 Django views that call the existing backend functions.
-Each view corresponds to a Streamlit page.
 
 FROZEN BACKEND: These views call db.py and services/* functions ONLY.
 No new queries, no alternate data paths.
@@ -304,7 +303,7 @@ def inventory_view(request):
         sales_stage=sales_stage if sales_stage else None,
     )
     
-    # Apply audience filter client-side (matches Streamlit behavior)
+    # Apply audience filter client-side (filter not applied at SQL level)
     if audience == 'unassigned':
         containers = [c for c in containers if not c.get('audience')]
     elif audience and audience != 'all':
@@ -398,14 +397,14 @@ def scrubbing_view(request):
     - Read: get_active_containers() only
     - Filter: QUEUE_FILTERS = ["Unreviewed", "Include", "Modify", "Sunset", "All"]
     - Sort: resource_count DESC, relative_path ASC
-    - No new validation gates (Streamlit didn't gate on owner/audience/notes)
+    - No new validation gates (owner/audience/notes are optional)
     """
     # Import backend functions (frozen - do not modify)
     from db import get_active_containers
     from services.scrub_rules import normalize_status, CANONICAL_SCRUB_STATUSES, CANONICAL_AUDIENCES
     from services.sales_stage import SALES_STAGES
     
-    # Queue filter options (exact Streamlit parity)
+    # Queue filter options
     QUEUE_FILTERS = ["Unreviewed", "Include", "Modify", "Sunset", "All"]
     
     # Get filter from GET params
@@ -413,7 +412,7 @@ def scrubbing_view(request):
     if queue_filter not in QUEUE_FILTERS:
         queue_filter = 'Unreviewed'
     
-    # Fetch all active containers (same as Streamlit)
+    # Fetch all active containers
     containers = get_active_containers()
     
     # Compute queue counts using normalize_status
@@ -501,11 +500,11 @@ def save_scrub_view(request):
         messages.warning(request, f'Invalid sales stage "{sales_stage}" ignored')
         sales_stage = None
     
-    # Call frozen backend: update_container_scrub with owner='' (Streamlit parity)
+    # Call frozen backend: update_container_scrub with owner=''
     update_container_scrub(
         container_key=container_key,
         decision=decision,
-        owner='',  # ALWAYS empty string (Streamlit behavior)
+        owner='',  # ALWAYS empty string (owner field not collected in UI)
         notes=notes,
         reasons=None,  # Not used in current workflow
         resource_count_override=None,
@@ -654,7 +653,7 @@ def save_scrub_batch_view(request):
             update_container_scrub(
                 container_key=row['container_key'],
                 decision=row['decision'],
-                owner='',  # ALWAYS empty string (Streamlit parity)
+                owner='',  # ALWAYS empty string (owner field not collected in UI)
                 notes=row['notes'],
                 reasons=None,
                 resource_count_override=None,
