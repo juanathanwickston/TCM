@@ -443,7 +443,10 @@ def sync_from_sharepoint() -> Dict[str, Any]:
     
     _logger.info(
         f"Traversal complete: {stats['folders_scanned']} folders, "
-        f"{stats['files_scanned']} files, {stats['links_created']} links"
+        f"{stats['files_scanned']} files, {stats['links_created']} links | "
+        f"Skipped: excluded={stats['skipped_excluded']}, "
+        f"depth={stats['skipped_depth']}, no_urls={stats['skipped_no_urls']}, "
+        f"download_fail={stats['skipped_download_fail']}"
     )
     
     if stats['scope_violations'] > 0:
@@ -742,9 +745,15 @@ def _process_links_file(
         _logger.warning(f"[SYNC] SKIP download: links.txt at {parent_relative}")
         return
     
+    # DIAGNOSTIC: Log every links.txt download with content length
+    _logger.info(f"[SYNC] LINKS.TXT: {parent_relative} | content_len={len(content)}")
+    
     # Parse URLs
     links_data = parse_links_content(content)
     urls = links_data.get('urls', [])
+    
+    # DIAGNOSTIC: Log URL parse result
+    _logger.info(f"[SYNC] PARSED: {parent_relative} | urls_found={len(urls)}")
     
     if not urls:
         stats['skipped_no_urls'] += 1
