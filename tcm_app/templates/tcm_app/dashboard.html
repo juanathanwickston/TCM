@@ -115,7 +115,29 @@
         border-radius: 50%;
     }
 
-    /* Stacked Bar */
+    /* Sales Stage Grid Layout - 2 rows × 3 columns */
+    .donut-breakdown-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(2, auto);
+        gap: 0.25rem 0.5rem;
+        width: 100%;
+        max-width: 280px;
+        margin-top: 0.4rem;
+        font-size: 0.7rem;
+    }
+
+    .donut-breakdown-grid-item {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        white-space: nowrap;
+    }
+
+    .donut-breakdown-grid-item .donut-breakdown-dot {
+        flex-shrink: 0;
+    }
+
     .stacked-bar {
         display: flex;
         height: 32px;
@@ -313,13 +335,9 @@
                             <text x="18" y="16" class="donut-text-label">Total</text>
                             <text x="18" y="20" class="donut-text-value">{{ ss_total }}</text>
                         </svg>
-                        <div class="donut-breakdown">
+                        <div class="donut-breakdown-grid">
                             {% for item in ss_donut_data %}
-                            <div class="donut-breakdown-row">
-                                <span class="donut-breakdown-label"><span class="donut-breakdown-dot"
-                                        style="background:{{ item.color }};"></span>{{ item.label }}</span>
-                                <span>{{ item.count|intcomma }} ({{ item.pct }}%)</span>
-                            </div>
+                            <div class="donut-breakdown-grid-item"><span class="donut-breakdown-dot" style="background:{{ item.color }};"></span>{{ item.label }} {{ item.count }} ({{ item.pct }}%)</div>
                             {% endfor %}
                         </div>
                     </div>

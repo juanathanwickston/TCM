@@ -224,8 +224,8 @@ def dashboard_view(request):
     # -------------------------------------------------------------------------
     # TRAINING TYPES DONUT CHART DATA (for 3-column layout)
     # -------------------------------------------------------------------------
-    # Define colors for training types (up to 6)
-    TT_COLORS = ['#0051C2', '#00e0b8', '#001D4E', '#fd7e14', '#6f42c1', '#20c997']
+    # Shared 6-color palette for distinct visualization
+    DONUT_COLORS = ['#0051C2', '#00e0b8', '#fd7e14', '#6f42c1', '#dc3545', '#e9c46a']
     
     # Build training types donut data with colors and offsets
     tt_total = sum(t['count'] for t in training_types)
@@ -237,7 +237,7 @@ def dashboard_view(request):
             'label': t['type'],
             'count': t['count'],
             'pct': pct,
-            'color': TT_COLORS[i % len(TT_COLORS)],
+            'color': DONUT_COLORS[i % len(DONUT_COLORS)],
             'offset': tt_offset,
             'gap': round(100 - pct, 1),
         })
@@ -246,7 +246,15 @@ def dashboard_view(request):
     # -------------------------------------------------------------------------
     # SALES STAGE DONUT CHART DATA (excludes untagged)
     # -------------------------------------------------------------------------
-    SS_COLORS = ['#e63946', '#f4a261', '#e9c46a', '#2a9d8f', '#264653', '#023047']
+    # Short display labels for compact legend
+    SS_SHORT_LABELS = {
+        'stage_1_identify': 'Identify',
+        'stage_2_appointment': 'Ask',
+        'stage_3_prep': 'Prep',
+        'stage_4_make_sale': 'Make Sale',
+        'stage_5_close': 'Close Sale',
+        'stage_6_referrals': 'Referrals',
+    }
     
     # Get sales stage breakdown from DB (excludes NULL stages)
     ss_raw = get_sales_stage_breakdown()
@@ -261,10 +269,10 @@ def dashboard_view(request):
         pct = round((count / ss_total) * 100, 1) if ss_total > 0 else 0.0
         ss_donut_data.append({
             'key': stage_key,
-            'label': stage_label,
+            'label': SS_SHORT_LABELS.get(stage_key, stage_label),
             'count': count,
             'pct': pct,
-            'color': SS_COLORS[i % len(SS_COLORS)],
+            'color': DONUT_COLORS[i % len(DONUT_COLORS)],
             'offset': ss_offset,
             'gap': round(100 - pct, 1),
         })
