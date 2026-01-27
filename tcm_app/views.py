@@ -14,6 +14,7 @@ from django.http import HttpResponseForbidden
 from django.views.decorators.http import require_http_methods
 from django.contrib import messages
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 # =============================================================================
 # AUTH VIEWS
@@ -382,8 +383,19 @@ def inventory_view(request):
     # Compute totals - SUM(resource_count) over filtered containers
     total_resources = sum(c.get('resource_count', 0) for c in containers)
     
+    # Pagination - 20 items per page
+    page = request.GET.get('page', 1)
+    paginator = Paginator(containers, 20)
+    try:
+        page_obj = paginator.page(page)
+    except PageNotAnInteger:
+        page_obj = paginator.page(1)
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages)
+    
     context = {
-        'containers': containers,
+        'containers': page_obj,
+        'page_obj': page_obj,
         'departments': departments,
         'training_types': training_types,
         'training_type_labels': TRAINING_TYPE_LABELS,
@@ -502,8 +514,19 @@ def scrubbing_view(request):
     for c in filtered:
         c['normalized_status'] = normalize_status(c.get('scrub_status'))
     
+    # Pagination - 20 items per page
+    page = request.GET.get('page', 1)
+    paginator = Paginator(filtered, 20)
+    try:
+        page_obj = paginator.page(page)
+    except PageNotAnInteger:
+        page_obj = paginator.page(1)
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages)
+    
     context = {
-        'containers': filtered,
+        'containers': page_obj,
+        'page_obj': page_obj,
         'queue_filters': QUEUE_FILTERS,
         'queue_counts': queue_counts,
         'current_queue_filter': queue_filter,
@@ -740,12 +763,14 @@ def save_scrub_batch_view(request):
     except Exception as e:
         # Rollback on any error (database unchanged)
         messages.error(request, f'Database error: {str(e)}. No changes saved.')
-        return redirect(f'/scrubbing/?queue_filter={queue_filter}')
+        page = request.POST.get('current_page', '1')
+        return redirect(f'/scrubbing/?queue_filter={queue_filter}&page={page}')
     
     # Success: N = number of rows actually persisted
     messages.success(request, f'Saved {persisted_count} item(s)')
     
-    return redirect(f'/scrubbing/?queue_filter={queue_filter}')
+    page = request.POST.get('current_page', '1')
+    return redirect(f'/scrubbing/?queue_filter={queue_filter}&page={page}')
 
 
 @login_required
@@ -795,8 +820,19 @@ def investment_view(request):
     invest_choices = InvestDecision.choices()  # ['build', 'buy', 'assign_sme', 'defer']
     invest_labels = InvestDecision.display_labels()  # {'build': 'Build', 'buy': 'Buy', ...}
     
+    # Pagination - 20 items per page
+    page = request.GET.get('page', 1)
+    paginator = Paginator(filtered, 20)
+    try:
+        page_obj = paginator.page(page)
+    except PageNotAnInteger:
+        page_obj = paginator.page(1)
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages)
+    
     context = {
-        'containers': filtered,
+        'containers': page_obj,
+        'page_obj': page_obj,
         'total_count': len(containers),
         'decided_count': decided_count,
         'pending_count': pending_count,
