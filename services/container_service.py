@@ -205,7 +205,7 @@ def is_leaf_container(relative_path: str, is_folder: bool, filename: str) -> boo
         return current_depth == l3_depth + 1
     else:
         # File is container if directly under L3 (L4)
-        return current_depth == l3_depth
+        return current_depth >= l3_depth
 
 
 def parse_links_content(content: str) -> Dict[str, Any]:
@@ -224,8 +224,13 @@ def parse_links_content(content: str) -> Dict[str, Any]:
         line = line.strip()
         if not line or line.startswith('#'):
             continue
-        if line.startswith('http://') or line.startswith('https://'):
-            valid_urls.append(line)
+        # Normalize common URL formats
+        url = line
+        if url.startswith('www.'):
+            url = 'https://' + url  # Add protocol for www. URLs
+        elif not url.startswith(('http://', 'https://')):
+            continue  # Skip non-URL lines
+        valid_urls.append(url)
     
     count = len(valid_urls)
     return {
