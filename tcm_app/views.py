@@ -380,11 +380,8 @@ def update_audience_view(request):
         messages.error(request, 'Invalid container key')
         return _redirect_with_filters(request)
     
-    if not new_audience:
-        messages.error(request, 'Audience cannot be empty')
-        return _redirect_with_filters(request)
-    
-    if new_audience not in CANONICAL_AUDIENCES:
+    # Allow empty audience for unassigning, validate non-empty against canonical list
+    if new_audience and new_audience not in CANONICAL_AUDIENCES:
         messages.error(request, f'Invalid audience value: {new_audience}')
         return _redirect_with_filters(request)
     
