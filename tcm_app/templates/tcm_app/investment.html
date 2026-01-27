@@ -45,7 +45,7 @@
     <label class="form-label mb-0 text-muted">Decision:</label>
     <select name="decision_filter" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
       {% for value, label in decision_options %}
-      <option value="{{ value }}" {% if filter_decision==value %}selected{% endif %}>{{ label }}</option>
+      <option value="{{ value }}" {% if filter_decision == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
     <span class="text-muted small ms-3">Showing {{ containers|length }} items</span>

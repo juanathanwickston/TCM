@@ -69,7 +69,7 @@
                     <select class="form-select" id="department" name="department" onchange="this.form.submit()">
                         <option value="">All Departments</option>
                         {% for dept in departments %}
-                        <option value="{{ dept }}" {% if current_department==dept %}selected{% endif %}>{{ dept }}
+                        <option value="{{ dept }}" {% if current_department == dept %}selected{% endif %}>{{ dept }}
                         </option>
                         {% endfor %}
                     </select>
