@@ -425,6 +425,11 @@ def sync_from_sharepoint() -> Dict[str, Any]:
         "new_containers": 0,
         "updated_containers": 0,
         "scope_violations": 0,
+        # Detailed skip categories
+        "skipped_excluded": 0,
+        "skipped_depth": 0,
+        "skipped_download_fail": 0,
+        "skipped_no_urls": 0,
     }
     
     _traverse_folder(
@@ -438,7 +443,10 @@ def sync_from_sharepoint() -> Dict[str, Any]:
     
     _logger.info(
         f"Traversal complete: {stats['folders_scanned']} folders, "
-        f"{stats['files_scanned']} files, {stats['links_created']} links"
+        f"{stats['files_scanned']} files, {stats['links_created']} links | "
+        f"Skipped: excluded={stats['skipped_excluded']}, "
+        f"depth={stats['skipped_depth']}, no_urls={stats['skipped_no_urls']}, "
+        f"download_fail={stats['skipped_download_fail']}"
     )
     
     if stats['scope_violations'] > 0:
@@ -526,6 +534,7 @@ def _traverse_folder(
             
             # OS artifact exclusion
             if item_name.lower() in EXCLUDED_FILENAMES:
+                stats['skipped_excluded'] += 1
                 continue
             
             # SCOPE GUARD: Validate every item before processing
@@ -577,9 +586,9 @@ def _traverse_folder(
                 
                 # Check if leaf container
                 if not is_leaf_container(parent_path, False, item_name):
-                    # DIAGNOSTIC: Log skipped file with reason
+                    stats['skipped_depth'] += 1
                     parent_depth = len(parent_path.split('/')) if parent_path else 0
-                    _logger.info(f"[SYNC] SKIP file: {item_name} | parent_depth: {parent_depth} | path: {parent_path}")
+                    _logger.info(f"[SYNC] SKIP depth: {item_name} | depth: {parent_depth}")
                     continue  # Not a leaf, skip
                 
                 # Handle links.txt specially
@@ -732,6 +741,8 @@ def _process_links_file(
     content = _download_file_content(item["id"], drive_id, headers)
     
     if not content:
+        stats['skipped_download_fail'] += 1
+        _logger.warning(f"[SYNC] SKIP download: links.txt at {parent_relative}")
         return
     
     # Parse URLs
@@ -739,6 +750,7 @@ def _process_links_file(
     urls = links_data.get('urls', [])
     
     if not urls:
+        stats['skipped_no_urls'] += 1
         return  # No valid URLs, no containers created
     
     # Parse parent for taxonomy
