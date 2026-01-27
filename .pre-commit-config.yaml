@@ -1,0 +1,10 @@
+repos:
+  - repo: local
+    hooks:
+      - id: django-template-check
+        name: Django Template Syntax Check
+        entry: python -m pytest tests/test_template_compilation.py -x --tb=short
+        language: system
+        pass_filenames: false
+        always_run: true
+        types: [html]

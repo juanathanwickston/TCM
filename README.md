@@ -23,6 +23,19 @@ streamlit run app.py
 
 The app will open in your default browser at `http://localhost:8501`.
 
+## Development Setup
+
+### Pre-commit Hooks (Recommended)
+
+Install pre-commit to catch template syntax errors before committing:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+This validates Django templates on each commit, preventing CI failures.
+
 ## Usage
 
 1. **Upload a ZIP file** containing your Training Submission folder
