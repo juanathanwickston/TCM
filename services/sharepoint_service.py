@@ -443,10 +443,7 @@ def sync_from_sharepoint() -> Dict[str, Any]:
     
     _logger.info(
         f"Traversal complete: {stats['folders_scanned']} folders, "
-        f"{stats['files_scanned']} files, {stats['links_created']} links | "
-        f"Skipped: excluded={stats['skipped_excluded']}, "
-        f"depth={stats['skipped_depth']}, no_urls={stats['skipped_no_urls']}, "
-        f"download_fail={stats['skipped_download_fail']}"
+        f"{stats['files_scanned']} files, {stats['links_created']} links"
     )
     
     if stats['scope_violations'] > 0:
