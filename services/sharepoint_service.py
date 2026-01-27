@@ -425,6 +425,8 @@ def sync_from_sharepoint() -> Dict[str, Any]:
         "links_created": 0,
         "new_containers": 0,
         "updated_containers": 0,
+        "new_resources": 0,
+        "updated_resources": 0,
         "scope_violations": 0,
         # Detailed skip categories
         "skipped_excluded": 0,
