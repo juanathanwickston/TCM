@@ -58,11 +58,11 @@
               <td>
                 <select name="status_{{ c.resource_key }}" class="form-select form-select-sm dirty-track"
                   style="width:auto;">
-                  <option value="Unreviewed" {% if c.normalized_status=='Unreviewed' %}selected{% endif %}>Unreviewed
+                  <option value="Unreviewed" {% if c.normalized_status == 'Unreviewed' %}selected{% endif %}>Unreviewed
                   </option>
-                  <option value="Include" {% if c.normalized_status=='Include' %}selected{% endif %}>Include</option>
-                  <option value="Modify" {% if c.normalized_status=='Modify' %}selected{% endif %}>Modify</option>
-                  <option value="Sunset" {% if c.normalized_status=='Sunset' %}selected{% endif %}>Sunset</option>
+                  <option value="Include" {% if c.normalized_status == 'Include' %}selected{% endif %}>Include</option>
+                  <option value="Modify" {% if c.normalized_status == 'Modify' %}selected{% endif %}>Modify</option>
+                  <option value="Sunset" {% if c.normalized_status == 'Sunset' %}selected{% endif %}>Sunset</option>
                 </select>
               </td>
               <td>
@@ -70,7 +70,7 @@
                   style="width:auto;">
                   <option value="" {% if not c.audience %}selected{% endif %}>-</option>
                   {% for aud in audiences %}
-                  <option value="{{ aud }}" {% if c.audience==aud %}selected{% endif %}>{{ aud }}</option>
+                  <option value="{{ aud }}" {% if c.audience == aud %}selected{% endif %}>{{ aud }}</option>
                   {% endfor %}
                 </select>
               </td>
@@ -80,7 +80,7 @@
                   <option value="" {% if not c.sales_stage %}selected{% endif %}>-</option>
                   {% if sales_stages %}
                   {% for key, label in sales_stages %}
-                  <option value="{{ key }}" {% if c.sales_stage==key %}selected{% endif %}>{{ label }}</option>
+                  <option value="{{ key }}" {% if c.sales_stage == key %}selected{% endif %}>{{ label }}</option>
                   {% endfor %}
                   {% endif %}
                 </select>
