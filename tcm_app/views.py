@@ -290,7 +290,7 @@ def inventory_view(request):
         get_active_resource_training_types,
         get_active_resources_filtered,
     )
-    from services.container_service import compute_file_count, TRAINING_TYPE_LABELS
+    from services.container_service import TRAINING_TYPE_LABELS
     from services.sales_stage import SALES_STAGES, SALES_STAGE_LABELS
     from services.scrub_rules import CANONICAL_AUDIENCES
     

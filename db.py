@@ -1624,30 +1624,6 @@ def get_valid_departments() -> List[str]:
     return [row['department'] for row in rows] if rows else []
 
 
-def get_folder_file_count(folder_relative_path: str) -> int:
-    """
-    Get the contents count for a folder container from the database.
-    
-    This is informational metadata (Contents) per the resource vs contents contract.
-    It does NOT affect KPIs or resource identity.
-    
-    Args:
-        folder_relative_path: The relative path of the folder
-        
-    Returns:
-        Number of files inside the folder (from contents_count column)
-    """
-    row = execute("""
-        SELECT contents_count 
-        FROM resources 
-        WHERE relative_path = ? AND resource_type = 'folder'
-    """, (folder_relative_path,), fetch="one")
-    
-    if row:
-        return row['contents_count'] or 0
-    return 0
-
-
 # Initialize on import
 init_db()
 

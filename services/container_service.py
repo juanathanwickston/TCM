@@ -65,11 +65,9 @@ def compute_file_count(resource: dict) -> int:
     Compute file count for a resource (secondary metric, Inventory only).
     
     This is NOT the canonical KPI. The canonical operational total is SUM(resource_count).
-    This function computes "Items inside folders" for informational display.
     
     Logic (fail closed):
     - file → 1
-    - folder → max(int(contents_count or 0), 0)
     - link/links → max(int(valid_link_count or 0), 0)
     - unknown → 0
     
@@ -80,13 +78,6 @@ def compute_file_count(resource: dict) -> int:
     
     if resource_type == "file":
         return 1
-    
-    if resource_type == "folder":
-        try:
-            count = int(resource.get("contents_count") or 0)
-            return max(count, 0)
-        except (ValueError, TypeError):
-            return 0
     
     if resource_type in ("link", "links"):
         try:
@@ -569,52 +560,6 @@ def import_from_folder(root_dir: str) -> Dict[str, Any]:
                 'source': 'folder',
                 'is_archived': 0,
             })
-        
-        # Process subdirectories as potential folder containers
-        for dirname in dirnames:
-            dir_full_path = current_path / dirname
-            dir_relative = f"{relative_path}/{dirname}" if relative_path else dirname
-            
-            # Check if this folder is a leaf container (L3+1 depth)
-            if not is_leaf_container(dir_relative, True, dirname):
-                continue  # It's a structural folder, not a container
-            
-            # Parse path for metadata
-            parsed = parse_path(dir_relative)
-            
-            # Collect department for departments table
-            if parsed.get('primary_department'):
-                discovered_departments.add(parsed['primary_department'])
-            
-            # Count files inside this folder for contents_count (informational only)
-            folder_contents = sum(1 for item in dir_full_path.iterdir() if item.is_file())
-            
-            # Generate deterministic key
-            resource_key = make_resource_key(
-                relative_path=dir_relative,
-                resource_type="folder"
-            )
-            
-            rows.append({
-                'resource_key': resource_key,
-                'drive_item_id': None,
-                'relative_path': dir_relative,
-                'bucket': parsed['bucket'],
-                'primary_department': parsed['primary_department'],
-                'sub_department': parsed['sub_department'],
-                'training_type': parsed['training_type'],
-                'resource_type': 'folder',
-                'display_name': dirname,
-                'web_url': None,
-                'resource_count': 1,
-                'valid_link_count': 0,
-                'contents_count': folder_contents,
-                'is_placeholder': 0,
-                'first_seen': sync_started_at,
-                'last_seen': sync_started_at,
-                'source': 'folder',
-                'is_archived': 0,
-            })
     
     # -------------------------------------------------------------------------
     # PHASE 2: Single transaction for batch upsert + archive
@@ -650,34 +595,3 @@ def import_from_folder(root_dir: str) -> Dict[str, Any]:
         'errors': errors,
         'archived': archived_count,
     }
-
-
-def get_tree_structure() -> Dict[str, Any]:
-    """
-    Build virtual tree structure from container paths.
-    Tree nodes are derived (not stored), only active containers are included.
-    """
-    from db import get_active_containers
-    containers = get_active_containers()
-    
-    tree = {}
-    
-    for container in containers:
-        path = container['relative_path']
-        parts = path.replace("\\", "/").strip("/").split("/")
-        
-        # Build tree nodes
-        current = tree
-        for i, part in enumerate(parts[:-1]):  # All but last (the container itself)
-            if part not in current:
-                current[part] = {"_children": {}, "_is_folder": True}
-            current = current[part]["_children"]
-        
-        # Add container as leaf
-        leaf_name = parts[-1]
-        current[leaf_name] = {
-            "_container": container,
-            "_is_folder": container['resource_type'] == 'folder',
-        }
-    
-    return tree

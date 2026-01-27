@@ -142,18 +142,6 @@ def test_resource_counting():
         resource_count=1
     )
     
-    # - 1 folder container → should count 1
-    upsert_resource(
-        resource_key=make_resource_key(relative_path="01_Onboarding/04_Video on Demand/onePOS Support", resource_type="folder"),
-        relative_path="01_Onboarding/04_Video on Demand/onePOS Support",
-        resource_type="folder",
-        bucket="onboarding",
-        primary_department=None,
-        training_type="video_on_demand",
-        display_name="onePOS Support",
-        resource_count=1
-    )
-    
     # - empty links.txt → should count 0
     upsert_resource(
         resource_key=make_resource_key(relative_path="01_Onboarding/04_Video on Demand/links.txt", resource_type="links"),
@@ -167,7 +155,7 @@ def test_resource_counting():
         valid_link_count=0,
         is_placeholder=True
     )
-    # Onboarding total = 2 + 1 + 0 = 3
+    # Onboarding total = 2 + 0 = 2
     
     # Upskilling / Job Aids
     # - links.txt with URLs → count 1
@@ -200,7 +188,7 @@ def test_resource_counting():
     totals = get_resource_totals()
     
     # Assert expected values
-    assert totals["onboarding"] == 3, f"Expected onboarding=3, got {totals['onboarding']}"
+    assert totals["onboarding"] == 2, f"Expected onboarding=2, got {totals['onboarding']}"
     assert totals["upskilling"] == 2, f"Expected upskilling=2, got {totals['upskilling']}"
     
     print("  PASS: Resource counting")
@@ -264,7 +252,7 @@ def test_deterministic_keys():
     # Different type = different key
     key3 = make_resource_key(
         relative_path="01_Onboarding/04_Video on Demand/test.pdf",
-        resource_type="folder"
+        resource_type="link"
     )
     assert key1 != key3, "Different types should produce different keys"
     
