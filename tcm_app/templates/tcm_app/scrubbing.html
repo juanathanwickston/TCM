@@ -1,4 +1,4 @@
-{% extends "tcm_app/base.html" %}
+﻿{% extends "tcm_app/base.html" %}
 {% load static %}
 
 {% block content %}
@@ -14,15 +14,15 @@
         <label class="form-label mb-0 text-muted">Filter:</label>
         <select name="queue_filter" class="form-select form-select-sm" onchange="this.form.submit()"
           style="width:auto;">
-          <option value="Unreviewed" {% if current_queue_filter=='Unreviewed' %}selected{% endif %}>Unreviewed ({{
+          <option value="Unreviewed" {% if current_queue_filter  ==  'Unreviewed' %}selected{% endif %}>Unreviewed ({{
             queue_counts.Unreviewed }})</option>
-          <option value="Include" {% if current_queue_filter=='Include' %}selected{% endif %}>Include ({{
+          <option value="Include" {% if current_queue_filter  ==  'Include' %}selected{% endif %}>Include ({{
             queue_counts.Include }})</option>
-          <option value="Modify" {% if current_queue_filter=='Modify' %}selected{% endif %}>Modify ({{
+          <option value="Modify" {% if current_queue_filter  ==  'Modify' %}selected{% endif %}>Modify ({{
             queue_counts.Modify }})</option>
-          <option value="Sunset" {% if current_queue_filter=='Sunset' %}selected{% endif %}>Sunset ({{
+          <option value="Sunset" {% if current_queue_filter  ==  'Sunset' %}selected{% endif %}>Sunset ({{
             queue_counts.Sunset }})</option>
-          <option value="All" {% if current_queue_filter=='All' %}selected{% endif %}>All ({{ queue_counts.total }})
+          <option value="All" {% if current_queue_filter  ==  'All' %}selected{% endif %}>All ({{ queue_counts.total }})
           </option>
         </select>
       </form>
@@ -58,11 +58,11 @@
               <td>
                 <select name="status_{{ c.resource_key }}" class="form-select form-select-sm dirty-track"
                   style="width:auto;">
-                  <option value="Unreviewed" {% if c.normalized_status=='Unreviewed' %}selected{% endif %}>Unreviewed
+                  <option value="Unreviewed" {% if c.normalized_status  ==  'Unreviewed' %}selected{% endif %}>Unreviewed
                   </option>
-                  <option value="Include" {% if c.normalized_status=='Include' %}selected{% endif %}>Include</option>
-                  <option value="Modify" {% if c.normalized_status=='Modify' %}selected{% endif %}>Modify</option>
-                  <option value="Sunset" {% if c.normalized_status=='Sunset' %}selected{% endif %}>Sunset</option>
+                  <option value="Include" {% if c.normalized_status  ==  'Include' %}selected{% endif %}>Include</option>
+                  <option value="Modify" {% if c.normalized_status  ==  'Modify' %}selected{% endif %}>Modify</option>
+                  <option value="Sunset" {% if c.normalized_status  ==  'Sunset' %}selected{% endif %}>Sunset</option>
                 </select>
               </td>
               <td>
@@ -70,7 +70,7 @@
                   style="width:auto;">
                   <option value="" {% if not c.audience %}selected{% endif %}>-</option>
                   {% for aud in audiences %}
-                  <option value="{{ aud }}" {% if c.audience==aud %}selected{% endif %}>{{ aud }}</option>
+                  <option value="{{ aud }}" {% if c.audience == aud %}selected{% endif %}>{{ aud }}</option>
                   {% endfor %}
                 </select>
               </td>
@@ -80,7 +80,7 @@
                   <option value="" {% if not c.sales_stage %}selected{% endif %}>-</option>
                   {% if sales_stages %}
                   {% for key, label in sales_stages %}
-                  <option value="{{ key }}" {% if c.sales_stage==key %}selected{% endif %}>{{ label }}</option>
+                  <option value="{{ key }}" {% if c.sales_stage == key %}selected{% endif %}>{{ label }}</option>
                   {% endfor %}
                   {% endif %}
                 </select>
@@ -105,7 +105,7 @@
 <script>
   (function () {
     /**
-     * SCRUBBING GLOBAL SAVE — CLIENT-SIDE CONTRACT
+     * SCRUBBING GLOBAL SAVE â€” CLIENT-SIDE CONTRACT
      * 
      * Dirty tracking is LOGICAL, not visual:
      * - A row is dirty if any field differs from original loaded value
@@ -141,10 +141,10 @@
         const currNotes = row.querySelector('[name^="notes_"]').value;
 
         // Logical dirty check (exact comparison)
-        const isDirty = (currStatus !== origStatus) ||
-          (currAudience !== origAudience) ||
-          (currStage !== origStage) ||
-          (currNotes !== origNotes);
+        const isDirty = (currStatus ! ==  origStatus) ||
+          (currAudience ! ==  origAudience) ||
+          (currStage ! ==  origStage) ||
+          (currNotes ! ==  origNotes);
 
         if (isDirty) {
           dirtyRows.add(key);
@@ -159,7 +159,7 @@
       });
 
       // Track input events for text fields (notes) for real-time feedback
-      if (el.tagName === 'INPUT') {
+      if (el.tagName  == = 'INPUT') {
         el.addEventListener('input', function () {
           this.dispatchEvent(new Event('change'));
         });
@@ -171,14 +171,14 @@
         saveBtn.disabled = true;
         saveBtn.textContent = 'Saving...';
       } else {
-        saveBtn.disabled = dirtyRows.size === 0;
+        saveBtn.disabled = dirtyRows.size  == = 0;
         saveBtn.textContent = saveBtnOriginalText;
       }
     }
 
     // Global Save click handler with in-flight protection
     saveBtn.addEventListener('click', function () {
-      if (dirtyRows.size === 0 || isSaving) return;
+      if (dirtyRows.size  == = 0 || isSaving) return;
 
       // In-flight protection: disable button, show saving state
       isSaving = true;
