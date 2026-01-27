@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
-from db import upsert_container, make_container_key, get_all_containers
+from db import upsert_resource, make_resource_key, get_all_resources
 
 
 # Template structure constants
@@ -55,14 +55,14 @@ TRAINING_TYPE_LABELS = {
 }
 
 # OS metadata and template files excluded from ingestion.
-# Explicit denylist - these NEVER create resource_containers.
+# Explicit denylist - these NEVER create resources.
 # Compare with filename.lower().
 EXCLUDED_FILENAMES = frozenset({"desktop.ini", ".ds_store", "thumbs.db", "instructions.txt", "instructions.pdf"})
 
 
-def compute_file_count(container: dict) -> int:
+def compute_file_count(resource: dict) -> int:
     """
-    Compute file count for a container (secondary metric, Inventory only).
+    Compute file count for a resource (secondary metric, Inventory only).
     
     This is NOT the canonical KPI. The canonical operational total is SUM(resource_count).
     This function computes "Items inside folders" for informational display.
@@ -74,28 +74,28 @@ def compute_file_count(container: dict) -> int:
     - unknown → 0
     
     Returns:
-        int: File count contribution for this container
+        int: File count contribution for this resource
     """
-    container_type = container.get("container_type", "")
+    resource_type = resource.get("resource_type", "")
     
-    if container_type == "file":
+    if resource_type == "file":
         return 1
     
-    if container_type == "folder":
+    if resource_type == "folder":
         try:
-            count = int(container.get("contents_count") or 0)
+            count = int(resource.get("contents_count") or 0)
             return max(count, 0)
         except (ValueError, TypeError):
             return 0
     
-    if container_type in ("link", "links"):
+    if resource_type in ("link", "links"):
         try:
-            count = int(container.get("valid_link_count") or 0)
+            count = int(resource.get("valid_link_count") or 0)
             return max(count, 0)
         except (ValueError, TypeError):
             return 0
     
-    # Unknown container type - fail closed
+    # Unknown resource type - fail closed
     return 0
 
 
@@ -304,15 +304,15 @@ def import_from_zip(zip_path: str) -> Dict[str, Any]:
                         else:
                             link_relative_path = f"links.txt#{url_hash}"
                         
-                        container_key = make_container_key(
+                        resource_key = make_resource_key(
                             relative_path=link_relative_path,
-                            container_type="link"
+                            resource_type="link"
                         )
                         
-                        is_new = upsert_container(
-                            container_key=container_key,
+                        is_new = upsert_resource(
+                            resource_key=resource_key,
                             relative_path=link_relative_path,
-                            container_type="link",
+                            resource_type="link",
                             bucket=parsed['bucket'],
                             primary_department=parsed['primary_department'],
                             sub_department=parsed['sub_department'],
@@ -345,7 +345,7 @@ def import_from_zip(zip_path: str) -> Dict[str, Any]:
                 continue
             
             else:
-                container_type = "file"
+                resource_type = "file"
             
             # ZIP import: ALL files are valid resources regardless of depth
             # No is_leaf_container() check - depth is irrelevant
@@ -355,16 +355,16 @@ def import_from_zip(zip_path: str) -> Dict[str, Any]:
             parsed = parse_path(parent_path)
             
             # Generate deterministic key
-            container_key = make_container_key(
+            resource_key = make_resource_key(
                 relative_path=relative_path,
-                container_type=container_type
+                resource_type=resource_type
             )
             
             # Upsert container
-            is_new = upsert_container(
-                container_key=container_key,
+            is_new = upsert_resource(
+                resource_key=resource_key,
                 relative_path=relative_path,
-                container_type=container_type,
+                resource_type=resource_type,
                 bucket=parsed['bucket'],
                 primary_department=parsed['primary_department'],
                 sub_department=parsed['sub_department'],
@@ -406,7 +406,7 @@ def import_from_folder(root_dir: str) -> Dict[str, Any]:
     from datetime import datetime, timezone
     from db import (
         get_active_resource_count, archive_stale_resources, record_sync_run,
-        upsert_department, transaction, batch_upsert_containers, clear_cache
+        upsert_department, transaction, batch_upsert_resources, clear_cache
     )
     
     # Record sync start time (all upserts use this as last_seen)
@@ -497,17 +497,17 @@ def import_from_folder(root_dir: str) -> Dict[str, Any]:
                         
                         # Generate deterministic key from full string (no collision risk)
                         key_source = f"{parent_path}|{url}|link"
-                        container_key = hashlib.sha256(key_source.encode()).hexdigest()[:16]
+                        resource_key = hashlib.sha256(key_source.encode()).hexdigest()[:16]
                         
                         rows.append({
-                            'container_key': container_key,
+                            'resource_key': resource_key,
                             'drive_item_id': None,
                             'relative_path': link_relative_path,
                             'bucket': parsed['bucket'],
                             'primary_department': parsed['primary_department'],
                             'sub_department': parsed['sub_department'],
                             'training_type': parsed['training_type'],
-                            'container_type': 'link',
+                            'resource_type': 'link',
                             'display_name': url,
                             'web_url': url,
                             'resource_count': 1,
@@ -530,7 +530,7 @@ def import_from_folder(root_dir: str) -> Dict[str, Any]:
                 continue  # links.txt itself produces no row
             
             # Regular file handling (non-links.txt)
-            container_type = "file"
+            resource_type = "file"
             
             # Count contents for ZIP files (archives are like folders)
             contents_count = 0
@@ -544,20 +544,20 @@ def import_from_folder(root_dir: str) -> Dict[str, Any]:
                     contents_count = 0  # Fallback if ZIP is corrupted/unreadable
             
             # Generate deterministic key
-            container_key = make_container_key(
+            resource_key = make_resource_key(
                 relative_path=file_relative,
-                container_type=container_type
+                resource_type=resource_type
             )
             
             rows.append({
-                'container_key': container_key,
+                'resource_key': resource_key,
                 'drive_item_id': None,
                 'relative_path': file_relative,
                 'bucket': parsed['bucket'],
                 'primary_department': parsed['primary_department'],
                 'sub_department': parsed['sub_department'],
                 'training_type': parsed['training_type'],
-                'container_type': container_type,
+                'resource_type': resource_type,
                 'display_name': filename,
                 'web_url': None,
                 'resource_count': 1,
@@ -590,20 +590,20 @@ def import_from_folder(root_dir: str) -> Dict[str, Any]:
             folder_contents = sum(1 for item in dir_full_path.iterdir() if item.is_file())
             
             # Generate deterministic key
-            container_key = make_container_key(
+            resource_key = make_resource_key(
                 relative_path=dir_relative,
-                container_type="folder"
+                resource_type="folder"
             )
             
             rows.append({
-                'container_key': container_key,
+                'resource_key': resource_key,
                 'drive_item_id': None,
                 'relative_path': dir_relative,
                 'bucket': parsed['bucket'],
                 'primary_department': parsed['primary_department'],
                 'sub_department': parsed['sub_department'],
                 'training_type': parsed['training_type'],
-                'container_type': 'folder',
+                'resource_type': 'folder',
                 'display_name': dirname,
                 'web_url': None,
                 'resource_count': 1,
@@ -620,7 +620,7 @@ def import_from_folder(root_dir: str) -> Dict[str, Any]:
     # PHASE 2: Single transaction for batch upsert + archive
     # -------------------------------------------------------------------------
     with transaction() as conn:
-        processed_count = batch_upsert_containers(rows, conn=conn)
+        processed_count = batch_upsert_resources(rows, conn=conn)
         archived_count = archive_stale_resources(sync_started_at, conn=conn)
     
     # -------------------------------------------------------------------------
@@ -677,7 +677,7 @@ def get_tree_structure() -> Dict[str, Any]:
         leaf_name = parts[-1]
         current[leaf_name] = {
             "_container": container,
-            "_is_folder": container['container_type'] == 'folder',
+            "_is_folder": container['resource_type'] == 'folder',
         }
     
     return tree

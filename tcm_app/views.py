@@ -103,7 +103,7 @@ def dashboard_view(request):
     
     def is_resource(c):
         """A resource is a FILE or LINK container."""
-        return c.get('container_type') in ('file', 'link')
+        return c.get('resource_type') in ('file', 'link')
     
     def humanize_label(raw: str) -> str:
         """Convert 'instructor_led_virtual' to 'Instructor Led Virtual'."""
@@ -367,16 +367,16 @@ def update_audience_view(request):
     """
     Update audience for a single container.
     CSRF-protected POST endpoint.
-    Calls frozen backend: update_audience_bulk([container_key], audience)
+    Calls frozen backend: update_audience_bulk([resource_key], audience)
     """
     from db import update_audience_bulk
     from services.scrub_rules import CANONICAL_AUDIENCES
     
-    container_key = request.POST.get('container_key', '').strip()
+    resource_key = request.POST.get('resource_key', '').strip()
     new_audience = request.POST.get('audience', '').strip()
     
     # Validate inputs - preserve filter state on error redirects
-    if not container_key:
+    if not resource_key:
         messages.error(request, 'Invalid container key')
         return _redirect_with_filters(request)
     
@@ -389,7 +389,7 @@ def update_audience_view(request):
         return _redirect_with_filters(request)
     
     # Call frozen backend function - exactly one container
-    update_audience_bulk([container_key], new_audience)
+    update_audience_bulk([resource_key], new_audience)
     
     messages.success(request, f'Audience updated to "{new_audience}"')
     
@@ -465,25 +465,25 @@ def save_scrub_view(request):
     Save scrub decision for a single container.
     
     PARITY CONTRACT:
-    - Calls update_container_scrub with owner='' ALWAYS (Streamlit behavior)
+    - Calls update_resource_scrub with owner='' ALWAYS (Streamlit behavior)
     - Maps "Unreviewed" → 'not_reviewed' for storage
     - Does NOT gate on missing audience/notes/owner (Streamlit didn't)
     - Calls update_sales_stage if sales_stage provided
     """
-    from db import update_container_scrub, update_sales_stage
+    from db import update_resource_scrub, update_sales_stage
     from services.scrub_rules import VALID_SCRUB_DECISIONS, CANONICAL_AUDIENCES
     from services.sales_stage import SALES_STAGE_KEYS
     from urllib.parse import urlencode
     
-    container_key = request.POST.get('container_key', '').strip()
+    resource_key = request.POST.get('resource_key', '').strip()
     decision_input = request.POST.get('decision', '').strip()
     notes = request.POST.get('notes', '').strip() or None
     audience = request.POST.get('audience', '').strip() or None
     sales_stage = request.POST.get('sales_stage', '').strip() or None
     queue_filter = request.POST.get('queue_filter', 'Unreviewed')
     
-    # Validate container_key
-    if not container_key:
+    # Validate resource_key
+    if not resource_key:
         messages.error(request, 'Invalid container key')
         return redirect(f'/scrubbing/?queue_filter={queue_filter}')
     
@@ -508,9 +508,9 @@ def save_scrub_view(request):
         messages.warning(request, f'Invalid sales stage "{sales_stage}" ignored')
         sales_stage = None
     
-    # Call frozen backend: update_container_scrub with owner=''
-    update_container_scrub(
-        container_key=container_key,
+    # Call frozen backend: update_resource_scrub with owner=''
+    update_resource_scrub(
+        resource_key=resource_key,
         decision=decision,
         owner='',  # ALWAYS empty string (owner field not collected in UI)
         notes=notes,
@@ -521,7 +521,7 @@ def save_scrub_view(request):
     
     # Call frozen backend: update_sales_stage (None clears it)
     update_sales_stage(
-        container_key=container_key,
+        resource_key=resource_key,
         stage=sales_stage,
     )
     
@@ -544,11 +544,11 @@ def save_scrub_batch_view(request):
     - Concurrency: last-write-wins (intentionally accepted, no conflict detection)
     
     Expected POST data:
-    - dirty_keys: comma-separated list of container_keys that changed
+    - dirty_keys: comma-separated list of resource_keys that changed
     - For each key: status_{key}, audience_{key}, stage_{key}, notes_{key}
     - queue_filter: current filter for redirect
     """
-    from db import update_container_scrub, update_sales_stage, get_connection
+    from db import update_resource_scrub, update_sales_stage, get_connection
     from services.scrub_rules import VALID_SCRUB_DECISIONS, CANONICAL_AUDIENCES
     from services.sales_stage import SALES_STAGE_KEYS
     
@@ -578,12 +578,12 @@ def save_scrub_batch_view(request):
         stage_input = request.POST.get(f'stage_{key}', '').strip() or None
         notes_input = request.POST.get(f'notes_{key}', '').strip() or None
         
-        # Validate container_key exists
+        # Validate resource_key exists
         if not key:
             errors.append({
                 'key': key,
                 'name': '(unknown)',
-                'field': 'container_key',
+                'field': 'resource_key',
                 'reason': 'Missing container identifier'
             })
             continue
@@ -626,7 +626,7 @@ def save_scrub_batch_view(request):
         
         # Row is valid - add to batch
         validated_rows.append({
-            'container_key': key,
+            'resource_key': key,
             'decision': decision,
             'audience': audience_input,
             'sales_stage': stage_input,
@@ -658,8 +658,8 @@ def save_scrub_batch_view(request):
         conn = get_connection()
         
         for row in validated_rows:
-            update_container_scrub(
-                container_key=row['container_key'],
+            update_resource_scrub(
+                resource_key=row['resource_key'],
                 decision=row['decision'],
                 owner='',  # ALWAYS empty string (owner field not collected in UI)
                 notes=row['notes'],
@@ -669,7 +669,7 @@ def save_scrub_batch_view(request):
             )
             
             update_sales_stage(
-                container_key=row['container_key'],
+                resource_key=row['resource_key'],
                 stage=row['sales_stage'],
             )
             
@@ -758,14 +758,14 @@ def save_investment_view(request):
     Save investment decision for a single container.
     
     PARITY CONTRACT:
-    - Calls update_container_invest with (container_key, decision, owner, effort, notes)
+    - Calls update_resource_invest with (resource_key, decision, owner, effort, notes)
     - Does NOT enforce extra validation gates beyond what legacy did
     - Preserves filter state on redirect
     """
-    from db import update_container_invest
+    from db import update_resource_invest
     from models.enums import InvestDecision
     
-    container_key = request.POST.get('container_key', '').strip()
+    resource_key = request.POST.get('resource_key', '').strip()
     decision = request.POST.get('decision', '').strip() or None
     owner = request.POST.get('owner', '').strip() or ''
     effort = request.POST.get('effort', '').strip() or None
@@ -774,8 +774,8 @@ def save_investment_view(request):
     # Preserve filters for redirect
     decision_filter = request.POST.get('decision_filter', 'All')
     
-    # Validate container_key
-    if not container_key:
+    # Validate resource_key
+    if not resource_key:
         messages.error(request, 'Invalid container key')
         return redirect(f'/investment/?decision_filter={decision_filter}')
     
@@ -785,9 +785,9 @@ def save_investment_view(request):
         messages.warning(request, f'Invalid decision "{decision}" ignored')
         decision = None
     
-    # Call frozen backend: update_container_invest
-    update_container_invest(
-        container_key=container_key,
+    # Call frozen backend: update_resource_invest
+    update_resource_invest(
+        resource_key=resource_key,
         decision=decision,
         owner=owner,
         effort=effort,

@@ -5,7 +5,7 @@ Tests for SharePoint sync scope validation.
 
 These tests prove:
 A) The validate_item_in_scope() function correctly blocks invalid items
-B) The runtime wiring ensures no invalid items touch upsert_container()
+B) The runtime wiring ensures no invalid items touch upsert_resource()
 """
 
 import pytest
@@ -91,15 +91,15 @@ class TestScopeGuardUnit:
 class TestScopeGuardRuntimeWiring:
     """
     Runtime wiring tests that prove the scope guard is called before any upsert.
-    Uses mocking to verify upsert_container is never called for invalid items.
+    Uses mocking to verify upsert_resource is never called for invalid items.
     """
     
     def test_invalid_item_blocks_upsert(self):
         """
-        Prove that invalid items are blocked from touching upsert_container.
+        Prove that invalid items are blocked from touching upsert_resource.
         
         This test simulates the traversal loop with one invalid item and
-        verifies that upsert_container is never called.
+        verifies that upsert_resource is never called.
         """
         from services.sharepoint_service import (
             validate_item_in_scope, 
@@ -169,7 +169,7 @@ class TestScopeGuardRuntimeWiring:
     
     def test_traversal_with_mocked_upsert(self):
         """
-        Full integration test with mocked upsert_container.
+        Full integration test with mocked upsert_resource.
         Proves that invalid items never touch the database.
         """
         # This would require more extensive mocking of Graph API calls
@@ -191,7 +191,7 @@ class TestLinkHashingContract:
         assert actual_hash == expected_hash
         assert len(actual_hash) == 8
     
-    def test_container_key_format(self):
+    def test_resource_key_format(self):
         """Container key should use sha256[:16] of deterministic source."""
         parent_path = "HR/Training"
         url = "https://example.com/course1"

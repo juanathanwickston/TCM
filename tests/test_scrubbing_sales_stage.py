@@ -73,7 +73,7 @@ class TestSalesStageValidation:
         # Passing a label (not a key) should raise ValueError
         with pytest.raises(ValueError):
             update_sales_stage(
-                container_key="test_container",
+                resource_key="test_container",
                 stage="1. Identify the Customer"  # This is a label, not a key
             )
     
@@ -88,7 +88,7 @@ class TestSalesStageValidation:
         # None should not raise - it clears the stage
         # This will try to update a non-existent container but shouldn't raise ValueError
         try:
-            update_sales_stage(container_key="nonexistent_test", stage=None)
+            update_sales_stage(resource_key="nonexistent_test", stage=None)
         except ValueError:
             pytest.fail("update_sales_stage should accept None")
         except Exception:

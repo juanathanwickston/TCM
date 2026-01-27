@@ -4,7 +4,7 @@ Metrics Reconciliation Tests — Option A Verification
 Proves that Inventory and Dashboard use the same resource definition.
 
 Option A Contract:
-- Resource = container_type IN ('file', 'link')
+- Resource = resource_type IN ('file', 'link')
 - Folder = excluded from Inventory
 - Inventory total == Dashboard total (always)
 """
@@ -35,8 +35,8 @@ class TestMetricsReconciliation:
         
         # No folders should be in the result
         for r in resources:
-            assert r.get('container_type') in ('file', 'link'), \
-                f"Folder found in resources: {r.get('container_type')}"
+            assert r.get('resource_type') in ('file', 'link'), \
+                f"Folder found in resources: {r.get('resource_type')}"
     
     @requires_database
     def test_resource_departments_excludes_folder_only_depts(self):

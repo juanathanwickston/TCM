@@ -13,8 +13,8 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from db import (
-    init_db, clear_containers, upsert_container, make_container_key,
-    get_resource_totals, update_container_scrub
+    init_db, clear_containers, upsert_resource, make_resource_key,
+    get_resource_totals, update_resource_scrub
 )
 from services.container_service import parse_path, parse_links_content, is_leaf_container
 
@@ -121,20 +121,20 @@ def test_resource_counting():
     
     # Onboarding / Video On Demand
     # - 2 files → should count 2
-    upsert_container(
-        container_key=make_container_key(relative_path="01_Onboarding/04_Video on Demand/training1.pdf", container_type="file"),
+    upsert_resource(
+        resource_key=make_resource_key(relative_path="01_Onboarding/04_Video on Demand/training1.pdf", resource_type="file"),
         relative_path="01_Onboarding/04_Video on Demand/training1.pdf",
-        container_type="file",
+        resource_type="file",
         bucket="onboarding",
         primary_department=None,  # Department assigned during scrubbing
         training_type="video_on_demand",
         display_name="training1.pdf",
         resource_count=1
     )
-    upsert_container(
-        container_key=make_container_key(relative_path="01_Onboarding/04_Video on Demand/training2.pdf", container_type="file"),
+    upsert_resource(
+        resource_key=make_resource_key(relative_path="01_Onboarding/04_Video on Demand/training2.pdf", resource_type="file"),
         relative_path="01_Onboarding/04_Video on Demand/training2.pdf",
-        container_type="file",
+        resource_type="file",
         bucket="onboarding",
         primary_department=None,
         training_type="video_on_demand",
@@ -143,10 +143,10 @@ def test_resource_counting():
     )
     
     # - 1 folder container → should count 1
-    upsert_container(
-        container_key=make_container_key(relative_path="01_Onboarding/04_Video on Demand/onePOS Support", container_type="folder"),
+    upsert_resource(
+        resource_key=make_resource_key(relative_path="01_Onboarding/04_Video on Demand/onePOS Support", resource_type="folder"),
         relative_path="01_Onboarding/04_Video on Demand/onePOS Support",
-        container_type="folder",
+        resource_type="folder",
         bucket="onboarding",
         primary_department=None,
         training_type="video_on_demand",
@@ -155,10 +155,10 @@ def test_resource_counting():
     )
     
     # - empty links.txt → should count 0
-    upsert_container(
-        container_key=make_container_key(relative_path="01_Onboarding/04_Video on Demand/links.txt", container_type="links"),
+    upsert_resource(
+        resource_key=make_resource_key(relative_path="01_Onboarding/04_Video on Demand/links.txt", resource_type="links"),
         relative_path="01_Onboarding/04_Video on Demand/links.txt",
-        container_type="links",
+        resource_type="links",
         bucket="onboarding",
         primary_department=None,
         training_type="video_on_demand",
@@ -171,10 +171,10 @@ def test_resource_counting():
     
     # Upskilling / Job Aids
     # - links.txt with URLs → count 1
-    upsert_container(
-        container_key=make_container_key(relative_path="02_Upskilling/05_Job Aids/links.txt", container_type="links"),
+    upsert_resource(
+        resource_key=make_resource_key(relative_path="02_Upskilling/05_Job Aids/links.txt", resource_type="links"),
         relative_path="02_Upskilling/05_Job Aids/links.txt",
-        container_type="links",
+        resource_type="links",
         bucket="upskilling",
         primary_department=None,
         training_type="job_aids",
@@ -184,10 +184,10 @@ def test_resource_counting():
         is_placeholder=False
     )
     # - 1 file → count 1
-    upsert_container(
-        container_key=make_container_key(relative_path="02_Upskilling/05_Job Aids/guide.pdf", container_type="file"),
+    upsert_resource(
+        resource_key=make_resource_key(relative_path="02_Upskilling/05_Job Aids/guide.pdf", resource_type="file"),
         relative_path="02_Upskilling/05_Job Aids/guide.pdf",
-        container_type="file",
+        resource_type="file",
         bucket="upskilling",
         primary_department=None,
         training_type="job_aids",
@@ -213,14 +213,14 @@ def test_department_assignment():
     # Clear and add a container without department
     clear_containers()
     
-    container_key = make_container_key(
+    resource_key = make_resource_key(
         relative_path="01_Onboarding/03_Self Directed/test.pdf",
-        container_type="file"
+        resource_type="file"
     )
-    upsert_container(
-        container_key=container_key,
+    upsert_resource(
+        resource_key=resource_key,
         relative_path="01_Onboarding/03_Self Directed/test.pdf",
-        container_type="file",
+        resource_type="file",
         bucket="onboarding",
         primary_department=None,  # Not set from path
         training_type="self_directed",
@@ -229,8 +229,8 @@ def test_department_assignment():
     )
     
     # Assign audience during scrubbing (new signature: decision, no reasons for PASS)
-    update_container_scrub(
-        container_key=container_key,
+    update_resource_scrub(
+        resource_key=resource_key,
         decision="Include",  # Canonical scrub decision
         owner="Test User",
         notes=None,
@@ -251,27 +251,27 @@ def test_deterministic_keys():
     """Test that container keys are stable across runs."""
     print("Testing deterministic keys...")
     
-    key1 = make_container_key(
+    key1 = make_resource_key(
         relative_path="01_Onboarding/04_Video on Demand/test.pdf",
-        container_type="file"
+        resource_type="file"
     )
-    key2 = make_container_key(
+    key2 = make_resource_key(
         relative_path="01_Onboarding/04_Video on Demand/test.pdf",
-        container_type="file"
+        resource_type="file"
     )
     assert key1 == key2, "Keys should be identical for same path"
     
     # Different type = different key
-    key3 = make_container_key(
+    key3 = make_resource_key(
         relative_path="01_Onboarding/04_Video on Demand/test.pdf",
-        container_type="folder"
+        resource_type="folder"
     )
     assert key1 != key3, "Different types should produce different keys"
     
     # Case insensitive
-    key4 = make_container_key(
+    key4 = make_resource_key(
         relative_path="01_ONBOARDING/04_Video on Demand/test.pdf",
-        container_type="file"
+        resource_type="file"
     )
     assert key1 == key4, "Keys should be case-insensitive"
     

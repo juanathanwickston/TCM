@@ -20,7 +20,7 @@ def test_placeholder_exclusion_sql_enforced():
     mock_db_containers = [
         # Normal active container
         {
-            "container_key": "normal_1",
+            "resource_key": "normal_1",
             "is_archived": 0,
             "is_placeholder": 0,
             "resource_count": 5,
@@ -28,7 +28,7 @@ def test_placeholder_exclusion_sql_enforced():
         },
         # Placeholder (should be excluded by SQL)
         {
-            "container_key": "placeholder_1", 
+            "resource_key": "placeholder_1", 
             "is_archived": 0,
             "is_placeholder": 1,
             "resource_count": 999,  # Large number to make exclusion obvious
@@ -36,7 +36,7 @@ def test_placeholder_exclusion_sql_enforced():
         },
         # Another normal container
         {
-            "container_key": "normal_2",
+            "resource_key": "normal_2",
             "is_archived": 0,
             "is_placeholder": 0,
             "resource_count": 3,
@@ -44,7 +44,7 @@ def test_placeholder_exclusion_sql_enforced():
         },
         # Archived (should be excluded anyway)
         {
-            "container_key": "archived_1",
+            "resource_key": "archived_1",
             "is_archived": 1,
             "is_placeholder": 0,
             "resource_count": 10,
@@ -61,7 +61,7 @@ def test_placeholder_exclusion_sql_enforced():
     # Assertions
     assert len(filtered) == 2, f"Expected 2 active non-placeholder containers, got {len(filtered)}"
     
-    keys = [c["container_key"] for c in filtered]
+    keys = [c["resource_key"] for c in filtered]
     assert "normal_1" in keys, "normal_1 should be included"
     assert "normal_2" in keys, "normal_2 should be included"
     assert "placeholder_1" not in keys, "placeholder_1 should be EXCLUDED by SQL predicate"

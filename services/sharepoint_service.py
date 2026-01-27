@@ -356,7 +356,7 @@ def _build_relative_path(item: dict, drive_id: str) -> str:
     Build relative path from Graph item.
     
     Returns path WITHOUT trailing slash (even for folders).
-    Trailing slash is only added to container_key for folders.
+    Trailing slash is only added to resource_key for folders.
     """
     parent_path = item.get("parentReference", {}).get("path", "")
     parent_relative = _strip_drive_prefix(parent_path, drive_id)
@@ -396,7 +396,7 @@ def sync_from_sharepoint() -> Dict[str, Any]:
         get_active_resource_count,
         archive_stale_resources,
         record_sync_run,
-        upsert_container,
+        upsert_resource,
         clear_cache
     )
     
@@ -507,7 +507,7 @@ def _traverse_folder(
     Validates every item before processing.
     """
     from services.container_service import parse_path, is_leaf_container, parse_links_content
-    from db import upsert_container, make_container_key
+    from db import upsert_resource, make_resource_key
     
     # Build URL for children
     if item_id == "root":
@@ -550,25 +550,14 @@ def _traverse_folder(
             item_relative = _build_relative_path(item, drive_id)
             
             if "folder" in item:
-                # It's a folder - check if leaf container or recurse
+                # It's a folder - recurse into it
                 stats['folders_scanned'] += 1
                 
                 # DIAGNOSTIC: Log folder entry with depth
                 folder_depth = len(item_relative.split('/')) if item_relative else 0
                 _logger.info(f"[SYNC] FOLDER: {item_relative} (depth {folder_depth})")
                 
-                # Check if this folder is a leaf container (L3+1 depth)
-                if is_leaf_container(item_relative, True, item_name):
-                    # Process as folder container
-                    _process_folder_container(
-                        item=item,
-                        drive_id=drive_id,
-                        relative_path=item_relative,
-                        sync_started_at=sync_started_at,
-                        stats=stats
-                    )
-                
-                # Always recurse into folders (traversal continues regardless)
+                # Recurse into all folders (traversal continues, no folder records created)
                 _traverse_folder(
                     item_id=item["id"],
                     drive_id=drive_id,
@@ -620,55 +609,6 @@ def _traverse_folder(
         url = result.get("@odata.nextLink")
 
 
-def _process_folder_container(
-    item: dict,
-    drive_id: str,
-    relative_path: str,
-    sync_started_at: str,
-    stats: Dict[str, int]
-) -> None:
-    """Process a folder as a container (L3+1 depth)."""
-    # REDUNDANT SCOPE GUARD: Prevents drift if this function is called directly
-    validate_item_in_scope(item, drive_id)
-    
-    from services.container_service import parse_path
-    from db import upsert_container, make_container_key
-    
-    parsed = parse_path(relative_path)
-    
-    # container_key has trailing slash for folders
-    container_key = make_container_key(
-        relative_path=relative_path,
-        container_type="folder"
-    )
-    
-    # Folder metadata (contents_count from Graph childCount)
-    contents_count = item.get("folder", {}).get("childCount", 0)
-    
-    is_new = upsert_container(
-        container_key=container_key,
-        relative_path=relative_path,  # NO trailing slash
-        container_type="folder",
-        bucket=parsed.get('bucket'),
-        primary_department=parsed.get('primary_department'),
-        sub_department=parsed.get('sub_department'),
-        training_type=parsed.get('training_type'),
-        display_name=item.get("name"),
-        resource_count=1,
-        valid_link_count=0,
-        contents_count=contents_count,
-        is_placeholder=False,
-        source="sharepoint",
-        drive_item_id=item.get("id"),
-        last_seen_override=sync_started_at
-    )
-    
-    if is_new:
-        stats['new_containers'] += 1
-    else:
-        stats['updated_containers'] += 1
-
-
 def _process_file_container(
     item: dict,
     drive_id: str,
@@ -681,21 +621,21 @@ def _process_file_container(
     validate_item_in_scope(item, drive_id)
     
     from services.container_service import parse_path
-    from db import upsert_container, make_container_key
+    from db import upsert_resource, make_resource_key
     
     # Parse parent path for taxonomy
     parent_path = "/".join(relative_path.split("/")[:-1])
     parsed = parse_path(parent_path)
     
-    container_key = make_container_key(
+    resource_key = make_resource_key(
         relative_path=relative_path,
-        container_type="file"
+        resource_type="file"
     )
     
-    is_new = upsert_container(
-        container_key=container_key,
+    is_new = upsert_resource(
+        resource_key=resource_key,
         relative_path=relative_path,
-        container_type="file",
+        resource_type="file",
         bucket=parsed.get('bucket'),
         primary_department=parsed.get('primary_department'),
         sub_department=parsed.get('sub_department'),
@@ -711,9 +651,9 @@ def _process_file_container(
     )
     
     if is_new:
-        stats['new_containers'] += 1
+        stats['new_resources'] += 1
     else:
-        stats['updated_containers'] += 1
+        stats['updated_resources'] += 1
 
 
 def _process_links_file(
@@ -727,8 +667,8 @@ def _process_links_file(
     """
     Process links.txt file: download content, parse URLs, create link resources.
     
-    Each valid URL becomes its own container with:
-    - container_type = "link"
+    Each valid URL becomes its own resource with:
+    - resource_type = "link"
     - resource_count = 1
     - drive_item_id = null (consistent with existing behavior)
     """
@@ -736,7 +676,7 @@ def _process_links_file(
     validate_item_in_scope(item, drive_id)
     
     from services.container_service import parse_path, parse_links_content
-    from db import upsert_container
+    from db import upsert_resource
     
     # Download file content (only content download allowed)
     content = _download_file_content(item["id"], drive_id, headers)
@@ -762,25 +702,25 @@ def _process_links_file(
     
     if not urls:
         stats['skipped_no_urls'] += 1
-        return  # No valid URLs, no containers created
+        return  # No valid URLs, no resources created
     
     # Parse parent for taxonomy
     parsed = parse_path(parent_relative)
     
-    # Create one container per URL (matching existing sha256 scheme)
+    # Create one resource per URL (matching existing sha256 scheme)
     for url in urls:
         # url_hash for relative_path display
         url_hash = hashlib.sha256(url.encode()).hexdigest()[:8]
         link_relative_path = f"{parent_relative}/links.txt#{url_hash}"
         
-        # container_key from full deterministic source
+        # resource_key from full deterministic source
         key_source = f"{parent_relative}|{url}|link"
-        container_key = hashlib.sha256(key_source.encode()).hexdigest()[:16]
+        resource_key = hashlib.sha256(key_source.encode()).hexdigest()[:16]
         
-        is_new = upsert_container(
-            container_key=container_key,
+        is_new = upsert_resource(
+            resource_key=resource_key,
             relative_path=link_relative_path,
-            container_type="link",
+            resource_type="link",
             bucket=parsed.get('bucket'),
             primary_department=parsed.get('primary_department'),
             sub_department=parsed.get('sub_department'),
@@ -797,7 +737,7 @@ def _process_links_file(
         )
         
         if is_new:
-            stats['new_containers'] += 1
+            stats['new_resources'] += 1
             stats['links_created'] += 1
         else:
-            stats['updated_containers'] += 1
+            stats['updated_resources'] += 1

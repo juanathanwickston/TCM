@@ -15,7 +15,7 @@ sys.path.insert(0, '.')
 def test_file_always_counts_as_1():
     """File always counts as 1."""
     from services.container_service import compute_file_count
-    result = compute_file_count({"container_type": "file"})
+    result = compute_file_count({"resource_type": "file"})
     assert result == 1, f"Expected 1, got {result}"
     print("  PASS: File counts as 1")
 
@@ -23,7 +23,7 @@ def test_file_always_counts_as_1():
 def test_folder_uses_contents_count():
     """Folder uses contents_count."""
     from services.container_service import compute_file_count
-    result = compute_file_count({"container_type": "folder", "contents_count": 7})
+    result = compute_file_count({"resource_type": "folder", "contents_count": 7})
     assert result == 7, f"Expected 7, got {result}"
     print("  PASS: Folder uses contents_count")
 
@@ -31,7 +31,7 @@ def test_folder_uses_contents_count():
 def test_folder_null_contents_count_fails_closed():
     """Folder NULL contents_count fails closed to 0."""
     from services.container_service import compute_file_count
-    result = compute_file_count({"container_type": "folder", "contents_count": None})
+    result = compute_file_count({"resource_type": "folder", "contents_count": None})
     assert result == 0, f"Expected 0, got {result}"
     print("  PASS: Folder NULL contents_count -> 0")
 
@@ -39,7 +39,7 @@ def test_folder_null_contents_count_fails_closed():
 def test_folder_missing_contents_count_fails_closed():
     """Folder missing contents_count fails closed to 0."""
     from services.container_service import compute_file_count
-    result = compute_file_count({"container_type": "folder"})
+    result = compute_file_count({"resource_type": "folder"})
     assert result == 0, f"Expected 0, got {result}"
     print("  PASS: Folder missing contents_count -> 0")
 
@@ -47,7 +47,7 @@ def test_folder_missing_contents_count_fails_closed():
 def test_folder_negative_contents_count_clamps():
     """Folder negative contents_count clamps to 0."""
     from services.container_service import compute_file_count
-    result = compute_file_count({"container_type": "folder", "contents_count": -3})
+    result = compute_file_count({"resource_type": "folder", "contents_count": -3})
     assert result == 0, f"Expected 0, got {result}"
     print("  PASS: Folder negative contents_count -> 0")
 
@@ -55,7 +55,7 @@ def test_folder_negative_contents_count_clamps():
 def test_link_uses_valid_link_count():
     """Link uses valid_link_count."""
     from services.container_service import compute_file_count
-    result = compute_file_count({"container_type": "link", "valid_link_count": 4})
+    result = compute_file_count({"resource_type": "link", "valid_link_count": 4})
     assert result == 4, f"Expected 4, got {result}"
     print("  PASS: Link uses valid_link_count")
 
@@ -63,7 +63,7 @@ def test_link_uses_valid_link_count():
 def test_links_plural_uses_valid_link_count():
     """Links (plural) also uses valid_link_count."""
     from services.container_service import compute_file_count
-    result = compute_file_count({"container_type": "links", "valid_link_count": 2})
+    result = compute_file_count({"resource_type": "links", "valid_link_count": 2})
     assert result == 2, f"Expected 2, got {result}"
     print("  PASS: Links (plural) uses valid_link_count")
 
@@ -71,17 +71,17 @@ def test_links_plural_uses_valid_link_count():
 def test_link_null_valid_link_count_fails_closed():
     """Link NULL valid_link_count fails closed to 0."""
     from services.container_service import compute_file_count
-    result = compute_file_count({"container_type": "link", "valid_link_count": None})
+    result = compute_file_count({"resource_type": "link", "valid_link_count": None})
     assert result == 0, f"Expected 0, got {result}"
     print("  PASS: Link NULL valid_link_count -> 0")
 
 
-def test_unknown_container_type_fails_closed():
-    """Unknown container_type fails closed to 0."""
+def test_unknown_resource_type_fails_closed():
+    """Unknown resource_type fails closed to 0."""
     from services.container_service import compute_file_count
-    result = compute_file_count({"container_type": "weird"})
+    result = compute_file_count({"resource_type": "weird"})
     assert result == 0, f"Expected 0, got {result}"
-    print("  PASS: Unknown container_type -> 0")
+    print("  PASS: Unknown resource_type -> 0")
 
 
 def test_non_numeric_counts_do_not_crash():
@@ -89,14 +89,14 @@ def test_non_numeric_counts_do_not_crash():
     from services.container_service import compute_file_count
     
     # String numeric should convert
-    result = compute_file_count({"container_type": "folder", "contents_count": "5"})
+    result = compute_file_count({"resource_type": "folder", "contents_count": "5"})
     assert result == 5, f"Expected 5, got {result}"
     
-    result = compute_file_count({"container_type": "link", "valid_link_count": "3"})
+    result = compute_file_count({"resource_type": "link", "valid_link_count": "3"})
     assert result == 3, f"Expected 3, got {result}"
     
     # Non-convertible string should fail closed to 0
-    result = compute_file_count({"container_type": "folder", "contents_count": "abc"})
+    result = compute_file_count({"resource_type": "folder", "contents_count": "abc"})
     assert result == 0, f"Expected 0 for 'abc', got {result}"
     
     print("  PASS: Non-numeric counts handled correctly")
@@ -124,11 +124,11 @@ def test_inventory_totals_with_fixture():
     from services.container_service import compute_file_count
     
     fixture = [
-        {"container_key": "A", "container_type": "file", "resource_count": 1},
-        {"container_key": "B", "container_type": "folder", "resource_count": 1, "contents_count": 10},
-        {"container_key": "C", "container_type": "link", "resource_count": 1, "valid_link_count": 3},
-        {"container_key": "D", "container_type": "folder", "resource_count": 1, "contents_count": 0},
-        {"container_key": "E", "container_type": "weird", "resource_count": 1},
+        {"resource_key": "A", "resource_type": "file", "resource_count": 1},
+        {"resource_key": "B", "resource_type": "folder", "resource_count": 1, "contents_count": 10},
+        {"resource_key": "C", "resource_type": "link", "resource_count": 1, "valid_link_count": 3},
+        {"resource_key": "D", "resource_type": "folder", "resource_count": 1, "contents_count": 0},
+        {"resource_key": "E", "resource_type": "weird", "resource_count": 1},
     ]
     
     # Primary total = SUM(resource_count)
@@ -155,15 +155,15 @@ def test_filter_consistency_same_dataset():
     from services.container_service import compute_file_count
     
     fixture = [
-        {"container_key": "A", "container_type": "file", "resource_count": 1},
-        {"container_key": "B", "container_type": "folder", "resource_count": 1, "contents_count": 10},
-        {"container_key": "C", "container_type": "link", "resource_count": 1, "valid_link_count": 3},
-        {"container_key": "D", "container_type": "folder", "resource_count": 1, "contents_count": 0},
-        {"container_key": "E", "container_type": "weird", "resource_count": 1},
+        {"resource_key": "A", "resource_type": "file", "resource_count": 1},
+        {"resource_key": "B", "resource_type": "folder", "resource_count": 1, "contents_count": 10},
+        {"resource_key": "C", "resource_type": "link", "resource_count": 1, "valid_link_count": 3},
+        {"resource_key": "D", "resource_type": "folder", "resource_count": 1, "contents_count": 0},
+        {"resource_key": "E", "resource_type": "weird", "resource_count": 1},
     ]
     
     # Filter: exclude B and C
-    filtered = [c for c in fixture if c["container_key"] not in ("B", "C")]
+    filtered = [c for c in fixture if c["resource_key"] not in ("B", "C")]
     
     primary_total = sum(c.get("resource_count", 0) for c in filtered)
     assert primary_total == 3, f"Expected filtered primary=3, got {primary_total}"
@@ -193,7 +193,7 @@ def run_all_tests():
     test_link_uses_valid_link_count()
     test_links_plural_uses_valid_link_count()
     test_link_null_valid_link_count_fails_closed()
-    test_unknown_container_type_fails_closed()
+    test_unknown_resource_type_fails_closed()
     test_non_numeric_counts_do_not_crash()
     
     print("\nB) Inventory totals integrity tests:")

@@ -13,14 +13,14 @@ def main():
     cursor = conn.cursor()
     
     # 1. Check schema
-    cursor.execute("PRAGMA table_info(resource_containers)")
+    cursor.execute("PRAGMA table_info(resources)")
     columns = [row[1] for row in cursor.fetchall()]
     print(f"Existing columns: {columns}")
     
     # 2. Add scrub_reasons column if missing
     if 'scrub_reasons' not in columns:
         print("Adding missing 'scrub_reasons' column...")
-        cursor.execute("ALTER TABLE resource_containers ADD COLUMN scrub_reasons TEXT")
+        cursor.execute("ALTER TABLE resources ADD COLUMN scrub_reasons TEXT")
         conn.commit()
         print("Added 'scrub_reasons' column")
     else:
@@ -28,7 +28,7 @@ def main():
     
     # 3. Reset all scrub statuses to 'not_reviewed'
     cursor.execute("""
-        UPDATE resource_containers 
+        UPDATE resources 
         SET scrub_status = 'not_reviewed',
             scrub_notes = NULL,
             scrub_owner = NULL,
@@ -41,10 +41,10 @@ def main():
     print(f"Reset {rows_updated} containers to 'not_reviewed'")
     
     # 4. Verify counts
-    cursor.execute("SELECT COUNT(*) as total FROM resource_containers WHERE is_archived = 0 AND is_placeholder = 0")
+    cursor.execute("SELECT COUNT(*) as total FROM resources WHERE is_archived = 0 AND is_placeholder = 0")
     total = cursor.fetchone()[0]
     
-    cursor.execute("SELECT COUNT(*) as unrev FROM resource_containers WHERE is_archived = 0 AND is_placeholder = 0 AND scrub_status = 'not_reviewed'")
+    cursor.execute("SELECT COUNT(*) as unrev FROM resources WHERE is_archived = 0 AND is_placeholder = 0 AND scrub_status = 'not_reviewed'")
     unreviewed = cursor.fetchone()[0]
     
     print(f"\nVerification:")

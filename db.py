@@ -445,18 +445,18 @@ def execute(sql: str, params=None, *, fetch="none", conn=None):
             return_connection(conn, healthy=healthy)
 
 
-def make_container_key(
+def make_resource_key(
     drive_item_id: str = None,
     relative_path: str = None,
-    container_type: str = None
+    resource_type: str = None
 ) -> str:
     """
-    Generate deterministic container key.
+    Generate deterministic resource key.
     Uses SharePoint ID when available, otherwise hash of path|type.
     """
     if drive_item_id:
         return drive_item_id
-    raw = f"{relative_path.lower()}|{container_type}"
+    raw = f"{relative_path.lower()}|{resource_type}"
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
@@ -484,10 +484,10 @@ def init_db() -> None:
         conn = get_connection()
         try:
             with conn.cursor() as cursor:
-                # Resource containers table
+                # Resources table
                 cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS resource_containers (
-                        container_key TEXT PRIMARY KEY,
+                    CREATE TABLE IF NOT EXISTS resources (
+                        resource_key TEXT PRIMARY KEY,
                         drive_item_id TEXT,
                         
                         relative_path TEXT NOT NULL,
@@ -496,7 +496,7 @@ def init_db() -> None:
                         sub_department TEXT,
                         training_type TEXT,
                         
-                        container_type TEXT NOT NULL,
+                        resource_type TEXT NOT NULL,
                         display_name TEXT,
                         web_url TEXT,
                         
@@ -529,32 +529,32 @@ def init_db() -> None:
                 
                 # Indexes
                 cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_containers_path 
-                    ON resource_containers(relative_path)
+                    CREATE INDEX IF NOT EXISTS idx_resources_path 
+                    ON resources(relative_path)
                 """)
                 cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_containers_bucket 
-                    ON resource_containers(bucket)
+                    CREATE INDEX IF NOT EXISTS idx_resources_bucket 
+                    ON resources(bucket)
                 """)
                 cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_containers_dept 
-                    ON resource_containers(primary_department)
+                    CREATE INDEX IF NOT EXISTS idx_resources_dept 
+                    ON resources(primary_department)
                 """)
                 cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_containers_subdept 
-                    ON resource_containers(sub_department)
+                    CREATE INDEX IF NOT EXISTS idx_resources_subdept 
+                    ON resources(sub_department)
                 """)
                 cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_containers_scrub_status 
-                    ON resource_containers(scrub_status)
+                    CREATE INDEX IF NOT EXISTS idx_resources_scrub_status 
+                    ON resources(scrub_status)
                 """)
                 cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_containers_active 
-                    ON resource_containers(is_archived, is_placeholder)
+                    CREATE INDEX IF NOT EXISTS idx_resources_active 
+                    ON resources(is_archived, is_placeholder)
                 """)
                 cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_containers_approved 
-                    ON resource_containers(approved_for_investment)
+                    CREATE INDEX IF NOT EXISTS idx_resources_approved 
+                    ON resources(approved_for_investment)
                 """)
                 
                 # Legacy catalog_items table (for backwards compatibility)
@@ -625,29 +625,29 @@ def init_db() -> None:
                 
                 # Migration: backfill first_seen for rows where it's NULL
                 cursor.execute("""
-                    UPDATE resource_containers
+                    UPDATE resources
                     SET first_seen = COALESCE(first_seen, last_seen, NOW()::TEXT)
                     WHERE first_seen IS NULL OR first_seen = ''
                 """)
                 
                 # Normalize legacy statuses to canonical
-                cursor.execute("UPDATE resource_containers SET scrub_status = 'Include' WHERE scrub_status = 'PASS'")
-                cursor.execute("UPDATE resource_containers SET scrub_status = 'Include' WHERE scrub_status = 'keep'")
-                cursor.execute("UPDATE resource_containers SET scrub_status = 'Modify' WHERE scrub_status = 'HOLD'")
-                cursor.execute("UPDATE resource_containers SET scrub_status = 'Modify' WHERE scrub_status = 'modify'")
-                cursor.execute("UPDATE resource_containers SET scrub_status = 'Modify' WHERE scrub_status = 'gap'")
-                cursor.execute("UPDATE resource_containers SET scrub_status = 'Sunset' WHERE scrub_status = 'BLOCK'")
-                cursor.execute("UPDATE resource_containers SET scrub_status = 'Sunset' WHERE LOWER(scrub_status) = 'sunset'")
+                cursor.execute("UPDATE resources SET scrub_status = 'Include' WHERE scrub_status = 'PASS'")
+                cursor.execute("UPDATE resources SET scrub_status = 'Include' WHERE scrub_status = 'keep'")
+                cursor.execute("UPDATE resources SET scrub_status = 'Modify' WHERE scrub_status = 'HOLD'")
+                cursor.execute("UPDATE resources SET scrub_status = 'Modify' WHERE scrub_status = 'modify'")
+                cursor.execute("UPDATE resources SET scrub_status = 'Modify' WHERE scrub_status = 'gap'")
+                cursor.execute("UPDATE resources SET scrub_status = 'Sunset' WHERE scrub_status = 'BLOCK'")
+                cursor.execute("UPDATE resources SET scrub_status = 'Sunset' WHERE LOWER(scrub_status) = 'sunset'")
                 
                 # Force NULL/empty to not_reviewed
                 cursor.execute("""
-                    UPDATE resource_containers SET scrub_status = 'not_reviewed' 
+                    UPDATE resources SET scrub_status = 'not_reviewed' 
                     WHERE scrub_status IS NULL OR scrub_status = ''
                 """)
                 
                 # Force any remaining unknown value to not_reviewed
                 cursor.execute("""
-                    UPDATE resource_containers SET scrub_status = 'not_reviewed' 
+                    UPDATE resources SET scrub_status = 'not_reviewed' 
                     WHERE scrub_status NOT IN ('not_reviewed', 'Include', 'Modify', 'Sunset')
                 """)
                 
@@ -660,13 +660,13 @@ def init_db() -> None:
 
 
 # -----------------------------------------------------------------------------
-# Container CRUD
+# Resource CRUD
 # -----------------------------------------------------------------------------
 
-def upsert_container(
-    container_key: str,
+def upsert_resource(
+    resource_key: str,
     relative_path: str,
-    container_type: str,
+    resource_type: str,
     bucket: str = None,
     primary_department: str = None,
     sub_department: str = None,
@@ -682,7 +682,7 @@ def upsert_container(
     last_seen_override: str = None
 ) -> bool:
     """
-    Insert or update a container.
+    Insert or update a resource.
     
     IDEMPOTENT: Updates metadata but NEVER overwrites scrub/invest fields.
     Returns True if new, False if updated.
@@ -690,8 +690,8 @@ def upsert_container(
     now = last_seen_override or datetime.now(timezone.utc).isoformat()
     
     existing = execute(
-        "SELECT container_key FROM resource_containers WHERE container_key = ?",
-        (container_key,),
+        "SELECT resource_key FROM resources WHERE resource_key = ?",
+        (resource_key,),
         fetch="one"
     )
     
@@ -699,7 +699,7 @@ def upsert_container(
         # Update metadata only (preserve user decisions)
         # Always set is_archived = 0 (resource is current)
         execute("""
-            UPDATE resource_containers SET
+            UPDATE resources SET
                 relative_path = ?,
                 bucket = ?,
                 primary_department = ?,
@@ -715,24 +715,24 @@ def upsert_container(
                 source = ?,
                 drive_item_id = ?,
                 is_archived = 0
-            WHERE container_key = ?
+            WHERE resource_key = ?
         """, (
             relative_path, bucket, primary_department, sub_department, training_type,
             display_name, web_url, resource_count, valid_link_count, contents_count,
-            int(is_placeholder), now, source, drive_item_id, container_key
+            int(is_placeholder), now, source, drive_item_id, resource_key
         ))
         return False
     else:
         execute("""
-            INSERT INTO resource_containers (
-                container_key, drive_item_id, relative_path, bucket,
-                primary_department, sub_department, training_type, container_type,
+            INSERT INTO resources (
+                resource_key, drive_item_id, relative_path, bucket,
+                primary_department, sub_department, training_type, resource_type,
                 display_name, web_url, resource_count, valid_link_count,
                 contents_count, is_placeholder, first_seen, last_seen, source, is_archived
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
         """, (
-            container_key, drive_item_id, relative_path, bucket,
-            primary_department, sub_department, training_type, container_type,
+            resource_key, drive_item_id, relative_path, bucket,
+            primary_department, sub_department, training_type, resource_type,
             display_name, web_url, resource_count, valid_link_count,
             contents_count, int(is_placeholder), now, now, source
         ))
@@ -747,19 +747,19 @@ from psycopg2.extras import execute_values
 
 # Column order for batch upsert (must match tuple order)
 _UPSERT_COLUMNS = (
-    "container_key", "drive_item_id", "relative_path", "bucket",
-    "primary_department", "sub_department", "training_type", "container_type",
+    "resource_key", "drive_item_id", "relative_path", "bucket",
+    "primary_department", "sub_department", "training_type", "resource_type",
     "display_name", "web_url", "resource_count", "valid_link_count",
     "contents_count", "is_placeholder", "first_seen", "last_seen", "source", "is_archived"
 )
 
 # Required keys that must NOT be None (based on schema NOT NULL constraints)
-_REQUIRED_KEYS = frozenset({"container_key", "relative_path", "container_type"})
+_REQUIRED_KEYS = frozenset({"resource_key", "relative_path", "resource_type"})
 
 _UPSERT_SQL = f"""
-INSERT INTO resource_containers ({', '.join(_UPSERT_COLUMNS)})
+INSERT INTO resources ({', '.join(_UPSERT_COLUMNS)})
 VALUES %s
-ON CONFLICT (container_key) DO UPDATE SET
+ON CONFLICT (resource_key) DO UPDATE SET
     relative_path = EXCLUDED.relative_path,
     bucket = EXCLUDED.bucket,
     primary_department = EXCLUDED.primary_department,
@@ -778,12 +778,12 @@ ON CONFLICT (container_key) DO UPDATE SET
 """
 
 
-def batch_upsert_containers(rows: list, *, conn, chunk_size: int = 500) -> int:
+def batch_upsert_resources(rows: list, *, conn, chunk_size: int = 500) -> int:
     """
     Batched upsert using INSERT ... ON CONFLICT DO UPDATE.
     
     Args:
-        rows: List of dicts with container data (keys must match _UPSERT_COLUMNS)
+        rows: List of dicts with resource data (keys must match _UPSERT_COLUMNS)
         conn: Connection from transaction() context (caller owns commit)
         chunk_size: Max rows per statement to avoid size limits
     
@@ -800,9 +800,9 @@ def batch_upsert_containers(rows: list, *, conn, chunk_size: int = 500) -> int:
     for i, row in enumerate(rows):
         for key in _REQUIRED_KEYS:
             if key not in row or row[key] is None:
-                container_id = row.get('container_key', f'row_index_{i}')
+                resource_id = row.get('resource_key', f'row_index_{i}')
                 raise ValueError(
-                    f"Missing required key '{key}' in row {i} (container_key={container_id})"
+                    f"Missing required key '{key}' in row {i} (resource_key={resource_id})"
                 )
     
     # Convert dicts to tuples in deterministic column order
@@ -824,25 +824,25 @@ def batch_upsert_containers(rows: list, *, conn, chunk_size: int = 500) -> int:
     return len(rows)
 
 
-def get_all_containers() -> List[Dict[str, Any]]:
-    """Get all containers."""
-    rows = execute("SELECT * FROM resource_containers ORDER BY relative_path", fetch="all")
+def get_all_resources() -> List[Dict[str, Any]]:
+    """Get all resources."""
+    rows = execute("SELECT * FROM resources ORDER BY relative_path", fetch="all")
     return [dict(row) for row in rows] if rows else []
 
 
-def get_containers_by_scrub_status(statuses: List[str]) -> List[Dict[str, Any]]:
-    """Get containers filtered by scrub status."""
+def get_resources_by_scrub_status(statuses: List[str]) -> List[Dict[str, Any]]:
+    """Get resources filtered by scrub status."""
     placeholders = ",".join("?" * len(statuses))
     rows = execute(
-        f"SELECT * FROM resource_containers WHERE scrub_status IN ({placeholders})",
+        f"SELECT * FROM resources WHERE scrub_status IN ({placeholders})",
         tuple(statuses),
         fetch="all"
     )
     return [dict(row) for row in rows] if rows else []
 
 
-def update_container_scrub(
-    container_key: str,
+def update_resource_scrub(
+    resource_key: str,
     decision: str,  # RENAMED from status
     owner: str,
     notes: str = None,
@@ -851,15 +851,15 @@ def update_container_scrub(
     audience: str = None
 ) -> None:
     """
-    Update scrubbing fields for a container.
+    Update scrubbing fields for a resource.
     
     Args:
-        container_key: Unique container identifier
+        resource_key: Unique resource identifier
         decision: One of {not_reviewed, Include, Modify, Sunset}
         owner: Who made this decision
         notes: Optional free-text notes
         reasons: DEPRECATED - kept for backwards compatibility, ignored
-        resource_count_override: Override count for links containers after review
+        resource_count_override: Override count for links resources after review
         audience: Who the training is for
     
     Raises:
@@ -894,63 +894,63 @@ def update_container_scrub(
         updates.append("audience = ?")
         params.append(audience)
     
-    params.append(container_key)
+    params.append(resource_key)
     
     execute(f"""
-        UPDATE resource_containers SET
+        UPDATE resources SET
             {', '.join(updates)}
-        WHERE container_key = ?
+        WHERE resource_key = ?
     """, tuple(params))
 
 
-def update_container_invest(
-    container_key: str,
+def update_resource_invest(
+    resource_key: str,
     decision: str,
     owner: str,
     effort: str = None,
     notes: str = None
 ) -> None:
-    """Update investment fields for a container."""
+    """Update investment fields for a resource."""
     now = datetime.now(timezone.utc).isoformat()
     execute("""
-        UPDATE resource_containers SET
+        UPDATE resources SET
             invest_decision = ?, invest_owner = ?, invest_effort = ?,
             invest_notes = ?, invest_updated = ?
-        WHERE container_key = ?
-    """, (decision, owner, effort, notes, now, container_key))
+        WHERE resource_key = ?
+    """, (decision, owner, effort, notes, now, resource_key))
 
 
 # -----------------------------------------------------------------------------
 # Batch Updates (for optimized scrubbing workflow)
 # -----------------------------------------------------------------------------
 
-def update_audience_bulk(container_keys: list, audience: str) -> int:
+def update_audience_bulk(resource_keys: list, audience: str) -> int:
     """
-    Update audience for multiple active containers.
+    Update audience for multiple active resources.
     
     GUARDRAILS:
-    - Only updates active, non-placeholder containers
+    - Only updates active, non-placeholder resources
     - Handles empty selection safely (returns 0)
     - Only modifies 'audience' field
     
     Returns: count of rows updated
     """
-    if not container_keys:
+    if not resource_keys:
         return 0  # Handle empty selection safely
     
-    placeholders = ",".join("?" * len(container_keys))
+    placeholders = ",".join("?" * len(resource_keys))
     
     # Note: We need rowcount, so use manual connection with proper cleanup
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute(adapt_query(f"""
-                UPDATE resource_containers
+                UPDATE resources
                 SET audience = ?
-                WHERE container_key IN ({placeholders})
+                WHERE resource_key IN ({placeholders})
                   AND is_archived = 0 
                   AND is_placeholder = 0
-            """), tuple([audience] + list(container_keys)))
+            """), tuple([audience] + list(resource_keys)))
             count = cursor.rowcount
             conn.commit()
             return count
@@ -960,14 +960,14 @@ def update_audience_bulk(container_keys: list, audience: str) -> int:
 
 def update_scrub_batch(updates: dict) -> int:
     """
-    Batch update scrub fields for multiple containers.
+    Batch update scrub fields for multiple resources.
     
     Args:
-        updates: Dict of {container_key: {field: value, ...}}
+        updates: Dict of {resource_key: {field: value, ...}}
     
     GUARDRAILS:
     - Only updates whitelisted fields (scrub_status, scrub_owner, scrub_notes, audience)
-    - Only updates active, non-placeholder containers
+    - Only updates active, non-placeholder resources
     - Sets scrub_updated timestamp on each update
     
     Returns: count of rows updated
@@ -983,7 +983,7 @@ def update_scrub_batch(updates: dict) -> int:
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            for container_key, fields in updates.items():
+            for resource_key, fields in updates.items():
                 # Validate fields against whitelist
                 safe_fields = {k: v for k, v in fields.items() if k in SCRUB_FIELD_WHITELIST}
                 
@@ -996,12 +996,12 @@ def update_scrub_batch(updates: dict) -> int:
                 
                 params = list(safe_fields.values())
                 params.append(now)
-                params.append(container_key)
+                params.append(resource_key)
                 
                 cursor.execute(adapt_query(f"""
-                    UPDATE resource_containers SET
+                    UPDATE resources SET
                         {', '.join(set_clauses)}
-                    WHERE container_key = ?
+                    WHERE resource_key = ?
                       AND is_archived = 0
                       AND is_placeholder = 0
                 """), tuple(params))
@@ -1040,14 +1040,14 @@ def get_resource_totals(departments: List[str] = None) -> Dict[str, Any]:
                 placeholders = ",".join("?" * len(departments))
                 cursor.execute(adapt_query(f"""
                     SELECT bucket, SUM(resource_count) as total
-                    FROM resource_containers
+                    FROM resources
                     WHERE {base_filter} AND (primary_department IN ({placeholders}) OR primary_department IS NULL)
                     GROUP BY bucket
                 """), tuple(departments))
             else:
                 cursor.execute(f"""
                     SELECT bucket, SUM(resource_count) as total
-                    FROM resource_containers
+                    FROM resources
                     WHERE {base_filter}
                     GROUP BY bucket
                 """)
@@ -1058,14 +1058,14 @@ def get_resource_totals(departments: List[str] = None) -> Dict[str, Any]:
                 placeholders = ",".join("?" * len(departments))
                 cursor.execute(adapt_query(f"""
                     SELECT primary_department, SUM(resource_count) as total
-                    FROM resource_containers
+                    FROM resources
                     WHERE {base_filter} AND primary_department IN ({placeholders})
                     GROUP BY primary_department
                 """), tuple(departments))
             else:
                 cursor.execute(f"""
                     SELECT primary_department, SUM(resource_count) as total
-                    FROM resource_containers
+                    FROM resources
                     WHERE {base_filter} AND primary_department IS NOT NULL
                     GROUP BY primary_department
                 """)
@@ -1074,7 +1074,7 @@ def get_resource_totals(departments: List[str] = None) -> Dict[str, Any]:
             # Not sure backlog
             cursor.execute(f"""
                 SELECT COUNT(*) as count, SUM(resource_count) as total
-                FROM resource_containers
+                FROM resources
                 WHERE {base_filter} AND primary_department IS NULL
             """)
             not_sure = cursor.fetchone()
@@ -1084,7 +1084,7 @@ def get_resource_totals(departments: List[str] = None) -> Dict[str, Any]:
                 SELECT 
                     COUNT(*) as total,
                     SUM(CASE WHEN scrub_status != 'not_reviewed' THEN 1 ELSE 0 END) as reviewed
-                FROM resource_containers
+                FROM resources
                 WHERE {base_filter}
             """)
             scrub = cursor.fetchone()
@@ -1092,7 +1092,7 @@ def get_resource_totals(departments: List[str] = None) -> Dict[str, Any]:
             # Investment queue
             cursor.execute(f"""
                 SELECT COUNT(*) as count
-                FROM resource_containers
+                FROM resources
                 WHERE {base_filter} AND scrub_status IN ('modify', 'gap')
             """)
             invest = cursor.fetchone()
@@ -1122,7 +1122,7 @@ def get_latest_snapshot() -> Optional[Dict[str, Any]]:
 
 def clear_containers() -> None:
     """Clear all containers. For testing/reset only."""
-    execute("DELETE FROM resource_containers")
+    execute("DELETE FROM resources")
 
 
 # -----------------------------------------------------------------------------
@@ -1131,7 +1131,7 @@ def clear_containers() -> None:
 
 def get_active_resource_count() -> int:
     """Get count of active (non-archived) resources."""
-    row = execute("SELECT COUNT(*) as cnt FROM resource_containers WHERE is_archived = 0", fetch="one")
+    row = execute("SELECT COUNT(*) as cnt FROM resources WHERE is_archived = 0", fetch="one")
     return row['cnt'] if row else 0
 
 
@@ -1154,7 +1154,7 @@ def archive_stale_resources(sync_started_at: str, *, conn=None) -> int:
     try:
         with conn.cursor() as cursor:
             cursor.execute(adapt_query("""
-                UPDATE resource_containers
+                UPDATE resources
                 SET is_archived = 1
                 WHERE
                     is_archived = 0
@@ -1193,7 +1193,7 @@ def record_sync_run(
 def get_active_containers() -> List[Dict[str, Any]]:
     """Get all active (non-archived, non-placeholder) containers for Inventory."""
     rows = execute("""
-        SELECT * FROM resource_containers 
+        SELECT * FROM resources 
         WHERE is_archived = 0 AND is_placeholder = 0
         ORDER BY relative_path
     """, fetch="all")
@@ -1224,7 +1224,7 @@ def get_active_containers_filtered(
     """
     # Build parameterized query
     query = """
-        SELECT * FROM resource_containers 
+        SELECT * FROM resources 
         WHERE is_archived = 0 AND is_placeholder = 0
     """
     params = []
@@ -1259,7 +1259,7 @@ def get_active_departments() -> List[str]:
     """
     rows = execute("""
         SELECT DISTINCT primary_department
-        FROM resource_containers
+        FROM resources
         WHERE is_archived = 0 AND is_placeholder = 0
           AND primary_department IS NOT NULL
         ORDER BY primary_department
@@ -1280,7 +1280,7 @@ def get_active_training_types(primary_department: str = None) -> List[str]:
     """
     query = """
         SELECT DISTINCT training_type
-        FROM resource_containers
+        FROM resources
         WHERE is_archived = 0 AND is_placeholder = 0
           AND training_type IS NOT NULL
     """
@@ -1312,12 +1312,12 @@ def get_active_resources_filtered(
     
     For Inventory page use. Dashboard and other pages use get_active_containers().
     
-    Canonical predicate: is_archived=0 AND is_placeholder=0 AND container_type IN ('file','link')
+    Canonical predicate: is_archived=0 AND is_placeholder=0 AND resource_type IN ('file','link')
     """
     query = """
-        SELECT * FROM resource_containers 
+        SELECT * FROM resources 
         WHERE is_archived = 0 AND is_placeholder = 0
-          AND container_type IN ('file', 'link')
+          AND resource_type IN ('file', 'link')
     """
     params = []
     
@@ -1350,9 +1350,9 @@ def get_active_resource_departments() -> List[str]:
     """
     rows = execute("""
         SELECT DISTINCT primary_department
-        FROM resource_containers
+        FROM resources
         WHERE is_archived = 0 AND is_placeholder = 0
-          AND container_type IN ('file', 'link')
+          AND resource_type IN ('file', 'link')
           AND primary_department IS NOT NULL
         ORDER BY primary_department
     """, fetch="all")
@@ -1368,9 +1368,9 @@ def get_active_resource_training_types(primary_department: str = None) -> List[s
     """
     query = """
         SELECT DISTINCT training_type
-        FROM resource_containers
+        FROM resources
         WHERE is_archived = 0 AND is_placeholder = 0
-          AND container_type IN ('file', 'link')
+          AND resource_type IN ('file', 'link')
           AND training_type IS NOT NULL
     """
     params = []
@@ -1389,12 +1389,12 @@ def get_active_resource_training_types(primary_department: str = None) -> List[s
 # Sales Stage Functions
 # -----------------------------------------------------------------------------
 
-def update_sales_stage(container_key: str, stage: str | None) -> None:
+def update_sales_stage(resource_key: str, stage: str | None) -> None:
     """
     Update sales_stage for a container.
     
     Args:
-        container_key: The container to update
+        resource_key: The container to update
         stage: None to clear (set NULL), or a canonical stage key
     
     Raises:
@@ -1406,8 +1406,8 @@ def update_sales_stage(container_key: str, stage: str | None) -> None:
         raise ValueError(f"Invalid sales_stage: {stage}")
     
     execute(
-        "UPDATE resource_containers SET sales_stage = ? WHERE container_key = ?",
-        (stage, container_key)
+        "UPDATE resources SET sales_stage = ? WHERE resource_key = ?",
+        (stage, resource_key)
     )
 
 
@@ -1426,7 +1426,7 @@ def get_sales_stage_breakdown() -> List[Dict]:
     
     rows = execute("""
         SELECT sales_stage, SUM(resource_count) as count
-        FROM resource_containers
+        FROM resources
         WHERE is_archived = 0 AND is_placeholder = 0
           AND sales_stage IS NOT NULL
         GROUP BY sales_stage
@@ -1486,7 +1486,7 @@ def run_audience_migration() -> Dict[str, Any]:
             # Step 1: Diagnostic - what's in primary_department for rows needing migration?
             cursor.execute("""
                 SELECT primary_department, COUNT(*) AS cnt
-                FROM resource_containers
+                FROM resources
                 WHERE (audience IS NULL OR audience = '')
                   AND primary_department IS NOT NULL
                 GROUP BY primary_department
@@ -1501,7 +1501,7 @@ def run_audience_migration() -> Dict[str, Any]:
             # For each key in AUDIENCE_MAP, update rows
             for old_val, canonical_val in AUDIENCE_MAP.items():
                 cursor.execute(adapt_query("""
-                    UPDATE resource_containers
+                    UPDATE resources
                     SET audience = ?
                     WHERE (audience IS NULL OR audience = '')
                     AND primary_department = ?
@@ -1514,7 +1514,7 @@ def run_audience_migration() -> Dict[str, Any]:
             for old_val in snake_case_keys:
                 canonical_val = AUDIENCE_MAP[old_val]
                 cursor.execute(adapt_query("""
-                    UPDATE resource_containers
+                    UPDATE resources
                     SET audience = ?
                     WHERE audience = ?
                 """), (canonical_val, old_val))
@@ -1522,7 +1522,7 @@ def run_audience_migration() -> Dict[str, Any]:
             
             # Count remaining NULL
             cursor.execute("""
-                SELECT COUNT(*) as cnt FROM resource_containers
+                SELECT COUNT(*) as cnt FROM resources
                 WHERE audience IS NULL OR audience = ''
             """)
             remaining_null = cursor.fetchone()['cnt']
@@ -1545,7 +1545,7 @@ def get_audience_stats() -> Dict[str, int]:
         SELECT 
             COALESCE(audience, 'Unassigned') as audience_group,
             SUM(resource_count) as total
-        FROM resource_containers
+        FROM resources
         WHERE is_archived = 0 AND is_placeholder = 0
         GROUP BY audience_group
         ORDER BY total DESC
@@ -1573,7 +1573,7 @@ def get_scrub_rollups() -> Dict[str, Any]:
         SELECT scrub_status, 
                COUNT(*) as cnt, 
                COALESCE(SUM(resource_count), 0) as total
-        FROM resource_containers
+        FROM resources
         WHERE is_archived = 0 AND is_placeholder = 0
         GROUP BY scrub_status
     """, fetch="all")
@@ -1584,7 +1584,7 @@ def get_scrub_rollups() -> Dict[str, Any]:
     
     # By reason (parse JSON, accumulate resource_count)
     reason_rows = execute("""
-        SELECT scrub_reasons, resource_count FROM resource_containers
+        SELECT scrub_reasons, resource_count FROM resources
         WHERE is_archived = 0 AND is_placeholder = 0 
           AND scrub_status IN ('HOLD', 'BLOCK')
           AND scrub_reasons IS NOT NULL AND scrub_reasons != ''
@@ -1639,8 +1639,8 @@ def get_folder_file_count(folder_relative_path: str) -> int:
     """
     row = execute("""
         SELECT contents_count 
-        FROM resource_containers 
-        WHERE relative_path = ? AND container_type = 'folder'
+        FROM resources 
+        WHERE relative_path = ? AND resource_type = 'folder'
     """, (folder_relative_path,), fetch="one")
     
     if row:
