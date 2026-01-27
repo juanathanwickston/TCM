@@ -211,10 +211,10 @@
         </div>
     </div>
 
-    <!-- ROW 2: Composition -->
+    <!-- ROW 2: 3-Column Donut Charts -->
     <div class="row g-2 mb-2">
-        <!-- Donut Card -->
-        <div class="col-md-6">
+        <!-- Onboarding vs Upskilling Donut -->
+        <div class="col-md-4">
             <div class="card h-100">
                 <div class="card-header card-header-sm">
                     <h6>Onboarding vs Upskilling</h6>
@@ -246,10 +246,8 @@
                         <div class="donut-breakdown">
                             {% for item in donut_breakdown %}
                             <div class="donut-breakdown-row">
-                                <span class="donut-breakdown-label">
-                                    <span class="donut-breakdown-dot" style="background:{{ item.color }};"></span>
-                                    {{ item.label }}
-                                </span>
+                                <span class="donut-breakdown-label"><span class="donut-breakdown-dot"
+                                        style="background:{{ item.color }};"></span>{{ item.label }}</span>
                                 <span>{{ item.count|intcomma }} ({{ item.pct }}%)</span>
                             </div>
                             {% endfor %}
@@ -258,35 +256,73 @@
                 </div>
             </div>
         </div>
-        <!-- Training Types Card -->
-        <div class="col-md-6">
+        <!-- Training Types Donut -->
+        <div class="col-md-4">
             <div class="card h-100">
                 <div class="card-header card-header-sm">
                     <h6>Training Types</h6>
                 </div>
                 <div class="card-body card-body-sm">
-                    {% if training_types %}
-                    <table class="table table-sm-tight">
-                        <thead>
-                            <tr>
-                                <th>Training Type</th>
-                                <th class="text-end">Count</th>
-                                <th class="text-end">%</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for t in training_types %}
-                            <tr>
-                                <td>{{ t.type }}</td>
-                                <td class="text-end">{{ t.count|intcomma }}</td>
-                                <td class="text-end">{{ t.pct }}%</td>
-                            </tr>
+                    <div class="donut-container">
+                        <svg class="donut-chart" viewBox="0 0 36 36">
+                            <circle class="donut-ring" cx="18" cy="18" r="15.9155" />
+                            {% if tt_total > 0 %}
+                            {% for item in tt_donut_data %}
+                            {% if item.pct > 0 %}
+                            <circle cx="18" cy="18" r="15.9155" fill="none" stroke="{{ item.color }}" stroke-width="3"
+                                stroke-dasharray="{{ item.pct }} {{ item.gap }}"
+                                stroke-dashoffset="{{ item.offset }}" />
+                            {% endif %}
                             {% endfor %}
-                        </tbody>
-                    </table>
-                    {% else %}
-                    <div class="text-muted small">No training type data</div>
-                    {% endif %}
+                            {% endif %}
+                            <text x="18" y="16" class="donut-text-label">Total</text>
+                            <text x="18" y="20" class="donut-text-value">{{ tt_total }}</text>
+                        </svg>
+                        <div class="donut-breakdown">
+                            {% for item in tt_donut_data %}
+                            <div class="donut-breakdown-row">
+                                <span class="donut-breakdown-label"><span class="donut-breakdown-dot"
+                                        style="background:{{ item.color }};"></span>{{ item.label }}</span>
+                                <span>{{ item.count|intcomma }} ({{ item.pct }}%)</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Sales Stage Donut -->
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header card-header-sm">
+                    <h6>Sales Stage</h6>
+                </div>
+                <div class="card-body card-body-sm">
+                    <div class="donut-container">
+                        <svg class="donut-chart" viewBox="0 0 36 36">
+                            <circle class="donut-ring" cx="18" cy="18" r="15.9155" />
+                            {% if ss_total > 0 %}
+                            {% for item in ss_donut_data %}
+                            {% if item.pct > 0 %}
+                            <circle cx="18" cy="18" r="15.9155" fill="none" stroke="{{ item.color }}" stroke-width="3"
+                                stroke-dasharray="{{ item.pct }} {{ item.gap }}"
+                                stroke-dashoffset="{{ item.offset }}" />
+                            {% endif %}
+                            {% endfor %}
+                            {% endif %}
+                            <text x="18" y="16" class="donut-text-label">Total</text>
+                            <text x="18" y="20" class="donut-text-value">{{ ss_total }}</text>
+                        </svg>
+                        <div class="donut-breakdown">
+                            {% for item in ss_donut_data %}
+                            <div class="donut-breakdown-row">
+                                <span class="donut-breakdown-label"><span class="donut-breakdown-dot"
+                                        style="background:{{ item.color }};"></span>{{ item.label }}</span>
+                                <span>{{ item.count|intcomma }} ({{ item.pct }}%)</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

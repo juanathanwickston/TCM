@@ -79,8 +79,9 @@ def dashboard_view(request):
     """
     import re
     from collections import defaultdict
-    from db import get_active_containers
+    from db import get_active_containers, get_sales_stage_breakdown
     from services.scrub_rules import normalize_status, CANONICAL_AUDIENCES
+    from services.sales_stage import SALES_STAGES
     
     # -------------------------------------------------------------------------
     # AUDIENCE ORDER — Single source of truth from CANONICAL_AUDIENCES
@@ -221,6 +222,55 @@ def dashboard_view(request):
     training_types.sort(key=lambda x: (-x['count'], x['type']))
     
     # -------------------------------------------------------------------------
+    # TRAINING TYPES DONUT CHART DATA (for 3-column layout)
+    # -------------------------------------------------------------------------
+    # Define colors for training types (up to 6)
+    TT_COLORS = ['#0051C2', '#00e0b8', '#001D4E', '#fd7e14', '#6f42c1', '#20c997']
+    
+    # Build training types donut data with colors and offsets
+    tt_total = sum(t['count'] for t in training_types)
+    tt_donut_data = []
+    tt_offset = 25  # Start at 12 o'clock position
+    for i, t in enumerate(training_types[:6]):  # Max 6 segments
+        pct = round((t['count'] / tt_total) * 100, 1) if tt_total > 0 else 0.0
+        tt_donut_data.append({
+            'label': t['type'],
+            'count': t['count'],
+            'pct': pct,
+            'color': TT_COLORS[i % len(TT_COLORS)],
+            'offset': tt_offset,
+            'gap': round(100 - pct, 1),
+        })
+        tt_offset -= pct
+    
+    # -------------------------------------------------------------------------
+    # SALES STAGE DONUT CHART DATA (excludes untagged)
+    # -------------------------------------------------------------------------
+    SS_COLORS = ['#e63946', '#f4a261', '#e9c46a', '#2a9d8f', '#264653', '#023047']
+    
+    # Get sales stage breakdown from DB (excludes NULL stages)
+    ss_raw = get_sales_stage_breakdown()
+    ss_total = sum(s['count'] for s in ss_raw)
+    
+    # Build in SALES_STAGES order for consistent display
+    ss_donut_data = []
+    ss_offset = 25
+    for i, (stage_key, stage_label) in enumerate(SALES_STAGES):
+        # Find count from raw data
+        count = next((s['count'] for s in ss_raw if s['stage'] == stage_key), 0)
+        pct = round((count / ss_total) * 100, 1) if ss_total > 0 else 0.0
+        ss_donut_data.append({
+            'key': stage_key,
+            'label': stage_label,
+            'count': count,
+            'pct': pct,
+            'color': SS_COLORS[i % len(SS_COLORS)],
+            'offset': ss_offset,
+            'gap': round(100 - pct, 1),
+        })
+        ss_offset -= pct
+    
+    # -------------------------------------------------------------------------
     # AUDIENCE BREAKDOWN (8 fixed rows in order, always show including Unassigned)
     # -------------------------------------------------------------------------
     audience_agg = defaultdict(int)
@@ -272,6 +322,10 @@ def dashboard_view(request):
         'other_gap': other_gap,
         'donut_breakdown': donut_breakdown,
         'training_types': training_types,
+        'tt_donut_data': tt_donut_data,
+        'tt_total': tt_total,
+        'ss_donut_data': ss_donut_data,
+        'ss_total': ss_total,
         'audience_breakdown': audience_breakdown,
     }
     
