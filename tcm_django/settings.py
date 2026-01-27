@@ -229,5 +229,10 @@ LOGGING = {
             'level': 'ERROR',
             'propagate': False,
         },
+        'services.sharepoint_service': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
     },
 }
