@@ -197,7 +197,8 @@ def _download_file_content(item_id: str, drive_id: str, headers: Dict[str, str])
     response = requests.get(url, headers=headers, timeout=30)
     
     if response.status_code == 200:
-        return response.text
+        # Force UTF-8 decoding - SharePoint text files are UTF-8
+        return response.content.decode('utf-8', errors='replace')
     else:
         _logger.warning(f"Failed to download {item_id}: {response.status_code}")
         return ""
@@ -747,6 +748,10 @@ def _process_links_file(
     
     # DIAGNOSTIC: Log every links.txt download with content length
     _logger.info(f"[SYNC] LINKS.TXT: {parent_relative} | content_len={len(content)}")
+    
+    # DIAGNOSTIC: Log actual content for debugging (first 200 chars)
+    content_preview = content[:200].replace('\n', '\\n').replace('\r', '\\r') if content else "(empty)"
+    _logger.info(f"[SYNC] CONTENT: {parent_relative} | preview={content_preview}")
     
     # Parse URLs
     links_data = parse_links_content(content)
