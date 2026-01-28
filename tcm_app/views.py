@@ -630,7 +630,7 @@ def save_scrub_batch_view(request):
     - For each key: status_{key}, audience_{key}, stage_{key}, notes_{key}
     - queue_filter: current filter for redirect
     """
-    from db import update_resource_scrub, update_sales_stage, get_connection
+    from db import update_resource_scrub, update_sales_stage
     from services.scrub_rules import VALID_SCRUB_DECISIONS, CANONICAL_AUDIENCES
     from services.sales_stage import SALES_STAGE_KEYS
     
@@ -736,9 +736,6 @@ def save_scrub_batch_view(request):
     persisted_count = 0
     
     try:
-        # Get database connection for transaction
-        conn = get_connection()
-        
         for row in validated_rows:
             update_resource_scrub(
                 resource_key=row['resource_key'],
@@ -756,9 +753,6 @@ def save_scrub_batch_view(request):
             )
             
             persisted_count += 1
-        
-        # Commit transaction (all writes succeed)
-        conn.commit()
         
     except Exception as e:
         # Rollback on any error (database unchanged)
