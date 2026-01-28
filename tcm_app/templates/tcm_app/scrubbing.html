@@ -13,15 +13,15 @@
       <form method="get" class="d-flex align-items-center gap-2">
         <label class="form-label mb-0 text-muted">Filter:</label>
         <select name="queue_filter" class="form-select form-select-sm" style="width:auto;">
-          <option value="Unreviewed" {% if current_queue_filter == 'Unreviewed' %}selected{% endif %}>Unreviewed ({{
+          <option value="Unreviewed" {% if current_queue_filter=='Unreviewed' %}selected{% endif %}>Unreviewed ({{
             queue_counts.Unreviewed }})</option>
-          <option value="Include" {% if current_queue_filter == 'Include' %}selected{% endif %}>Include ({{
+          <option value="Include" {% if current_queue_filter=='Include' %}selected{% endif %}>Include ({{
             queue_counts.Include }})</option>
-          <option value="Modify" {% if current_queue_filter == 'Modify' %}selected{% endif %}>Modify ({{
+          <option value="Modify" {% if current_queue_filter=='Modify' %}selected{% endif %}>Modify ({{
             queue_counts.Modify }})</option>
-          <option value="Sunset" {% if current_queue_filter == 'Sunset' %}selected{% endif %}>Sunset ({{
+          <option value="Sunset" {% if current_queue_filter=='Sunset' %}selected{% endif %}>Sunset ({{
             queue_counts.Sunset }})</option>
-          <option value="All" {% if current_queue_filter == 'All' %}selected{% endif %}>All ({{ queue_counts.total }})
+          <option value="All" {% if current_queue_filter=='All' %}selected{% endif %}>All ({{ queue_counts.total }})
           </option>
         </select>
       </form>
@@ -33,6 +33,8 @@
     {% csrf_token %}
     <input type="hidden" name="queue_filter" value="{{ current_queue_filter }}">
     <input type="hidden" name="current_page" value="{{ page_obj.number }}">
+
+    {% include 'tcm_app/partials/pagination.html' %}
 
     <div class="card">
       <div class="table-responsive">
@@ -58,11 +60,11 @@
               <td>
                 <select name="status_{{ c.resource_key }}" class="form-select form-select-sm dirty-track"
                   style="width:auto;">
-                  <option value="Unreviewed" {% if c.normalized_status == 'Unreviewed' %}selected{% endif %}>Unreviewed
+                  <option value="Unreviewed" {% if c.normalized_status=='Unreviewed' %}selected{% endif %}>Unreviewed
                   </option>
-                  <option value="Include" {% if c.normalized_status == 'Include' %}selected{% endif %}>Include</option>
-                  <option value="Modify" {% if c.normalized_status == 'Modify' %}selected{% endif %}>Modify</option>
-                  <option value="Sunset" {% if c.normalized_status == 'Sunset' %}selected{% endif %}>Sunset</option>
+                  <option value="Include" {% if c.normalized_status=='Include' %}selected{% endif %}>Include</option>
+                  <option value="Modify" {% if c.normalized_status=='Modify' %}selected{% endif %}>Modify</option>
+                  <option value="Sunset" {% if c.normalized_status=='Sunset' %}selected{% endif %}>Sunset</option>
                 </select>
               </td>
               <td>
@@ -70,7 +72,7 @@
                   style="width:auto;">
                   <option value="" {% if not c.audience %}selected{% endif %}>-</option>
                   {% for aud in audiences %}
-                  <option value="{{ aud }}" {% if c.audience == aud %}selected{% endif %}>{{ aud }}</option>
+                  <option value="{{ aud }}" {% if c.audience==aud %}selected{% endif %}>{{ aud }}</option>
                   {% endfor %}
                 </select>
               </td>
@@ -80,7 +82,7 @@
                   <option value="" {% if not c.sales_stage %}selected{% endif %}>-</option>
                   {% if sales_stages %}
                   {% for key, label in sales_stages %}
-                  <option value="{{ key }}" {% if c.sales_stage == key %}selected{% endif %}>{{ label }}</option>
+                  <option value="{{ key }}" {% if c.sales_stage==key %}selected{% endif %}>{{ label }}</option>
                   {% endfor %}
                   {% endif %}
                 </select>
@@ -100,7 +102,6 @@
       </div>
     </div>
 
-    {% include 'tcm_app/partials/pagination.html' %}
   </form>
 </div>
 
