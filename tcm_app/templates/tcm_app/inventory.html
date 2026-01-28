@@ -79,8 +79,7 @@
                     <select class="form-select" id="training_type" name="training_type" onchange="this.form.submit()">
                         <option value="">All Types</option>
                         {% for tt in training_types %}
-                        <option value="{{ tt }}" {% if current_training_type == tt %}selected{% endif %}>{{
-                            training_type_labels|get_item:tt|default:tt }}</option>
+                        <option value="{{ tt }}" {% if current_training_type == tt %}selected{% endif %}>{{ training_type_labels|get_item:tt|default:tt }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -91,8 +90,7 @@
                         <option value="untagged" {% if current_sales_stage == 'untagged' %}selected{% endif %}>Untagged
                         </option>
                         {% for stage_key, stage_label in sales_stages %}
-                        <option value="{{ stage_key }}" {% if current_sales_stage == stage_key %}selected{% endif %}>{{
-                            stage_label }}</option>
+                        <option value="{{ stage_key }}" {% if current_sales_stage == stage_key %}selected{% endif %}>{{ stage_label }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -118,8 +116,7 @@
         <h4 class="mb-0">Total resources ({{ total_resources|intcomma }})</h4>
         <span class="badge bg-secondary">
             {% if current_department %}{{ current_department }}{% endif %}
-            {% if current_training_type %} / {{
-            training_type_labels|get_item:current_training_type|default:current_training_type }}{% endif %}
+            {% if current_training_type %} / {{ training_type_labels|get_item:current_training_type|default:current_training_type }}{% endif %}
             {% if not current_department and not current_training_type %}All Resources{% endif %}
         </span>
     </div>
