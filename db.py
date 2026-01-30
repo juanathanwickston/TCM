@@ -1624,6 +1624,4 @@ def get_valid_departments() -> List[str]:
     return [row['department'] for row in rows] if rows else []
 
 
-# Initialize on import
-init_db()
-
+# Initialization happens via Django AppConfig.ready() - no import-time side effects

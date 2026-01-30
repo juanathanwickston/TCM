@@ -12,11 +12,18 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from db import (
-    init_db, clear_containers, upsert_resource, make_resource_key,
-    get_resource_totals, update_resource_scrub
-)
+import pytest
+
+# db imports are deferred to function scope to prevent import-time database connection
+# Pure logic tests (parse_path, parse_links_content, is_leaf_container) work without database
+
 from services.container_service import parse_path, parse_links_content, is_leaf_container
+
+# Skip marker for tests requiring database
+requires_database = pytest.mark.skipif(
+    not os.environ.get('DATABASE_URL') or os.environ.get('DATABASE_URL', '').startswith('sqlite'),
+    reason="Requires PostgreSQL DATABASE_URL"
+)
 
 
 def test_path_parsing():
@@ -112,11 +119,18 @@ def test_leaf_detection():
     print("  PASS: Leaf detection")
 
 
+@requires_database
 def test_resource_counting():
     """Test resource count aggregation with mock containers."""
+    from db import (
+        init_db, clear_containers, upsert_resource, make_resource_key,
+        get_resource_totals
+    )
+    
     print("Testing resource counting...")
     
-    # Clear and setup mock data
+    # Initialize database and clear mock data
+    init_db()
     clear_containers()
     
     # Onboarding / Video On Demand
@@ -194,11 +208,18 @@ def test_resource_counting():
     print("  PASS: Resource counting")
 
 
+@requires_database
 def test_department_assignment():
     """Test that department is assigned during scrubbing, not from path."""
+    from db import (
+        init_db, clear_containers, upsert_resource, make_resource_key,
+        update_resource_scrub
+    )
+    
     print("Testing department assignment...")
     
-    # Clear and add a container without department
+    # Initialize database and clear mock data
+    init_db()
     clear_containers()
     
     resource_key = make_resource_key(
@@ -237,6 +258,8 @@ def test_department_assignment():
 
 def test_deterministic_keys():
     """Test that container keys are stable across runs."""
+    from db import make_resource_key  # Pure function, no database connection needed
+    
     print("Testing deterministic keys...")
     
     key1 = make_resource_key(

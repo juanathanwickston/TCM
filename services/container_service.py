@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
-from db import upsert_resource, make_resource_key, get_all_resources
+# db imports are deferred to function scope to prevent import-time database connection
 
 
 # Template structure constants
@@ -241,6 +241,9 @@ def import_from_zip(zip_path: str) -> Dict[str, Any]:
     
     Returns import statistics.
     """
+    # Deferred import to prevent import-time database connection
+    from db import upsert_resource, make_resource_key, get_all_resources
+    
     results = {
         'new_containers': 0,
         'updated_containers': 0,
