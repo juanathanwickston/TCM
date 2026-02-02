@@ -652,16 +652,19 @@ def init_db() -> None:
                 """)
                 
                 # Migration: Add version columns for optimistic locking
+                # Note: PostgreSQL aborts transaction on ALTER TABLE failure, need rollback
                 for col_name in ['scrub_version', 'invest_version']:
                     try:
                         cursor.execute(f"""
                             ALTER TABLE resources 
                             ADD COLUMN {col_name} INTEGER DEFAULT 1
                         """)
+                        conn.commit()  # Commit each successful ALTER
                         _logger.info(f"Migration: Added {col_name} column")
                     except Exception as e:
+                        conn.rollback()  # PostgreSQL requires rollback after failed statement
                         if 'already exists' in str(e).lower() or 'duplicate' in str(e).lower():
-                            pass  # Column exists
+                            _logger.debug(f"Column {col_name} already exists, skipping")
                         else:
                             raise
                 
@@ -671,10 +674,12 @@ def init_db() -> None:
                         ALTER TABLE resources 
                         ADD COLUMN last_reviewed_by TEXT DEFAULT NULL
                     """)
+                    conn.commit()
                     _logger.info("Migration: Added last_reviewed_by column")
                 except Exception as e:
+                    conn.rollback()  # PostgreSQL requires rollback after failed statement
                     if 'already exists' in str(e).lower() or 'duplicate' in str(e).lower():
-                        pass
+                        _logger.debug("Column last_reviewed_by already exists, skipping")
                     else:
                         raise
                 
