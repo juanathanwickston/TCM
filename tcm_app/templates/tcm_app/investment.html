@@ -1,59 +1,7 @@
 {% extends "tcm_app/base.html" %}
 {% load static %}
 
-{% block title %}Investment | TCM
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const dirtyRows = new Set();
-    
-    // Track changes on all form inputs
-    document.querySelectorAll('.dirty-track').forEach(el => {
-        const originalValue = el.value;
-        el.dataset.originalValue = originalValue;
-        
-        el.addEventListener('change', function() {
-            const row = this.closest('tr');
-            if (!row) return;
-            
-            // Check if any field in this row differs from original
-            let isDirty = false;
-            row.querySelectorAll('.dirty-track').forEach(input => {
-                if (input.value !== input.dataset.originalValue) {
-                    isDirty = true;
-                }
-            });
-            
-            if (isDirty) {
-                row.classList.add('table-warning');
-                dirtyRows.add(row);
-            } else {
-                row.classList.remove('table-warning');
-                dirtyRows.delete(row);
-            }
-        });
-    });
-    
-    // Navigation warning when dirty
-    window.addEventListener('beforeunload', function(e) {
-        if (dirtyRows.size > 0) {
-            e.preventDefault();
-            e.returnValue = '';
-            return '';
-        }
-    });
-    
-    // Clear dirty state when form submits (per-row save)
-    document.querySelectorAll('form').forEach(form => {
-        form.addEventListener('submit', function() {
-            const row = this.closest('tr');
-            if (row) {
-                dirtyRows.delete(row);
-            }
-        });
-    });
-});
-</script>
-{% endblock %}
+{% block title %}Investment | TCM{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4">
@@ -92,140 +40,210 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 
-  <!-- Filters -->
-  <form method="get" class="d-flex align-items-center gap-3 mb-4">
-    <label class="form-label mb-0 text-muted">Decision:</label>
-    <select name="decision_filter" class="form-select form-select-sm dirty-track" style="width:auto;" onchange="this.form.submit()">
-      {% for value, label in decision_options %}
-      <option value="{{ value }}" {% if filter_decision == value %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
-    </select>
-    <span class="text-muted small ms-3">Showing {{ containers|length }} items</span>
-  </form>
+  <!-- Filters and Save Button -->
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <form method="get" class="d-flex align-items-center gap-2">
+      <label class="form-label mb-0 text-muted">Decision:</label>
+      <select name="decision_filter" class="form-select form-select-sm" style="width:auto;">
+        {% for value, label in decision_options %}
+        <option value="{{ value }}" {% if filter_decision == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    <div class="d-flex align-items-center gap-3">
+      <span class="text-muted small">Showing {{ containers|length }} items</span>
+      <button type="button" id="global-save" class="btn btn-primary" disabled>Save All Changes</button>
+    </div>
+  </div>
 
-  {% include 'tcm_app/partials/pagination.html' %}
+  <form id="invest-form" method="post" action="{% url 'save_investment_batch' %}">
+    {% csrf_token %}
+    <input type="hidden" name="decision_filter" value="{{ filter_decision }}">
+    <input type="hidden" name="current_page" value="{{ page_obj.number|default:1 }}">
 
-  <!-- Container Table -->
-  <div class="card">
-    <div class="table-responsive">
-      <table class="table table-hover mb-0 align-middle investment-table tcm-fixed-table">
-        <colgroup>
-          <col style="width: 30%"> <!-- Name -->
-          <col style="width: 14%"> <!-- Decision -->
-          <col style="width: 14%"> <!-- Owner -->
-          <col style="width: 12%"> <!-- Effort/Cost -->
-          <col style="width: 22%"> <!-- Notes -->
-          <col style="width: 8%"> <!-- Save button -->
-        </colgroup>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Decision</th>
-            <th>Owner</th>
-            <th>Effort/Cost</th>
-            <th>Notes</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for c in containers %}
-          <tr data-container-key="{{ c.resource_key }}" data-version="{{ c.invest_version|default:1 }}">
-            <td title="{{ c.display_name }}">
-              <div class="fw-semibold">{{ c.display_name }}</div>
-              <div class="text-muted small" title="{{ c.relative_path }}">{{ c.relative_path }}</div>
-            </td>
-            <td>
-              <form method="post" action="{% url 'save_investment' %}"
-                class="d-flex gap-1 align-items-center invest-form">
-                {% csrf_token %}
-                <input type="hidden" name="resource_key" value="{{ c.resource_key }}">
-                <input type="hidden" name="decision_filter" value="{{ filter_decision }}">
-                <select name="decision" class="form-select form-select-sm dirty-track" style="width:auto;">
+    {% include 'tcm_app/partials/pagination.html' %}
+
+    <!-- Container Table -->
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle investment-table tcm-fixed-table">
+          <colgroup>
+            <col style="width: 30%"> <!-- Name -->
+            <col style="width: 14%"> <!-- Decision -->
+            <col style="width: 14%"> <!-- Owner -->
+            <col style="width: 12%"> <!-- Effort/Cost -->
+            <col style="width: 30%"> <!-- Notes -->
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Decision</th>
+              <th>Owner</th>
+              <th>Effort/Cost</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in containers %}
+            <tr data-container-key="{{ c.resource_key }}"
+                data-original-decision="{{ c.invest_decision|default:'' }}"
+                data-original-owner="{{ c.invest_owner|default:'' }}"
+                data-original-effort="{{ c.invest_effort|default:'' }}"
+                data-original-notes="{{ c.invest_notes|default:'' }}">
+              <td title="{{ c.display_name }}">
+                <div class="fw-semibold">{{ c.display_name }}</div>
+                <div class="text-muted small" title="{{ c.relative_path }}">{{ c.relative_path }}</div>
+              </td>
+              <td>
+                <select name="decision_{{ c.resource_key }}" class="form-select form-select-sm dirty-track" style="width:auto;">
                   <option value="" {% if not c.invest_decision %}selected{% endif %}>-</option>
                   {% for key, label in invest_choices %}
                   <option value="{{ key }}" {% if c.invest_decision == key %}selected{% endif %}>{{ label }}</option>
                   {% endfor %}
                 </select>
-            </td>
-            <td>
-              <input type="text" name="owner" class="form-control form-control-sm dirty-track"
-                value="{{ c.invest_owner|default_if_none:'' }}" placeholder="Owner">
-            </td>
-            <td>
-              <input type="text" name="effort" class="form-control form-control-sm dirty-track"
-                value="{{ c.invest_effort|default_if_none:'' }}" placeholder="e.g., 2 weeks">
-            </td>
-            <td>
-              <input type="text" name="notes" class="form-control form-control-sm dirty-track"
-                value="{{ c.invest_notes|default_if_none:'' }}" placeholder="Notes">
-            </td>
-            <td class="text-end">
-              <button type="submit" class="btn btn-sm btn-primary">Save</button>
-              </form>
-            </td>
-          </tr>
-          {% empty %}
-          <tr>
-            <td colspan="6" class="text-center text-muted py-4">No items in this queue. Complete Scrubbing to add Modify
-              items.</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+              </td>
+              <td>
+                <input type="text" name="owner_{{ c.resource_key }}" class="form-control form-control-sm dirty-track"
+                  value="{{ c.invest_owner|default_if_none:'' }}" placeholder="Owner">
+              </td>
+              <td>
+                <input type="text" name="effort_{{ c.resource_key }}" class="form-control form-control-sm dirty-track"
+                  value="{{ c.invest_effort|default_if_none:'' }}" placeholder="e.g., 2 weeks">
+              </td>
+              <td>
+                <input type="text" name="notes_{{ c.resource_key }}" class="form-control form-control-sm dirty-track"
+                  value="{{ c.invest_notes|default_if_none:'' }}" placeholder="Notes">
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5" class="text-center text-muted py-4">No items in this queue. Complete Scrubbing to add Modify items.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
-
+  </form>
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const dirtyRows = new Set();
-    
-    // Track changes on all form inputs
-    document.querySelectorAll('.dirty-track').forEach(el => {
-        const originalValue = el.value;
-        el.dataset.originalValue = originalValue;
-        
-        el.addEventListener('change', function() {
-            const row = this.closest('tr');
-            if (!row) return;
-            
-            // Check if any field in this row differs from original
-            let isDirty = false;
-            row.querySelectorAll('.dirty-track').forEach(input => {
-                if (input.value !== input.dataset.originalValue) {
-                    isDirty = true;
-                }
-            });
-            
-            if (isDirty) {
-                row.classList.add('table-warning');
-                dirtyRows.add(row);
-            } else {
-                row.classList.remove('table-warning');
-                dirtyRows.delete(row);
-            }
-        });
+(function() {
+  /**
+   * INVESTMENT BATCH SAVE - Matching Scrubbing Pattern
+   */
+  const form = document.getElementById('invest-form');
+  const saveBtn = document.getElementById('global-save');
+  const saveBtnOriginalText = 'Save All Changes';
+  const dirtyRows = new Set();
+  let isSaving = false;
+
+  // Track changes to editable fields
+  document.querySelectorAll('.dirty-track').forEach(function(el) {
+    el.addEventListener('change', function() {
+      const row = this.closest('tr');
+      if (!row) return;
+      const key = row.dataset.containerKey;
+
+      // Get original values
+      const origDecision = row.dataset.originalDecision;
+      const origOwner = row.dataset.originalOwner;
+      const origEffort = row.dataset.originalEffort;
+      const origNotes = row.dataset.originalNotes;
+
+      // Get current values
+      const currDecision = row.querySelector('[name^="decision_"]').value;
+      const currOwner = row.querySelector('[name^="owner_"]').value;
+      const currEffort = row.querySelector('[name^="effort_"]').value;
+      const currNotes = row.querySelector('[name^="notes_"]').value;
+
+      // Logical dirty check
+      const isDirty = (currDecision !== origDecision) ||
+        (currOwner !== origOwner) ||
+        (currEffort !== origEffort) ||
+        (currNotes !== origNotes);
+
+      if (isDirty) {
+        dirtyRows.add(key);
+        row.classList.add('table-warning');
+      } else {
+        dirtyRows.delete(key);
+        row.classList.remove('table-warning');
+      }
+      updateSaveButton();
     });
-    
-    // Navigation warning when dirty
-    window.addEventListener('beforeunload', function(e) {
-        if (dirtyRows.size > 0) {
-            e.preventDefault();
-            e.returnValue = '';
-            return '';
+
+    // Real-time tracking for text inputs
+    if (el.tagName === 'INPUT') {
+      el.addEventListener('input', function() {
+        this.dispatchEvent(new Event('change'));
+      });
+    }
+  });
+
+  function updateSaveButton() {
+    if (isSaving) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+    } else {
+      saveBtn.disabled = dirtyRows.size === 0;
+      saveBtn.textContent = saveBtnOriginalText;
+    }
+  }
+
+  // Save button click handler
+  saveBtn.addEventListener('click', function() {
+    if (dirtyRows.size === 0 || isSaving) return;
+    isSaving = true;
+    updateSaveButton();
+
+    // Add dirty_keys hidden input
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'dirty_keys';
+    input.value = Array.from(dirtyRows).join(',');
+    form.appendChild(input);
+
+    form.submit();
+  });
+
+  // Navigation warning
+  window.addEventListener('beforeunload', function(e) {
+    if (dirtyRows.size > 0 && !isSaving) {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    }
+  });
+
+  // Pagination warning
+  document.addEventListener('click', function(e) {
+    const link = e.target.closest('.pagination-link');
+    if (link && dirtyRows.size > 0) {
+      e.preventDefault();
+      const confirmed = confirm('There are unsaved changes. Save before going to next page?');
+      if (confirmed) {
+        saveBtn.click();
+      }
+    }
+  });
+
+  // Filter dropdown warning
+  const filterSelect = document.querySelector('select[name="decision_filter"]');
+  if (filterSelect) {
+    filterSelect.addEventListener('change', function(e) {
+      if (dirtyRows.size > 0) {
+        const confirmed = confirm('There are unsaved changes. They will be lost if you change the filter. Continue?');
+        if (!confirmed) {
+          e.preventDefault();
+          e.stopPropagation();
+          this.value = '{{ filter_decision|escapejs }}';
+          return false;
         }
+      }
+      this.form.submit();
     });
-    
-    // Clear dirty state when form submits (per-row save)
-    document.querySelectorAll('form').forEach(form => {
-        form.addEventListener('submit', function() {
-            const row = this.closest('tr');
-            if (row) {
-                dirtyRows.delete(row);
-            }
-        });
-    });
-});
+  }
+})();
 </script>
 {% endblock %}
