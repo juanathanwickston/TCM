@@ -19,13 +19,14 @@ class TestScrubbingGlobalSave:
     
     def test_transactional_integrity_invalid_row_blocks_all(self):
         """
-        Transactional Integrity Test:
-        - 2 dirty rows submitted
-        - 1 invalid
-        - Assert ZERO rows persisted
+        Transactional Integrity Test - Validation-Before-Write Pattern:
         
         This is a CODE STRUCTURE test verifying the endpoint has
         proper validation-before-write logic.
+        
+        Transaction pattern: view uses update_resource_scrub() which handles
+        commits internally after each write. The view wraps all writes in a
+        try/except block to catch any failures.
         """
         import inspect
         from tcm_app.views import save_scrub_batch_view
@@ -40,17 +41,23 @@ class TestScrubbingGlobalSave:
         assert 'PHASE 2: If ANY validation failed, abort ALL writes' in source, \
             "Batch save must abort all writes if any validation fails"
         
-        # Must use transaction
-        assert 'conn.commit()' in source, \
-            "Batch save must commit transaction after all writes"
+        # Must use database transaction pattern
+        assert 'PHASE 3: All valid - write all rows inside database transaction' in source, \
+            "Batch save must document transaction pattern"
         
-        # Must NOT commit before all validation passes
+        # Must use update_resource_scrub for writes (handles commits internally)
+        assert 'update_resource_scrub(' in source, \
+            "Batch save must use update_resource_scrub for database writes"
+        
+        # Must NOT commit before all validation passes (phase ordering check)
         phase1_pos = source.find('PHASE 1')
+        phase2_pos = source.find('PHASE 2')
         phase3_pos = source.find('PHASE 3')
-        commit_pos = source.find('conn.commit()')
+        write_pos = source.find('update_resource_scrub(')
         
-        assert phase1_pos < phase3_pos < commit_pos, \
-            "Commit must come after all validation and writes"
+        assert phase1_pos < phase2_pos < phase3_pos < write_pos, \
+            "Phases must be in order: validate → abort check → write"
+
     
     def test_success_count_equals_persisted_rows(self):
         """

@@ -114,27 +114,22 @@ class TestDashboardMetricsIntegrity:
     
     def test_audience_rows_always_present(self):
         """
-        Context must contain 8 audience rows in correct order.
+        Dashboard must use AUDIENCE_ORDER built from CANONICAL_AUDIENCES.
         """
         dashboard_code = self._get_dashboard_view_source()
         
-        # Verify fixed audience order is defined
-        expected_audiences = [
-            'Direct',
-            'Indirect',
-            'Integration',
-            'FI',
-            'Partner Management',
-            'Operations',
-            'Compliance',
-            'Unassigned',
-        ]
+        # Verify CANONICAL_AUDIENCES is imported
+        assert 'CANONICAL_AUDIENCES' in dashboard_code, \
+            "Must import CANONICAL_AUDIENCES for single source of truth"
         
-        for aud in expected_audiences:
-            assert f"'{aud}'" in dashboard_code, f"Must include audience: {aud}"
-        
-        # Verify AUDIENCE_ORDER list exists
+        # Verify AUDIENCE_ORDER is built from CANONICAL_AUDIENCES
         assert 'AUDIENCE_ORDER' in dashboard_code, "Must define AUDIENCE_ORDER list"
+        assert 'list(CANONICAL_AUDIENCES)' in dashboard_code, \
+            "AUDIENCE_ORDER must be built from CANONICAL_AUDIENCES"
+        
+        # Verify Unassigned is appended (computed value, not stored)
+        assert "'Unassigned'" in dashboard_code, \
+            "Must append 'Unassigned' to AUDIENCE_ORDER"
         
         # Verify audience_breakdown is built from fixed order
         assert 'for aud_label in AUDIENCE_ORDER' in dashboard_code, \
