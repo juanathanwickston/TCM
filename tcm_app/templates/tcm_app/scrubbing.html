@@ -48,7 +48,7 @@
             {% for c in containers %}
             <tr data-container-key="{{ c.resource_key }}" data-original-status="{{ c.normalized_status }}"
               data-original-audience="{{ c.audience|default:'' }}" data-original-stage="{{ c.sales_stage|default:'' }}"
-              data-original-notes="{{ c.scrub_notes|default:'' }}">
+              data-original-notes="{{ c.scrub_notes|default:'' }}" data-version="{{ c.scrub_version|default:1 }}">
               <td>
                 <div class="fw-semibold">{{ c.display_name }}</div>
                 <div class="text-muted small">{{ c.relative_path }}</div>
@@ -189,6 +189,18 @@
       input.name = 'dirty_keys';
       input.value = Array.from(dirtyRows).join(',');
       form.appendChild(input);
+
+      // Include version for each dirty row (optimistic locking)
+      dirtyRows.forEach(key => {
+          const row = document.querySelector(`tr[data-container-key="${key}"]`);
+          if (row && row.dataset.version) {
+              const versionInput = document.createElement('input');
+              versionInput.type = 'hidden';
+              versionInput.name = `version_${key}`;
+              versionInput.value = row.dataset.version;
+              form.appendChild(versionInput);
+          }
+      });
 
       form.submit();
     });

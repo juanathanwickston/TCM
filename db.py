@@ -651,6 +651,33 @@ def init_db() -> None:
                     WHERE scrub_status NOT IN ('not_reviewed', 'Include', 'Modify', 'Sunset')
                 """)
                 
+                # Migration: Add version columns for optimistic locking
+                for col_name in ['scrub_version', 'invest_version']:
+                    try:
+                        cursor.execute(f"""
+                            ALTER TABLE resources 
+                            ADD COLUMN {col_name} INTEGER DEFAULT 1
+                        """)
+                        _logger.info(f"Migration: Added {col_name} column")
+                    except Exception as e:
+                        if 'already exists' in str(e).lower() or 'duplicate' in str(e).lower():
+                            pass  # Column exists
+                        else:
+                            raise
+                
+                # Migration: Add last_reviewed_by for audit trail
+                try:
+                    cursor.execute("""
+                        ALTER TABLE resources 
+                        ADD COLUMN last_reviewed_by TEXT DEFAULT NULL
+                    """)
+                    _logger.info("Migration: Added last_reviewed_by column")
+                except Exception as e:
+                    if 'already exists' in str(e).lower() or 'duplicate' in str(e).lower():
+                        pass
+                    else:
+                        raise
+                
             conn.commit()
             _logger.info("init_db() completed successfully")
         finally:
@@ -848,10 +875,13 @@ def update_resource_scrub(
     notes: str = None,
     reasons: list = None,  # NEW: list of reason keys
     resource_count_override: int = None,
-    audience: str = None
-) -> None:
+    audience: str = None,
+    expected_version: int = None,
+    reviewed_by: str = None,
+    conn = None
+) -> bool:
     """
-    Update scrubbing fields for a resource.
+    Update scrubbing fields for a resource with optimistic locking.
     
     Args:
         resource_key: Unique resource identifier
@@ -861,6 +891,12 @@ def update_resource_scrub(
         reasons: DEPRECATED - kept for backwards compatibility, ignored
         resource_count_override: Override count for links resources after review
         audience: Who the training is for
+        expected_version: If provided, only update if version matches (optimistic locking)
+        reviewed_by: Username of who made this review (for audit trail)
+        conn: Database connection (for transaction support)
+    
+    Returns:
+        True if update succeeded, False if version conflict
     
     Raises:
         ValueError: If decision is invalid
@@ -894,13 +930,39 @@ def update_resource_scrub(
         updates.append("audience = ?")
         params.append(audience)
     
-    params.append(resource_key)
+    # Add version increment
+    updates.append("scrub_version = COALESCE(scrub_version, 1) + 1")
     
-    execute(f"""
-        UPDATE resources SET
-            {', '.join(updates)}
-        WHERE resource_key = ?
-    """, tuple(params))
+    # Add reviewed_by if provided
+    if reviewed_by:
+        updates.append("last_reviewed_by = ?")
+        params.append(reviewed_by)
+    
+    if expected_version is not None:
+        # Optimistic locking: only update if version matches
+        params.extend([resource_key, expected_version])
+        execute(f"""
+            UPDATE resources SET
+                {', '.join(updates)}
+            WHERE resource_key = ? AND COALESCE(scrub_version, 1) = ?
+        """, tuple(params), conn=conn)
+        
+        # Check if update happened by verifying the version incremented
+        check = execute(
+            "SELECT scrub_version FROM resources WHERE resource_key = ?",
+            (resource_key,), fetch="one", conn=conn
+        )
+        if check and check['scrub_version'] == expected_version:
+            return False  # Version didn't increment = conflict
+        return True
+    else:
+        params.append(resource_key)
+        execute(f"""
+            UPDATE resources SET
+                {', '.join(updates)}
+            WHERE resource_key = ?
+        """, tuple(params), conn=conn)
+        return True
 
 
 def update_resource_invest(
@@ -908,16 +970,47 @@ def update_resource_invest(
     decision: str,
     owner: str,
     effort: str = None,
-    notes: str = None
-) -> None:
-    """Update investment fields for a resource."""
+    notes: str = None,
+    expected_version: int = None,
+    reviewed_by: str = None,
+    conn = None
+) -> bool:
+    """
+    Update investment fields for a resource with optimistic locking.
+    
+    Returns:
+        True if update succeeded, False if version conflict
+    """
     now = datetime.now(timezone.utc).isoformat()
-    execute("""
-        UPDATE resources SET
-            invest_decision = ?, invest_owner = ?, invest_effort = ?,
-            invest_notes = ?, invest_updated = ?
-        WHERE resource_key = ?
-    """, (decision, owner, effort, notes, now, resource_key))
+    
+    if expected_version is not None:
+        execute("""
+            UPDATE resources SET
+                invest_decision = ?, invest_owner = ?, invest_effort = ?,
+                invest_notes = ?, invest_updated = ?,
+                invest_version = COALESCE(invest_version, 1) + 1,
+                last_reviewed_by = ?
+            WHERE resource_key = ? AND COALESCE(invest_version, 1) = ?
+        """, (decision, owner, effort, notes, now, reviewed_by, resource_key, expected_version), conn=conn)
+        
+        # Check if update happened
+        check = execute(
+            "SELECT invest_version FROM resources WHERE resource_key = ?",
+            (resource_key,), fetch="one", conn=conn
+        )
+        if check and check['invest_version'] == expected_version:
+            return False  # Conflict
+        return True
+    else:
+        execute("""
+            UPDATE resources SET
+                invest_decision = ?, invest_owner = ?, invest_effort = ?,
+                invest_notes = ?, invest_updated = ?,
+                invest_version = COALESCE(invest_version, 1) + 1,
+                last_reviewed_by = ?
+            WHERE resource_key = ?
+        """, (decision, owner, effort, notes, now, reviewed_by, resource_key), conn=conn)
+        return True
 
 
 # -----------------------------------------------------------------------------
@@ -1389,13 +1482,14 @@ def get_active_resource_training_types(primary_department: str = None) -> List[s
 # Sales Stage Functions
 # -----------------------------------------------------------------------------
 
-def update_sales_stage(resource_key: str, stage: str | None) -> None:
+def update_sales_stage(resource_key: str, stage: str | None, conn = None) -> None:
     """
     Update sales_stage for a container.
     
     Args:
         resource_key: The container to update
         stage: None to clear (set NULL), or a canonical stage key
+        conn: Database connection (for transaction support)
     
     Raises:
         ValueError: If stage is not None and not a valid canonical key
@@ -1407,7 +1501,8 @@ def update_sales_stage(resource_key: str, stage: str | None) -> None:
     
     execute(
         "UPDATE resources SET sales_stage = ? WHERE resource_key = ?",
-        (stage, resource_key)
+        (stage, resource_key),
+        conn=conn
     )
 
 

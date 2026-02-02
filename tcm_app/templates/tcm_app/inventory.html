@@ -160,7 +160,7 @@
                                     <input type="hidden" name="sales_stage" value="{{ current_sales_stage }}">
                                     <input type="hidden" name="audience_filter" value="{{ current_audience }}">
 
-                                    <select name="audience" class="form-select form-select-sm" style="width: 120px;"
+                                    <select name="audience" class="form-select form-select-sm dirty-track" style="width: 120px;"
                                         onchange="this.form.submit()">
                                         <option value="">-</option>
                                         {% for aud in audiences %}

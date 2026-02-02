@@ -43,7 +43,7 @@
   <!-- Filters -->
   <form method="get" class="d-flex align-items-center gap-3 mb-4">
     <label class="form-label mb-0 text-muted">Decision:</label>
-    <select name="decision_filter" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+    <select name="decision_filter" class="form-select form-select-sm dirty-track" style="width:auto;" onchange="this.form.submit()">
       {% for value, label in decision_options %}
       <option value="{{ value }}" {% if filter_decision == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
@@ -77,7 +77,7 @@
         </thead>
         <tbody>
           {% for c in containers %}
-          <tr>
+          <tr data-container-key="{{ c.resource_key }}" data-version="{{ c.invest_version|default:1 }}">
             <td title="{{ c.display_name }}">
               <div class="fw-semibold">{{ c.display_name }}</div>
               <div class="text-muted small" title="{{ c.relative_path }}">{{ c.relative_path }}</div>
@@ -88,7 +88,7 @@
                 {% csrf_token %}
                 <input type="hidden" name="resource_key" value="{{ c.resource_key }}">
                 <input type="hidden" name="decision_filter" value="{{ filter_decision }}">
-                <select name="decision" class="form-select form-select-sm" style="width:auto;">
+                <select name="decision" class="form-select form-select-sm dirty-track" style="width:auto;">
                   <option value="" {% if not c.invest_decision %}selected{% endif %}>-</option>
                   {% for key, label in invest_choices %}
                   <option value="{{ key }}" {% if c.invest_decision == key %}selected{% endif %}>{{ label }}</option>
@@ -96,15 +96,15 @@
                 </select>
             </td>
             <td>
-              <input type="text" name="owner" class="form-control form-control-sm"
+              <input type="text" name="owner" class="form-control form-control-sm dirty-track"
                 value="{{ c.invest_owner|default_if_none:'' }}" placeholder="Owner">
             </td>
             <td>
-              <input type="text" name="effort" class="form-control form-control-sm"
+              <input type="text" name="effort" class="form-control form-control-sm dirty-track"
                 value="{{ c.invest_effort|default_if_none:'' }}" placeholder="e.g., 2 weeks">
             </td>
             <td>
-              <input type="text" name="notes" class="form-control form-control-sm"
+              <input type="text" name="notes" class="form-control form-control-sm dirty-track"
                 value="{{ c.invest_notes|default_if_none:'' }}" placeholder="Notes">
             </td>
             <td class="text-end">

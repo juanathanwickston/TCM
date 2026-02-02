@@ -468,6 +468,90 @@ def update_audience_view(request):
 
 
 @login_required
+@require_http_methods(["POST"])
+def save_audience_batch_view(request):
+    """
+    Transactional batch save for Inventory page (audience updates).
+    
+    CONTRACT:
+    - All-or-nothing: if any row fails, no rows persist
+    - Wrapped in database transaction
+    - No version checking (audience-only updates, low conflict risk)
+    """
+    from db import execute, transaction
+    from services.scrub_rules import CANONICAL_AUDIENCES
+    
+    dirty_keys_str = request.POST.get('dirty_keys', '').strip()
+    
+    if not dirty_keys_str:
+        messages.warning(request, 'No changes to save')
+        return _redirect_with_inventory_filters(request)
+    
+    dirty_keys = [k.strip() for k in dirty_keys_str.split(',') if k.strip()]
+    
+    # Validate all rows
+    validated_rows = []
+    errors = []
+    
+    for key in dirty_keys:
+        audience_input = request.POST.get(f'audience_{key}', '').strip() or None
+        
+        # Validate audience if provided
+        if audience_input and audience_input not in CANONICAL_AUDIENCES:
+            errors.append({'key': key[:30], 'reason': f'Invalid audience: {audience_input}'})
+            continue
+        
+        validated_rows.append({
+            'resource_key': key,
+            'audience': audience_input,
+        })
+    
+    if errors:
+        error_str = '; '.join([f"{e['key']}: {e['reason']}" for e in errors])
+        messages.error(request, f'Save failed: {error_str}')
+        return _redirect_with_inventory_filters(request)
+    
+    # Transaction
+    persisted_count = 0
+    try:
+        with transaction() as conn:
+            for row in validated_rows:
+                execute(
+                    "UPDATE resources SET audience = ? WHERE resource_key = ?",
+                    (row['audience'], row['resource_key']),
+                    conn=conn
+                )
+                persisted_count += 1
+    except Exception as e:
+        messages.error(request, f'Database error: {str(e)}')
+        return _redirect_with_inventory_filters(request)
+    
+    messages.success(request, f'Saved {persisted_count} item(s)')
+    return _redirect_with_inventory_filters(request)
+
+
+def _redirect_with_inventory_filters(request):
+    """Helper to redirect back to inventory with filters preserved."""
+    from urllib.parse import urlencode
+    
+    params = {}
+    if request.POST.get('department'):
+        params['department'] = request.POST.get('department')
+    if request.POST.get('training_type'):
+        params['training_type'] = request.POST.get('training_type')
+    if request.POST.get('sales_stage'):
+        params['sales_stage'] = request.POST.get('sales_stage')
+    if request.POST.get('audience_filter'):
+        params['audience'] = request.POST.get('audience_filter')
+    if request.POST.get('current_page'):
+        params['page'] = request.POST.get('current_page')
+    
+    if params:
+        return redirect(f'/inventory/?{urlencode(params)}')
+    return redirect('inventory')
+
+
+@login_required
 def scrubbing_view(request):
     """
     Scrubbing - Queue-based triage workflow.
@@ -630,7 +714,7 @@ def save_scrub_batch_view(request):
     - For each key: status_{key}, audience_{key}, stage_{key}, notes_{key}
     - queue_filter: current filter for redirect
     """
-    from db import update_resource_scrub, update_sales_stage
+    from db import update_resource_scrub, update_sales_stage, transaction, execute
     from services.scrub_rules import VALID_SCRUB_DECISIONS, CANONICAL_AUDIENCES
     from services.sales_stage import SALES_STAGE_KEYS
     
@@ -733,29 +817,62 @@ def save_scrub_batch_view(request):
     # Transaction commits only after all writes succeed
     # Any failure triggers rollback (database integrity preserved)
     # =========================================================================
+    # Pre-check all versions before any writes (detect conflicts early)
+    conflicts = []
+    for row in validated_rows:
+        version_key = f"version_{row['resource_key']}"
+        expected_version_str = request.POST.get(version_key)
+        if expected_version_str:
+            expected_version = int(expected_version_str)
+            current = execute("""
+                SELECT COALESCE(scrub_version, 1) as version 
+                FROM resources WHERE resource_key = ?
+            """, (row['resource_key'],), fetch="one")
+            if current and current['version'] != expected_version:
+                conflicts.append(row['resource_key'][:30])  # Truncate for display
+    
+    if conflicts:
+        messages.error(
+            request, 
+            f'Conflict: {len(conflicts)} item(s) were modified by another user. '
+            f'Refresh and try again. ({", ".join(conflicts[:3])}{"..." if len(conflicts) > 3 else ""})'
+        )
+        page = request.POST.get('current_page', '1')
+        return redirect(f'/scrubbing/?queue_filter={queue_filter}&page={page}')
+    
+    # All versions match - proceed with transaction
     persisted_count = 0
     
     try:
-        for row in validated_rows:
-            update_resource_scrub(
-                resource_key=row['resource_key'],
-                decision=row['decision'],
-                owner='',  # ALWAYS empty string (owner field not collected in UI)
-                notes=row['notes'],
-                reasons=None,
-                resource_count_override=None,
-                audience=row['audience'],
-            )
-            
-            update_sales_stage(
-                resource_key=row['resource_key'],
-                stage=row['sales_stage'],
-            )
-            
-            persisted_count += 1
+        with transaction() as conn:
+            for row in validated_rows:
+                version_key = f"version_{row['resource_key']}"
+                expected_version_str = request.POST.get(version_key)
+                expected_version = int(expected_version_str) if expected_version_str else None
+                
+                update_resource_scrub(
+                    resource_key=row['resource_key'],
+                    decision=row['decision'],
+                    owner='',  # Asset owner (kept empty per current design)
+                    notes=row['notes'],
+                    reasons=None,
+                    resource_count_override=None,
+                    audience=row['audience'],
+                    expected_version=expected_version,
+                    reviewed_by=request.user.username,  # Audit trail
+                    conn=conn,
+                )
+                
+                update_sales_stage(
+                    resource_key=row['resource_key'],
+                    stage=row['sales_stage'],
+                    conn=conn,
+                )
+                
+                persisted_count += 1
         
     except Exception as e:
-        # Rollback on any error (database unchanged)
+        # Rollback on any error (database unchanged via transaction context manager)
         messages.error(request, f'Database error: {str(e)}. No changes saved.')
         page = request.POST.get('current_page', '1')
         return redirect(f'/scrubbing/?queue_filter={queue_filter}&page={page}')
@@ -887,6 +1004,104 @@ def save_investment_view(request):
     
     # Redirect back with filters preserved
     return redirect(f'/investment/?decision_filter={decision_filter}')
+
+
+@login_required
+@require_http_methods(["POST"])
+def save_investment_batch_view(request):
+    """
+    Transactional batch save for Investment page.
+    
+    CONTRACT:
+    - All-or-nothing: if any row fails validation or has conflict, no rows persist
+    - Wrapped in database transaction
+    """
+    from db import update_resource_invest, transaction, execute
+    from models.enums import InvestDecision
+    
+    decision_filter = request.POST.get('decision_filter', 'All')
+    dirty_keys_str = request.POST.get('dirty_keys', '').strip()
+    
+    if not dirty_keys_str:
+        messages.warning(request, 'No changes to save')
+        return redirect(f'/investment/?decision_filter={decision_filter}')
+    
+    dirty_keys = [k.strip() for k in dirty_keys_str.split(',') if k.strip()]
+    
+    # Phase 1: Validate all rows
+    validated_rows = []
+    errors = []
+    valid_decisions = InvestDecision.choices()
+    
+    for key in dirty_keys:
+        decision_input = request.POST.get(f'decision_{key}', '').strip() or None
+        owner_input = request.POST.get(f'owner_{key}', '').strip() or ''
+        effort_input = request.POST.get(f'effort_{key}', '').strip() or None
+        notes_input = request.POST.get(f'notes_{key}', '').strip() or None
+        
+        # Validate decision if provided
+        if decision_input and decision_input not in valid_decisions:
+            errors.append({'key': key[:30], 'reason': f'Invalid decision: {decision_input}'})
+            continue
+        
+        validated_rows.append({
+            'resource_key': key,
+            'decision': decision_input,
+            'owner': owner_input,
+            'effort': effort_input,
+            'notes': notes_input,
+        })
+    
+    if errors:
+        error_str = '; '.join([f"{e['key']}: {e['reason']}" for e in errors])
+        messages.error(request, f'Save failed: {error_str}')
+        return redirect(f'/investment/?decision_filter={decision_filter}')
+    
+    # Phase 2: Pre-check versions
+    conflicts = []
+    for row in validated_rows:
+        version_key = f"version_{row['resource_key']}"
+        expected_version_str = request.POST.get(version_key)
+        if expected_version_str:
+            expected_version = int(expected_version_str)
+            current = execute("""
+                SELECT COALESCE(invest_version, 1) as version 
+                FROM resources WHERE resource_key = ?
+            """, (row['resource_key'],), fetch="one")
+            if current and current['version'] != expected_version:
+                conflicts.append(row['resource_key'][:30])
+    
+    if conflicts:
+        messages.error(request, f'Conflict: {len(conflicts)} item(s) modified by another user. Refresh.')
+        return redirect(f'/investment/?decision_filter={decision_filter}')
+    
+    # Phase 3: Transaction
+    persisted_count = 0
+    try:
+        with transaction() as conn:
+            for row in validated_rows:
+                version_key = f"version_{row['resource_key']}"
+                expected_version_str = request.POST.get(version_key)
+                expected_version = int(expected_version_str) if expected_version_str else None
+                
+                update_resource_invest(
+                    resource_key=row['resource_key'],
+                    decision=row['decision'],
+                    owner=row['owner'],
+                    effort=row['effort'],
+                    notes=row['notes'],
+                    expected_version=expected_version,
+                    reviewed_by=request.user.username,
+                    conn=conn,
+                )
+                persisted_count += 1
+    except Exception as e:
+        messages.error(request, f'Database error: {str(e)}')
+        return redirect(f'/investment/?decision_filter={decision_filter}')
+    
+    messages.success(request, f'Saved {persisted_count} item(s)')
+    page = request.POST.get('current_page', '1')
+    return redirect(f'/investment/?decision_filter={decision_filter}&page={page}')
 
 
 # =============================================================================

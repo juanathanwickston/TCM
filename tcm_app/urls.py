@@ -16,6 +16,8 @@ urlpatterns = [
     path('scrubbing/batch/', views.save_scrub_batch_view, name='save_scrub_batch'),
     path('investment/', views.investment_view, name='investment'),
     path('investment/save/', views.save_investment_view, name='save_investment'),
+    path('investment/batch/', views.save_investment_batch_view, name='save_investment_batch'),
+    path('inventory/batch/', views.save_audience_batch_view, name='save_audience_batch'),
     
     # Tools
     path('tools/', views.tools_view, name='tools'),
