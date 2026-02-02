@@ -1,7 +1,44 @@
 ﻿{% extends 'tcm_app/base.html' %}
 {% load tcm_tags %}
 
-{% block title %}Inventory | TCM{% endblock %}
+{% block title %}Inventory | TCM
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dirtyRows = new Set();
+    
+    // Track changes on audience dropdowns
+    document.querySelectorAll('.dirty-track').forEach(el => {
+        const originalValue = el.value;
+        el.dataset.originalValue = originalValue;
+        
+        // Remove auto-submit behavior, track instead
+        el.removeAttribute('onchange');
+        
+        el.addEventListener('change', function() {
+            const row = this.closest('tr');
+            if (!row) return;
+            
+            if (this.value !== this.dataset.originalValue) {
+                row.classList.add('table-warning');
+                dirtyRows.add(row);
+            } else {
+                row.classList.remove('table-warning');
+                dirtyRows.delete(row);
+            }
+        });
+    });
+    
+    // Navigation warning when dirty
+    window.addEventListener('beforeunload', function(e) {
+        if (dirtyRows.size > 0) {
+            e.preventDefault();
+            e.returnValue = '';
+            return '';
+        }
+    });
+});
+</script>
+{% endblock %}
 
 {% block content %}
 <!-- INVENTORY TEMPLATE FINGERPRINT: 2026-01-25-VERIFIED-A -->
@@ -193,4 +230,41 @@
     {% endif %}
 
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dirtyRows = new Set();
+    
+    // Track changes on audience dropdowns
+    document.querySelectorAll('.dirty-track').forEach(el => {
+        const originalValue = el.value;
+        el.dataset.originalValue = originalValue;
+        
+        // Remove auto-submit behavior, track instead
+        el.removeAttribute('onchange');
+        
+        el.addEventListener('change', function() {
+            const row = this.closest('tr');
+            if (!row) return;
+            
+            if (this.value !== this.dataset.originalValue) {
+                row.classList.add('table-warning');
+                dirtyRows.add(row);
+            } else {
+                row.classList.remove('table-warning');
+                dirtyRows.delete(row);
+            }
+        });
+    });
+    
+    // Navigation warning when dirty
+    window.addEventListener('beforeunload', function(e) {
+        if (dirtyRows.size > 0) {
+            e.preventDefault();
+            e.returnValue = '';
+            return '';
+        }
+    });
+});
+</script>
 {% endblock %}

@@ -1,7 +1,59 @@
 {% extends "tcm_app/base.html" %}
 {% load static %}
 
-{% block title %}Investment | TCM{% endblock %}
+{% block title %}Investment | TCM
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dirtyRows = new Set();
+    
+    // Track changes on all form inputs
+    document.querySelectorAll('.dirty-track').forEach(el => {
+        const originalValue = el.value;
+        el.dataset.originalValue = originalValue;
+        
+        el.addEventListener('change', function() {
+            const row = this.closest('tr');
+            if (!row) return;
+            
+            // Check if any field in this row differs from original
+            let isDirty = false;
+            row.querySelectorAll('.dirty-track').forEach(input => {
+                if (input.value !== input.dataset.originalValue) {
+                    isDirty = true;
+                }
+            });
+            
+            if (isDirty) {
+                row.classList.add('table-warning');
+                dirtyRows.add(row);
+            } else {
+                row.classList.remove('table-warning');
+                dirtyRows.delete(row);
+            }
+        });
+    });
+    
+    // Navigation warning when dirty
+    window.addEventListener('beforeunload', function(e) {
+        if (dirtyRows.size > 0) {
+            e.preventDefault();
+            e.returnValue = '';
+            return '';
+        }
+    });
+    
+    // Clear dirty state when form submits (per-row save)
+    document.querySelectorAll('form').forEach(form => {
+        form.addEventListener('submit', function() {
+            const row = this.closest('tr');
+            if (row) {
+                dirtyRows.delete(row);
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4">
@@ -124,4 +176,56 @@
   </div>
 
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dirtyRows = new Set();
+    
+    // Track changes on all form inputs
+    document.querySelectorAll('.dirty-track').forEach(el => {
+        const originalValue = el.value;
+        el.dataset.originalValue = originalValue;
+        
+        el.addEventListener('change', function() {
+            const row = this.closest('tr');
+            if (!row) return;
+            
+            // Check if any field in this row differs from original
+            let isDirty = false;
+            row.querySelectorAll('.dirty-track').forEach(input => {
+                if (input.value !== input.dataset.originalValue) {
+                    isDirty = true;
+                }
+            });
+            
+            if (isDirty) {
+                row.classList.add('table-warning');
+                dirtyRows.add(row);
+            } else {
+                row.classList.remove('table-warning');
+                dirtyRows.delete(row);
+            }
+        });
+    });
+    
+    // Navigation warning when dirty
+    window.addEventListener('beforeunload', function(e) {
+        if (dirtyRows.size > 0) {
+            e.preventDefault();
+            e.returnValue = '';
+            return '';
+        }
+    });
+    
+    // Clear dirty state when form submits (per-row save)
+    document.querySelectorAll('form').forEach(form => {
+        form.addEventListener('submit', function() {
+            const row = this.closest('tr');
+            if (row) {
+                dirtyRows.delete(row);
+            }
+        });
+    });
+});
+</script>
 {% endblock %}
