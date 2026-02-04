@@ -23,9 +23,15 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 def login_view(request):
     """
     Login page - center-aligned card with username/password.
-    POST: Authenticate and redirect to dashboard.
+    POST: Authenticate and redirect to dashboard (or change-password if forced).
     """
+    from db import get_user_profile
+    
     if request.user.is_authenticated:
+        # Check if force password change is required
+        profile = get_user_profile(request.user.id)
+        if profile.get('force_password_change', False):
+            return redirect('change_password')
         return redirect('dashboard')
     
     if request.method == 'POST':
@@ -36,6 +42,12 @@ def login_view(request):
         
         if user is not None:
             login(request, user)
+            
+            # Check if force password change is required
+            profile = get_user_profile(user.id)
+            if profile.get('force_password_change', False):
+                return redirect('change_password')
+            
             # SECURITY: Validate next URL to prevent open redirect attacks
             next_url = request.GET.get('next', '')
             if next_url and url_has_allowed_host_and_scheme(
@@ -56,6 +68,58 @@ def logout_view(request):
     """Logout and redirect to login page."""
     logout(request)
     return redirect('login')
+
+
+@login_required
+def change_password_view(request):
+    """
+    Change password page.
+    
+    Shown when:
+    - User navigates here voluntarily
+    - Force password change flag is set (after login redirect)
+    
+    POST: Validate and set new password, clear force flag.
+    """
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+    from db import get_user_profile, set_force_password_change
+    
+    # Check if this is a forced password change
+    profile = get_user_profile(request.user.id)
+    forced = profile.get('force_password_change', False)
+    
+    if request.method == 'POST':
+        new_password = request.POST.get('new_password', '')
+        confirm_password = request.POST.get('confirm_password', '')
+        
+        # Validate passwords match
+        if new_password != confirm_password:
+            messages.error(request, 'Passwords do not match')
+            return render(request, 'tcm_app/change_password.html', {'forced': forced})
+        
+        # Validate password strength
+        try:
+            validate_password(new_password, request.user)
+        except ValidationError as e:
+            for error in e.messages:
+                messages.error(request, error)
+            return render(request, 'tcm_app/change_password.html', {'forced': forced})
+        
+        # Set new password
+        request.user.set_password(new_password)
+        request.user.save()
+        
+        # Clear force password change flag
+        set_force_password_change(request.user.id, False)
+        
+        # Re-login user (password change logs them out)
+        login(request, request.user)
+        
+        messages.success(request, 'Password changed successfully')
+        return redirect('dashboard')
+    
+    return render(request, 'tcm_app/change_password.html', {'forced': forced})
 
 
 # =============================================================================
@@ -1412,4 +1476,252 @@ def clear_all_data_view(request):
         messages.error(request, f'Clear failed: {str(e)}')
     
     return redirect('tools')
+
+
+# =============================================================================
+# USER MANAGEMENT VIEWS (Superuser Only)
+# =============================================================================
+
+@login_required
+@require_http_methods(["GET"])
+def list_users_view(request):
+    """
+    List all users as JSON.
+    SUPERUSER ONLY.
+    """
+    from django.http import JsonResponse
+    from django.contrib.auth.models import User
+    
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+    
+    users = User.objects.all().order_by('username')
+    user_list = []
+    for u in users:
+        user_list.append({
+            'id': u.id,
+            'username': u.username,
+            'email': u.email or '',
+            'first_name': u.first_name or '',
+            'last_name': u.last_name or '',
+            'is_staff': u.is_staff,
+            'is_superuser': u.is_superuser,
+            'is_active': u.is_active,
+            'last_login': u.last_login.isoformat() if u.last_login else None,
+            'date_joined': u.date_joined.isoformat() if u.date_joined else None,
+        })
+    
+    return JsonResponse({'users': user_list})
+
+
+@login_required
+@require_http_methods(["POST"])
+def create_user_view(request):
+    """
+    Create a new user.
+    SUPERUSER ONLY.
+    Returns JSON with new user data or error.
+    """
+    import json
+    from django.http import JsonResponse
+    from django.contrib.auth.models import User
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+    from db import create_user_profile
+    
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+    
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    
+    username = data.get('username', '').strip()
+    email = data.get('email', '').strip()
+    password = data.get('password', '')
+    first_name = data.get('first_name', '').strip()
+    last_name = data.get('last_name', '').strip()
+    is_staff = data.get('is_staff', False)
+    is_superuser = data.get('is_superuser', False)
+    is_active = data.get('is_active', True)
+    
+    # Validate username
+    if not username:
+        return JsonResponse({'error': 'Username is required'}, status=400)
+    
+    if User.objects.filter(username=username).exists():
+        return JsonResponse({'error': 'Username already exists'}, status=400)
+    
+    # Validate password
+    try:
+        validate_password(password)
+    except ValidationError as e:
+        return JsonResponse({'error': '; '.join(e.messages)}, status=400)
+    
+    # Create user
+    user = User.objects.create_user(
+        username=username,
+        email=email,
+        password=password,
+        first_name=first_name,
+        last_name=last_name,
+    )
+    user.is_staff = is_staff
+    user.is_superuser = is_superuser
+    user.is_active = is_active
+    user.save()
+    
+    # Create user profile with force_password_change=True
+    create_user_profile(user.id, force_password_change=True)
+    
+    return JsonResponse({
+        'success': True,
+        'user': {
+            'id': user.id,
+            'username': user.username,
+        }
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def update_user_view(request, user_id):
+    """
+    Update user details (except password).
+    SUPERUSER ONLY.
+    Cannot demote yourself from superuser.
+    Cannot remove last superuser.
+    """
+    import json
+    from django.http import JsonResponse
+    from django.contrib.auth.models import User
+    
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+    
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({'error': 'User not found'}, status=404)
+    
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    
+    new_is_superuser = data.get('is_superuser', user.is_superuser)
+    
+    # Prevent self-demotion from superuser
+    if user.id == request.user.id and user.is_superuser and not new_is_superuser:
+        return JsonResponse({'error': 'Cannot remove superuser status from yourself'}, status=400)
+    
+    # Prevent removing last superuser
+    if user.is_superuser and not new_is_superuser:
+        superuser_count = User.objects.filter(is_superuser=True, is_active=True).count()
+        if superuser_count <= 1:
+            return JsonResponse({'error': 'Cannot remove last superuser'}, status=400)
+    
+    # Update fields
+    if 'email' in data:
+        user.email = data['email'].strip()
+    if 'first_name' in data:
+        user.first_name = data['first_name'].strip()
+    if 'last_name' in data:
+        user.last_name = data['last_name'].strip()
+    if 'is_staff' in data:
+        user.is_staff = data['is_staff']
+    if 'is_superuser' in data:
+        user.is_superuser = data['is_superuser']
+    if 'is_active' in data:
+        # Prevent self-deactivation
+        if user.id == request.user.id and not data['is_active']:
+            return JsonResponse({'error': 'Cannot deactivate your own account'}, status=400)
+        user.is_active = data['is_active']
+    
+    user.save()
+    
+    return JsonResponse({'success': True})
+
+
+@login_required
+@require_http_methods(["POST"])
+def delete_user_view(request, user_id):
+    """
+    Delete a user.
+    SUPERUSER ONLY.
+    Cannot delete yourself.
+    Cannot delete last superuser.
+    """
+    from django.http import JsonResponse
+    from django.contrib.auth.models import User
+    
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+    
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({'error': 'User not found'}, status=404)
+    
+    # Prevent self-deletion
+    if user.id == request.user.id:
+        return JsonResponse({'error': 'Cannot delete your own account'}, status=400)
+    
+    # Prevent deleting last superuser
+    if user.is_superuser:
+        superuser_count = User.objects.filter(is_superuser=True, is_active=True).count()
+        if superuser_count <= 1:
+            return JsonResponse({'error': 'Cannot delete last superuser'}, status=400)
+    
+    username = user.username
+    user.delete()
+    
+    return JsonResponse({'success': True, 'deleted': username})
+
+
+@login_required
+@require_http_methods(["POST"])
+def reset_password_view(request, user_id):
+    """
+    Reset a user's password.
+    SUPERUSER ONLY.
+    Sets force_password_change flag.
+    """
+    import json
+    from django.http import JsonResponse
+    from django.contrib.auth.models import User
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+    from db import set_force_password_change
+    
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+    
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({'error': 'User not found'}, status=404)
+    
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    
+    new_password = data.get('password', '')
+    
+    # Validate password
+    try:
+        validate_password(new_password, user)
+    except ValidationError as e:
+        return JsonResponse({'error': '; '.join(e.messages)}, status=400)
+    
+    # Set new password
+    user.set_password(new_password)
+    user.save()
+    
+    # Set force password change flag
+    set_force_password_change(user.id, True)
+    
+    return JsonResponse({'success': True})
 

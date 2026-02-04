@@ -18,103 +18,593 @@
         </div>
     </div>
 
-    <!-- Import Content Card -->
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="mb-0"><i class="bi bi-cloud-upload me-2"></i>Import Content</h5>
-        </div>
-        <div class="card-body">
-            {% if is_superuser %}
-            <div class="row g-4">
-                <!-- ZIP Upload -->
-                <div class="col-md-6">
-                    <h6>Import from ZIP</h6>
-                    <p class="text-muted small mb-3">Upload a training catalog ZIP file (max 250MB)</p>
-                    <form method="post" action="{% url 'import_zip' %}" enctype="multipart/form-data">
-                        {% csrf_token %}
-                        <div class="input-group mb-2">
-                            <input type="file" name="zipfile" class="form-control" accept=".zip" required>
-                            <button type="submit" class="btn btn-primary">Import ZIP</button>
-                        </div>
-                    </form>
-                </div>
+    <!-- Tab Navigation -->
+    <ul class="nav nav-tabs mb-4" id="toolsTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="import-tab" data-bs-toggle="tab" data-bs-target="#import-pane" 
+                    type="button" role="tab">
+                <i class="bi bi-cloud-upload me-1"></i>Import
+            </button>
+        </li>
+        {% if is_superuser %}
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="users-tab" data-bs-toggle="tab" data-bs-target="#users-pane" 
+                    type="button" role="tab">
+                <i class="bi bi-people me-1"></i>Users
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link text-danger" id="danger-tab" data-bs-toggle="tab" data-bs-target="#danger-pane" 
+                    type="button" role="tab">
+                <i class="bi bi-exclamation-triangle me-1"></i>Danger Zone
+            </button>
+        </li>
+        {% endif %}
+    </ul>
 
-                <!-- SharePoint Sync -->
-                <div class="col-md-6">
-                    <h6>SharePoint Sync</h6>
-                    {% if sharepoint_configured %}
-                    <p class="text-muted small mb-3">Sync from SharePoint library</p>
-                    <form method="post" action="{% url 'sync_sharepoint' %}">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-outline-primary">
-                            <i class="bi bi-cloud-download me-1"></i>Sync SharePoint
-                        </button>
-                    </form>
+    <!-- Tab Content -->
+    <div class="tab-content" id="toolsTabContent">
+        
+        <!-- Import Tab -->
+        <div class="tab-pane fade show active" id="import-pane" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-cloud-upload me-2"></i>Import Content</h5>
+                </div>
+                <div class="card-body">
+                    {% if is_superuser %}
+                    <div class="row g-4">
+                        <!-- ZIP Upload -->
+                        <div class="col-md-6">
+                            <h6>Import from ZIP</h6>
+                            <p class="text-muted small mb-3">Upload a training catalog ZIP file (max 250MB)</p>
+                            <form method="post" action="{% url 'import_zip' %}" enctype="multipart/form-data">
+                                {% csrf_token %}
+                                <div class="input-group mb-2">
+                                    <input type="file" name="zipfile" class="form-control" accept=".zip" required>
+                                    <button type="submit" class="btn btn-primary">Import ZIP</button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- SharePoint Sync -->
+                        <div class="col-md-6">
+                            <h6>SharePoint Sync</h6>
+                            {% if sharepoint_configured %}
+                            <p class="text-muted small mb-3">Sync from SharePoint library</p>
+                            <form method="post" action="{% url 'sync_sharepoint' %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-outline-primary">
+                                    <i class="bi bi-cloud-download me-1"></i>Sync SharePoint
+                                </button>
+                            </form>
+                            {% else %}
+                            <p class="text-muted small mb-3">
+                                <i class="bi bi-exclamation-triangle text-warning me-1"></i>
+                                Not configured. Set SHAREPOINT_SYNC_ENABLED and credentials.
+                            </p>
+                            <button class="btn btn-outline-secondary" disabled>
+                                <i class="bi bi-cloud-download me-1"></i>Sync SharePoint
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
                     {% else %}
-                    <p class="text-muted small mb-3">
-                        <i class="bi bi-exclamation-triangle text-warning me-1"></i>
-                        Not configured. Set SHAREPOINT_SYNC_ENABLED and credentials.
-                    </p>
-                    <button class="btn btn-outline-secondary" disabled>
-                        <i class="bi bi-cloud-download me-1"></i>Sync SharePoint
-                    </button>
+                    <div class="alert alert-info mb-0">
+                        <i class="bi bi-info-circle me-2"></i>
+                        Import actions require superuser access.
+                    </div>
                     {% endif %}
                 </div>
             </div>
-            {% else %}
-            <div class="alert alert-info mb-0">
-                <i class="bi bi-info-circle me-2"></i>
-                Import actions require superuser access.
-            </div>
-            {% endif %}
         </div>
-    </div>
 
-    <!-- Danger Zone Card (Superuser Only) -->
-    {% if is_superuser %}
-    <div class="card border-danger">
-        <div class="card-header bg-danger text-white" data-bs-toggle="collapse" data-bs-target="#dangerZone"
-            style="cursor: pointer;">
-            <h5 class="mb-0">
-                <i class="bi bi-exclamation-triangle-fill me-2"></i>Danger Zone
-                <i class="bi bi-chevron-down float-end"></i>
-            </h5>
-        </div>
-        <div id="dangerZone" class="collapse">
-            <div class="card-body">
-                <h6 class="text-danger">Clear All Data</h6>
-                <p class="text-muted small">
-                    This will <strong>permanently delete</strong> all container data.
-                    This action <strong>cannot be undone</strong>.
-                </p>
-                <form method="post" action="{% url 'clear_all_data' %}" id="clearForm">
-                    {% csrf_token %}
-                    <div class="mb-3">
-                        <label class="form-label">Type <code>CLEAR ALL DATA</code> to confirm:</label>
-                        <input type="text" name="confirmation" class="form-control" id="confirmInput" autocomplete="off"
-                            placeholder="CLEAR ALL DATA">
-                    </div>
-                    <button type="submit" class="btn btn-danger" id="clearButton" disabled>
-                        <i class="bi bi-trash me-1"></i>Delete All Data
+        {% if is_superuser %}
+        <!-- Users Tab -->
+        <div class="tab-pane fade" id="users-pane" role="tabpanel">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-people me-2"></i>User Management</h5>
+                    <button class="btn btn-primary btn-sm" id="addUserBtn">
+                        <i class="bi bi-plus-lg me-1"></i>Add User
                     </button>
-                </form>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="usersTable">
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Email</th>
+                                    <th>Name</th>
+                                    <th class="text-center">Staff</th>
+                                    <th class="text-center">Superuser</th>
+                                    <th class="text-center">Active</th>
+                                    <th>Last Login</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody">
+                                <tr>
+                                    <td colspan="8" class="text-center text-muted py-4">
+                                        <div class="spinner-border spinner-border-sm me-2"></div>
+                                        Loading users...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
+
+        <!-- Danger Zone Tab -->
+        <div class="tab-pane fade" id="danger-pane" role="tabpanel">
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>Danger Zone
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <h6 class="text-danger">Clear All Data</h6>
+                    <p class="text-muted small">
+                        This will <strong>permanently delete</strong> all container data.
+                        This action <strong>cannot be undone</strong>.
+                    </p>
+                    <form method="post" action="{% url 'clear_all_data' %}" id="clearForm">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label">Type <code>CLEAR ALL DATA</code> to confirm:</label>
+                            <input type="text" name="confirmation" class="form-control" id="confirmInput" autocomplete="off"
+                                placeholder="CLEAR ALL DATA">
+                        </div>
+                        <button type="submit" class="btn btn-danger" id="clearButton" disabled>
+                            <i class="bi bi-trash me-1"></i>Delete All Data
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
 </div>
 
-<script>
-    // Client-side confirmation validation
-    document.addEventListener('DOMContentLoaded', function () {
-        const confirmInput = document.getElementById('confirmInput');
-        const clearButton = document.getElementById('clearButton');
+<!-- Add/Edit User Modal -->
+<div class="modal fade" id="userModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="userModalTitle">Add User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editUserId">
+                
+                <div class="mb-3">
+                    <label class="form-label">Username <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="userUsername" required>
+                </div>
+                
+                <div class="mb-3" id="passwordGroup">
+                    <label class="form-label">Password <span class="text-danger">*</span></label>
+                    <input type="password" class="form-control" id="userPassword">
+                    <div class="form-text">
+                        At least 8 characters, not common, not all numeric
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" id="userEmail">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">First Name</label>
+                        <input type="text" class="form-control" id="userFirstName">
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Last Name</label>
+                        <input type="text" class="form-control" id="userLastName">
+                    </div>
+                </div>
+                
+                <div class="border-top pt-3">
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="userIsActive" checked>
+                        <label class="form-check-label" for="userIsActive">Active</label>
+                    </div>
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="userIsStaff">
+                        <label class="form-check-label" for="userIsStaff">Staff</label>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="userIsSuperuser">
+                        <label class="form-check-label" for="userIsSuperuser">Superuser</label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveUserBtn">
+                    <span id="saveUserSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>
+                    <span id="saveUserText">Save</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
-        if (confirmInput && clearButton) {
-            confirmInput.addEventListener('input', function () {
-                clearButton.disabled = (this.value.trim() !== 'CLEAR ALL DATA');
+<!-- Reset Password Modal -->
+<div class="modal fade" id="resetPasswordModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Reset Password</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">Setting a new password for: <strong id="resetUsername"></strong></p>
+                <input type="hidden" id="resetUserId">
+                
+                <div class="mb-3">
+                    <label class="form-label">New Password</label>
+                    <input type="password" class="form-control" id="newPassword">
+                    <div class="form-text">User will be prompted to change password on next login.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" id="resetPasswordBtn">
+                    <span id="resetSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>
+                    Reset Password
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Delete User</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete <strong id="deleteUsername"></strong>?</p>
+                <p class="text-danger small mb-0">This action cannot be undone.</p>
+                <input type="hidden" id="deleteUserId">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
+                    <span id="deleteSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>
+                    Delete
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="toolsToast" class="toast align-items-center" role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="toastMessage"></div>
+            <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    // Elements
+    const usersTab = document.getElementById('users-tab');
+    const usersTableBody = document.getElementById('usersTableBody');
+    const addUserBtn = document.getElementById('addUserBtn');
+    const confirmInput = document.getElementById('confirmInput');
+    const clearButton = document.getElementById('clearButton');
+    
+    // Modals
+    const userModal = new bootstrap.Modal(document.getElementById('userModal'));
+    const resetPasswordModal = new bootstrap.Modal(document.getElementById('resetPasswordModal'));
+    const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    const toast = new bootstrap.Toast(document.getElementById('toolsToast'));
+    
+    // State
+    let usersLoaded = false;
+    let currentUserId = {{ user.id }};
+    
+    // Toast helper
+    function showToast(message, isError = false) {
+        const toastEl = document.getElementById('toolsToast');
+        const toastMessage = document.getElementById('toastMessage');
+        toastEl.classList.remove('text-bg-success', 'text-bg-danger');
+        toastEl.classList.add(isError ? 'text-bg-danger' : 'text-bg-success');
+        toastMessage.textContent = message;
+        toast.show();
+    }
+    
+    // Load users
+    async function loadUsers() {
+        try {
+            const response = await fetch('{% url "list_users" %}');
+            const data = await response.json();
+            
+            if (data.error) {
+                usersTableBody.innerHTML = `<tr><td colspan="8" class="text-danger text-center">${data.error}</td></tr>`;
+                return;
+            }
+            
+            if (data.users.length === 0) {
+                usersTableBody.innerHTML = '<tr><td colspan="8" class="text-muted text-center">No users found</td></tr>';
+                return;
+            }
+            
+            usersTableBody.innerHTML = data.users.map(u => `
+                <tr data-user-id="${u.id}">
+                    <td><strong>${escapeHtml(u.username)}</strong></td>
+                    <td>${escapeHtml(u.email) || '<span class="text-muted">-</span>'}</td>
+                    <td>${escapeHtml(u.first_name || '')} ${escapeHtml(u.last_name || '')}</td>
+                    <td class="text-center">${u.is_staff ? '<i class="bi bi-check-circle text-success"></i>' : '<i class="bi bi-dash text-muted"></i>'}</td>
+                    <td class="text-center">${u.is_superuser ? '<i class="bi bi-shield-fill text-danger"></i>' : '<i class="bi bi-dash text-muted"></i>'}</td>
+                    <td class="text-center">${u.is_active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>'}</td>
+                    <td>${u.last_login ? new Date(u.last_login).toLocaleDateString() : '<span class="text-muted">Never</span>'}</td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-outline-primary edit-btn" title="Edit">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-warning reset-btn" title="Reset Password">
+                            <i class="bi bi-key"></i>
+                        </button>
+                        ${u.id !== currentUserId ? `
+                        <button class="btn btn-sm btn-outline-danger delete-btn" title="Delete">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                        ` : ''}
+                    </td>
+                </tr>
+            `).join('');
+            
+            usersLoaded = true;
+        } catch (err) {
+            usersTableBody.innerHTML = '<tr><td colspan="8" class="text-danger text-center">Error loading users</td></tr>';
+        }
+    }
+    
+    // Escape HTML
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // Load users when tab is shown
+    if (usersTab) {
+        usersTab.addEventListener('shown.bs.tab', function() {
+            if (!usersLoaded) loadUsers();
+        });
+    }
+    
+    // Add User button
+    if (addUserBtn) {
+        addUserBtn.addEventListener('click', function() {
+            document.getElementById('userModalTitle').textContent = 'Add User';
+            document.getElementById('editUserId').value = '';
+            document.getElementById('userUsername').value = '';
+            document.getElementById('userUsername').disabled = false;
+            document.getElementById('userPassword').value = '';
+            document.getElementById('userPassword').required = true;
+            document.getElementById('passwordGroup').style.display = 'block';
+            document.getElementById('userEmail').value = '';
+            document.getElementById('userFirstName').value = '';
+            document.getElementById('userLastName').value = '';
+            document.getElementById('userIsActive').checked = true;
+            document.getElementById('userIsStaff').checked = false;
+            document.getElementById('userIsSuperuser').checked = false;
+            userModal.show();
+        });
+    }
+    
+    // Edit user button (delegated)
+    usersTableBody.addEventListener('click', function(e) {
+        const btn = e.target.closest('.edit-btn');
+        if (!btn) return;
+        
+        const row = btn.closest('tr');
+        const userId = row.dataset.userId;
+        
+        // Fetch user data and populate modal
+        fetch('{% url "list_users" %}')
+            .then(r => r.json())
+            .then(data => {
+                const user = data.users.find(u => u.id == userId);
+                if (!user) return;
+                
+                document.getElementById('userModalTitle').textContent = 'Edit User';
+                document.getElementById('editUserId').value = user.id;
+                document.getElementById('userUsername').value = user.username;
+                document.getElementById('userUsername').disabled = true;
+                document.getElementById('userPassword').value = '';
+                document.getElementById('userPassword').required = false;
+                document.getElementById('passwordGroup').style.display = 'none';
+                document.getElementById('userEmail').value = user.email || '';
+                document.getElementById('userFirstName').value = user.first_name || '';
+                document.getElementById('userLastName').value = user.last_name || '';
+                document.getElementById('userIsActive').checked = user.is_active;
+                document.getElementById('userIsStaff').checked = user.is_staff;
+                document.getElementById('userIsSuperuser').checked = user.is_superuser;
+                userModal.show();
             });
+    });
+    
+    // Save user
+    document.getElementById('saveUserBtn').addEventListener('click', async function() {
+        const userId = document.getElementById('editUserId').value;
+        const isEdit = !!userId;
+        
+        const spinner = document.getElementById('saveUserSpinner');
+        const textEl = document.getElementById('saveUserText');
+        spinner.classList.remove('d-none');
+        textEl.textContent = 'Saving...';
+        this.disabled = true;
+        
+        const payload = {
+            email: document.getElementById('userEmail').value,
+            first_name: document.getElementById('userFirstName').value,
+            last_name: document.getElementById('userLastName').value,
+            is_active: document.getElementById('userIsActive').checked,
+            is_staff: document.getElementById('userIsStaff').checked,
+            is_superuser: document.getElementById('userIsSuperuser').checked,
+        };
+        
+        if (!isEdit) {
+            payload.username = document.getElementById('userUsername').value;
+            payload.password = document.getElementById('userPassword').value;
+        }
+        
+        try {
+            const url = isEdit ? `/tools/users/update/${userId}/` : '{% url "create_user" %}';
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                userModal.hide();
+                loadUsers();
+                showToast(isEdit ? 'User updated' : 'User created');
+            } else {
+                showToast(data.error || 'Save failed', true);
+            }
+        } catch (err) {
+            showToast('Network error', true);
+        } finally {
+            spinner.classList.add('d-none');
+            textEl.textContent = 'Save';
+            this.disabled = false;
         }
     });
+    
+    // Reset password button (delegated)
+    usersTableBody.addEventListener('click', function(e) {
+        const btn = e.target.closest('.reset-btn');
+        if (!btn) return;
+        
+        const row = btn.closest('tr');
+        const userId = row.dataset.userId;
+        const username = row.querySelector('strong').textContent;
+        
+        document.getElementById('resetUserId').value = userId;
+        document.getElementById('resetUsername').textContent = username;
+        document.getElementById('newPassword').value = '';
+        resetPasswordModal.show();
+    });
+    
+    // Reset password confirm
+    document.getElementById('resetPasswordBtn').addEventListener('click', async function() {
+        const userId = document.getElementById('resetUserId').value;
+        const password = document.getElementById('newPassword').value;
+        
+        const spinner = document.getElementById('resetSpinner');
+        spinner.classList.remove('d-none');
+        this.disabled = true;
+        
+        try {
+            const response = await fetch(`/tools/users/reset-password/${userId}/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({ password })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                resetPasswordModal.hide();
+                showToast('Password reset successfully');
+            } else {
+                showToast(data.error || 'Reset failed', true);
+            }
+        } catch (err) {
+            showToast('Network error', true);
+        } finally {
+            spinner.classList.add('d-none');
+            this.disabled = false;
+        }
+    });
+    
+    // Delete button (delegated)
+    usersTableBody.addEventListener('click', function(e) {
+        const btn = e.target.closest('.delete-btn');
+        if (!btn) return;
+        
+        const row = btn.closest('tr');
+        const userId = row.dataset.userId;
+        const username = row.querySelector('strong').textContent;
+        
+        document.getElementById('deleteUserId').value = userId;
+        document.getElementById('deleteUsername').textContent = username;
+        deleteModal.show();
+    });
+    
+    // Delete confirm
+    document.getElementById('confirmDeleteBtn').addEventListener('click', async function() {
+        const userId = document.getElementById('deleteUserId').value;
+        
+        const spinner = document.getElementById('deleteSpinner');
+        spinner.classList.remove('d-none');
+        this.disabled = true;
+        
+        try {
+            const response = await fetch(`/tools/users/delete/${userId}/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({})
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                deleteModal.hide();
+                loadUsers();
+                showToast('User deleted');
+            } else {
+                showToast(data.error || 'Delete failed', true);
+            }
+        } catch (err) {
+            showToast('Network error', true);
+        } finally {
+            spinner.classList.add('d-none');
+            this.disabled = false;
+        }
+    });
+    
+    // Clear data confirmation
+    if (confirmInput && clearButton) {
+        confirmInput.addEventListener('input', function() {
+            clearButton.disabled = (this.value.trim() !== 'CLEAR ALL DATA');
+        });
+    }
+})();
 </script>
 {% endblock %}

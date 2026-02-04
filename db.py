@@ -704,6 +704,15 @@ def init_db() -> None:
                         else:
                             raise
                 
+                # User profiles table (for force_password_change flag)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS user_profiles (
+                        user_id INTEGER PRIMARY KEY,
+                        force_password_change BOOLEAN DEFAULT TRUE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
             conn.commit()
             _logger.info("init_db() completed successfully")
         finally:
@@ -1759,6 +1768,55 @@ def get_valid_departments() -> List[str]:
     """Get list of valid departments from folder structure."""
     rows = execute("SELECT department FROM departments ORDER BY department", fetch="all")
     return [row['department'] for row in rows] if rows else []
+
+
+# -----------------------------------------------------------------------------
+# User Profile Helpers
+# -----------------------------------------------------------------------------
+
+def get_user_profile(user_id: int) -> dict:
+    """
+    Get user profile, creating one if it doesn't exist.
+    Returns: {'user_id': int, 'force_password_change': bool}
+    """
+    row = execute(
+        "SELECT user_id, force_password_change FROM user_profiles WHERE user_id = ?",
+        (user_id,),
+        fetch="one"
+    )
+    if row:
+        return dict(row)
+    
+    # Create profile with force_password_change=False for existing users
+    execute(
+        "INSERT INTO user_profiles (user_id, force_password_change) VALUES (?, FALSE)",
+        (user_id,)
+    )
+    return {'user_id': user_id, 'force_password_change': False}
+
+
+def set_force_password_change(user_id: int, force: bool) -> None:
+    """
+    Set the force_password_change flag for a user.
+    Creates profile if it doesn't exist.
+    """
+    execute("""
+        INSERT INTO user_profiles (user_id, force_password_change)
+        VALUES (?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET force_password_change = excluded.force_password_change
+    """, (user_id, force))
+
+
+def create_user_profile(user_id: int, force_password_change: bool = True) -> None:
+    """
+    Create a new user profile (called when creating new users via admin).
+    New users default to force_password_change=True.
+    """
+    execute("""
+        INSERT INTO user_profiles (user_id, force_password_change)
+        VALUES (?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET force_password_change = excluded.force_password_change
+    """, (user_id, force_password_change))
 
 
 # Initialization happens via Django AppConfig.ready() - no import-time side effects

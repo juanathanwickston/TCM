@@ -5,6 +5,7 @@ urlpatterns = [
     # Auth
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
+    path('change-password/', views.change_password_view, name='change_password'),
     
     # Pages
     path('', views.dashboard_view, name='home'),
@@ -25,5 +26,12 @@ urlpatterns = [
     path('tools/import/zip/', views.import_zip_view, name='import_zip'),
     path('tools/sync/sharepoint/', views.sync_sharepoint_view, name='sync_sharepoint'),
     path('tools/danger/clear/', views.clear_all_data_view, name='clear_all_data'),
+    
+    # User Management (AJAX)
+    path('tools/users/list/', views.list_users_view, name='list_users'),
+    path('tools/users/create/', views.create_user_view, name='create_user'),
+    path('tools/users/update/<int:user_id>/', views.update_user_view, name='update_user'),
+    path('tools/users/delete/<int:user_id>/', views.delete_user_view, name='delete_user'),
+    path('tools/users/reset-password/<int:user_id>/', views.reset_password_view, name='reset_password'),
 ]
 
