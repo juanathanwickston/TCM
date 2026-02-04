@@ -40,7 +40,7 @@
     </div>
   </div>
 
-  <!-- Filters and Save Button -->
+  <!-- Filters, Search, Pagination, Save Button -->
   <div class="d-flex align-items-center justify-content-between mb-4">
     <form method="get" class="d-flex align-items-center gap-2">
       <label class="form-label mb-0 text-muted">Decision:</label>
@@ -49,9 +49,26 @@
         <option value="{{ value }}" {% if filter_decision == value %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
+      <input type="text" id="searchBox" class="form-control form-control-sm" placeholder="Search name or path..." style="width:200px;">
     </form>
     <div class="d-flex align-items-center gap-3">
-      <span class="text-muted small">Showing {{ containers|length }} items</span>
+      <!-- Compact pagination -->
+      {% if page_obj.has_other_pages %}
+      <nav class="d-flex align-items-center gap-1">
+        {% if page_obj.has_previous %}
+        <a href="?decision_filter={{ filter_decision }}&page={{ page_obj.previous_page_number }}" class="btn btn-sm btn-outline-secondary pagination-link">←</a>
+        {% else %}
+        <button class="btn btn-sm btn-outline-secondary" disabled>←</button>
+        {% endif %}
+        <span class="small text-muted px-1">{{ page_obj.number }}/{{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+        <a href="?decision_filter={{ filter_decision }}&page={{ page_obj.next_page_number }}" class="btn btn-sm btn-outline-secondary pagination-link">→</a>
+        {% else %}
+        <button class="btn btn-sm btn-outline-secondary" disabled>→</button>
+        {% endif %}
+      </nav>
+      {% endif %}
+      <span class="text-muted small" id="itemCount">Showing {{ containers|length }} items</span>
       <button type="button" id="global-save" class="btn btn-primary" disabled>Save All Changes</button>
     </div>
   </div>
@@ -61,38 +78,45 @@
     <input type="hidden" name="decision_filter" value="{{ filter_decision }}">
     <input type="hidden" name="current_page" value="{{ page_obj.number|default:1 }}">
 
-    {% include 'tcm_app/partials/pagination.html' %}
-
     <!-- Container Table -->
     <div class="card">
       <div class="table-responsive">
         <table class="table table-hover mb-0 align-middle investment-table tcm-fixed-table">
           <colgroup>
-            <col style="width: 30%"> <!-- Name -->
-            <col style="width: 14%"> <!-- Decision -->
+            <col style="width: 28%"> <!-- Name -->
+            <col style="width: 12%"> <!-- Decision -->
             <col style="width: 14%"> <!-- Owner -->
-            <col style="width: 12%"> <!-- Effort/Cost -->
-            <col style="width: 30%"> <!-- Notes -->
+            <col style="width: 10%"> <!-- Effort -->
+            <col style="width: 10%"> <!-- Cost -->
+            <col style="width: 26%"> <!-- Notes -->
           </colgroup>
           <thead>
             <tr>
               <th>Name</th>
               <th>Decision</th>
               <th>Owner</th>
-              <th>Effort/Cost</th>
+              <th>Effort</th>
+              <th>Cost</th>
               <th>Notes</th>
             </tr>
           </thead>
           <tbody>
             {% for c in containers %}
             <tr data-container-key="{{ c.resource_key }}"
+                data-name="{{ c.display_name }}"
+                data-path="{{ c.relative_path }}"
+                data-version="{{ c.invest_version|default:1 }}"
+                data-modified-at="{{ c.invest_modified_at|default:'' }}"
+                data-modified-by="{{ c.invest_modified_by|default:'' }}"
                 data-original-decision="{{ c.invest_decision|default:'' }}"
                 data-original-owner="{{ c.invest_owner|default:'' }}"
                 data-original-effort="{{ c.invest_effort|default:'' }}"
-                data-original-notes="{{ c.invest_notes|default:'' }}">
-              <td title="{{ c.display_name }}">
-                <div class="fw-semibold">{{ c.display_name }}</div>
-                <div class="text-muted small" title="{{ c.relative_path }}">{{ c.relative_path }}</div>
+                data-original-cost="{{ c.invest_cost|default:'' }}"
+                data-original-notes="{{ c.invest_notes|default:'' }}"
+                class="invest-row">
+              <td title="{{ c.display_name }}" class="name-cell">
+                <div class="fw-semibold text-truncate" style="max-width:250px;">{{ c.display_name }}</div>
+                <div class="text-muted small text-truncate" style="max-width:250px;" title="{{ c.relative_path }}">{{ c.relative_path }}</div>
               </td>
               <td>
                 <select name="decision_{{ c.resource_key }}" class="form-select form-select-sm dirty-track" style="width:auto;">
@@ -104,20 +128,34 @@
               </td>
               <td>
                 <input type="text" name="owner_{{ c.resource_key }}" class="form-control form-control-sm dirty-track"
-                  value="{{ c.invest_owner|default_if_none:'' }}" placeholder="Owner">
+                  value="{{ c.invest_owner|default_if_none:'' }}" placeholder="Owner" style="width:100%;">
               </td>
               <td>
-                <input type="text" name="effort_{{ c.resource_key }}" class="form-control form-control-sm dirty-track"
-                  value="{{ c.invest_effort|default_if_none:'' }}" placeholder="e.g., 2 weeks">
+                <select name="effort_{{ c.resource_key }}" class="form-select form-select-sm dirty-track" style="width:auto;">
+                  <option value="" {% if not c.invest_effort %}selected{% endif %}>-</option>
+                  {% for key, label in effort_choices %}
+                  <option value="{{ key }}" {% if c.invest_effort == key %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
               </td>
               <td>
-                <input type="text" name="notes_{{ c.resource_key }}" class="form-control form-control-sm dirty-track"
-                  value="{{ c.invest_notes|default_if_none:'' }}" placeholder="Notes">
+                <select name="cost_{{ c.resource_key }}" class="form-select form-select-sm dirty-track" style="width:auto;">
+                  <option value="" {% if not c.invest_cost %}selected{% endif %}>-</option>
+                  {% for key, label in cost_choices %}
+                  <option value="{{ key }}" {% if c.invest_cost == key %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td class="notes-cell">
+                <input type="hidden" name="notes_{{ c.resource_key }}" value="{{ c.invest_notes|default_if_none:'' }}">
+                <span class="notes-display text-truncate d-inline-block" style="max-width:200px;">
+                  {% if c.invest_notes %}{{ c.invest_notes|truncatechars:50 }}{% else %}<span class="text-muted">-</span>{% endif %}
+                </span>
               </td>
             </tr>
             {% empty %}
             <tr>
-              <td colspan="5" class="text-center text-muted py-4">No items in this queue. Complete Scrubbing to add Modify items.</td>
+              <td colspan="6" class="text-center text-muted py-4">No items in this queue. Complete Scrubbing to add Modify items.</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -127,16 +165,136 @@
   </form>
 </div>
 
+<!-- Detail Modal -->
+<div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalTitle">Resource Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-muted small mb-3" id="modalPath"></div>
+        
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label">Decision</label>
+            <select id="modalDecision" class="form-select">
+              <option value="">-</option>
+              {% for key, label in invest_choices %}
+              <option value="{{ key }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Owner</label>
+            <input type="text" id="modalOwner" class="form-control" placeholder="Owner name">
+          </div>
+        </div>
+        
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label">Effort</label>
+            <select id="modalEffort" class="form-select">
+              <option value="">-</option>
+              {% for key, label in effort_choices %}
+              <option value="{{ key }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Cost</label>
+            <select id="modalCost" class="form-select">
+              <option value="">-</option>
+              {% for key, label in cost_choices %}
+              <option value="{{ key }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        
+        <div class="mb-3">
+          <label class="form-label">Notes</label>
+          <textarea id="modalNotes" class="form-control" rows="4" maxlength="250" placeholder="Add notes..."></textarea>
+          <div class="form-text text-end"><span id="notesCount">0</span>/250</div>
+        </div>
+        
+        <hr>
+        <div class="text-muted small">
+          <div>Last Modified: <span id="modalModifiedAt">-</span></div>
+          <div>Modified By: <span id="modalModifiedBy">-</span></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="modalSave">
+          <span class="spinner-border spinner-border-sm d-none" id="modalSpinner"></span>
+          <span id="modalSaveText">Save & Close</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="errorToast" class="toast align-items-center text-bg-danger border-0" role="alert">
+    <div class="d-flex">
+      <div class="toast-body" id="toastMessage">Error message here</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function() {
   /**
-   * INVESTMENT BATCH SAVE - Matching Scrubbing Pattern
+   * INVESTMENT PAGE - Batch Save + Modal Pattern
    */
   const form = document.getElementById('invest-form');
   const saveBtn = document.getElementById('global-save');
   const saveBtnOriginalText = 'Save All Changes';
   const dirtyRows = new Set();
   let isSaving = false;
+  let currentModalKey = null;
+  
+  // Modal elements
+  const modal = new bootstrap.Modal(document.getElementById('detailModal'));
+  const modalEl = document.getElementById('detailModal');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalPath = document.getElementById('modalPath');
+  const modalDecision = document.getElementById('modalDecision');
+  const modalOwner = document.getElementById('modalOwner');
+  const modalEffort = document.getElementById('modalEffort');
+  const modalCost = document.getElementById('modalCost');
+  const modalNotes = document.getElementById('modalNotes');
+  const modalModifiedAt = document.getElementById('modalModifiedAt');
+  const modalModifiedBy = document.getElementById('modalModifiedBy');
+  const modalSaveBtn = document.getElementById('modalSave');
+  const modalSpinner = document.getElementById('modalSpinner');
+  const modalSaveText = document.getElementById('modalSaveText');
+  const notesCount = document.getElementById('notesCount');
+  
+  // Toast
+  const errorToast = new bootstrap.Toast(document.getElementById('errorToast'), {autohide: false});
+  const toastMessage = document.getElementById('toastMessage');
+  
+  // Search box
+  const searchBox = document.getElementById('searchBox');
+  
+  // Item count display
+  const itemCountEl = document.getElementById('itemCount');
+  
+  // Update item count display
+  function updateItemCount() {
+    const visible = document.querySelectorAll('.invest-row:not(.d-none)').length;
+    const unsaved = dirtyRows.size;
+    let text = `Showing ${visible} items`;
+    if (unsaved > 0) {
+      text += ` • ${unsaved} unsaved`;
+    }
+    itemCountEl.textContent = text;
+  }
 
   // Track changes to editable fields
   document.querySelectorAll('.dirty-track').forEach(function(el) {
@@ -149,18 +307,21 @@
       const origDecision = row.dataset.originalDecision;
       const origOwner = row.dataset.originalOwner;
       const origEffort = row.dataset.originalEffort;
+      const origCost = row.dataset.originalCost;
       const origNotes = row.dataset.originalNotes;
 
       // Get current values
       const currDecision = row.querySelector('[name^="decision_"]').value;
       const currOwner = row.querySelector('[name^="owner_"]').value;
       const currEffort = row.querySelector('[name^="effort_"]').value;
+      const currCost = row.querySelector('[name^="cost_"]').value;
       const currNotes = row.querySelector('[name^="notes_"]').value;
 
       // Logical dirty check
       const isDirty = (currDecision !== origDecision) ||
         (currOwner !== origOwner) ||
         (currEffort !== origEffort) ||
+        (currCost !== origCost) ||
         (currNotes !== origNotes);
 
       if (isDirty) {
@@ -171,10 +332,11 @@
         row.classList.remove('table-warning');
       }
       updateSaveButton();
+      updateItemCount();
     });
 
     // Real-time tracking for text inputs
-    if (el.tagName === 'INPUT') {
+    if (el.tagName === 'INPUT' && el.type === 'text') {
       el.addEventListener('input', function() {
         this.dispatchEvent(new Event('change'));
       });
@@ -244,6 +406,159 @@
       this.form.submit();
     });
   }
+
+  // Search functionality (client-side)
+  if (searchBox) {
+    searchBox.addEventListener('input', function() {
+      const query = this.value.toLowerCase().trim();
+      document.querySelectorAll('.invest-row').forEach(function(row) {
+        const name = (row.dataset.name || '').toLowerCase();
+        const path = (row.dataset.path || '').toLowerCase();
+        if (query === '' || name.includes(query) || path.includes(query)) {
+          row.classList.remove('d-none');
+        } else {
+          row.classList.add('d-none');
+        }
+      });
+      updateItemCount();
+    });
+  }
+
+  // Row click -> open modal (but not on form elements)
+  document.querySelectorAll('.invest-row').forEach(function(row) {
+    row.addEventListener('click', function(e) {
+      // Don't open modal if clicking on form elements
+      if (e.target.closest('select') || e.target.closest('input') || e.target.closest('button')) {
+        return;
+      }
+      openModal(this);
+    });
+  });
+
+  function openModal(row) {
+    currentModalKey = row.dataset.containerKey;
+    
+    // Populate modal with current DOM values (inherits unsaved edits)
+    modalTitle.textContent = row.dataset.name || 'Resource Details';
+    modalPath.textContent = row.dataset.path || '';
+    
+    modalDecision.value = row.querySelector('[name^="decision_"]').value;
+    modalOwner.value = row.querySelector('[name^="owner_"]').value;
+    modalEffort.value = row.querySelector('[name^="effort_"]').value;
+    modalCost.value = row.querySelector('[name^="cost_"]').value;
+    modalNotes.value = row.querySelector('[name^="notes_"]').value;
+    
+    // Metadata
+    modalModifiedAt.textContent = row.dataset.modifiedAt || '-';
+    modalModifiedBy.textContent = row.dataset.modifiedBy || '-';
+    
+    // Notes counter
+    notesCount.textContent = modalNotes.value.length;
+    
+    modal.show();
+  }
+
+  // Notes character counter
+  modalNotes.addEventListener('input', function() {
+    notesCount.textContent = this.value.length;
+  });
+
+  // Modal save
+  modalSaveBtn.addEventListener('click', async function() {
+    if (!currentModalKey) return;
+    
+    // Get row and version
+    const row = document.querySelector(`tr[data-container-key="${currentModalKey}"]`);
+    if (!row) return;
+    
+    const version = parseInt(row.dataset.version) || 1;
+    
+    // Disable button, show spinner
+    modalSaveBtn.disabled = true;
+    modalSpinner.classList.remove('d-none');
+    modalSaveText.textContent = 'Saving...';
+    
+    try {
+      const response = await fetch('{% url "save_investment_single" %}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+          resource_key: currentModalKey,
+          decision: modalDecision.value,
+          owner: modalOwner.value,
+          effort: modalEffort.value,
+          cost: modalCost.value,
+          notes: modalNotes.value,
+          version: version
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Update the table row with saved values
+        row.querySelector('[name^="decision_"]').value = modalDecision.value;
+        row.querySelector('[name^="owner_"]').value = modalOwner.value;
+        row.querySelector('[name^="effort_"]').value = modalEffort.value;
+        row.querySelector('[name^="cost_"]').value = modalCost.value;
+        row.querySelector('[name^="notes_"]').value = modalNotes.value;
+        
+        // Update notes display
+        const notesDisplay = row.querySelector('.notes-display');
+        if (notesDisplay) {
+          const notes = modalNotes.value;
+          notesDisplay.innerHTML = notes ? 
+            (notes.length > 50 ? notes.substring(0, 47) + '...' : notes) : 
+            '<span class="text-muted">-</span>';
+        }
+        
+        // Update original values (no longer dirty)
+        row.dataset.originalDecision = modalDecision.value;
+        row.dataset.originalOwner = modalOwner.value;
+        row.dataset.originalEffort = modalEffort.value;
+        row.dataset.originalCost = modalCost.value;
+        row.dataset.originalNotes = modalNotes.value;
+        row.dataset.version = data.new_version;
+        row.dataset.modifiedAt = data.modified_at || '';
+        row.dataset.modifiedBy = data.modified_by || '';
+        
+        // Remove from dirty set
+        dirtyRows.delete(currentModalKey);
+        row.classList.remove('table-warning');
+        updateSaveButton();
+        updateItemCount();
+        
+        // Close modal
+        modal.hide();
+        
+        // Full page refresh to update filter/pagination
+        window.location.reload();
+      } else {
+        // Show error toast - stays until dismissed
+        toastMessage.textContent = data.error || 'Save failed';
+        errorToast.show();
+      }
+    } catch (err) {
+      toastMessage.textContent = 'Network error. Please try again.';
+      errorToast.show();
+    } finally {
+      // Re-enable button
+      modalSaveBtn.disabled = false;
+      modalSpinner.classList.add('d-none');
+      modalSaveText.textContent = 'Save & Close';
+    }
+  });
+
+  // Reset modal state when closed
+  modalEl.addEventListener('hidden.bs.modal', function() {
+    currentModalKey = null;
+  });
+
+  // Initial count
+  updateItemCount();
 })();
 </script>
 {% endblock %}

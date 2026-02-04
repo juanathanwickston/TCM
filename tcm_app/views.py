@@ -897,7 +897,7 @@ def investment_view(request):
     """
     from db import get_active_containers
     from services.scrub_rules import normalize_status
-    from models.enums import InvestDecision
+    from models.enums import InvestDecision, InvestEffort, InvestCost
     
     # CANONICAL READ: get_active_containers (same predicate as everywhere else)
     all_containers = get_active_containers()
@@ -931,6 +931,12 @@ def investment_view(request):
     invest_choices = InvestDecision.choices()  # ['build', 'buy', 'assign_sme', 'defer']
     invest_labels = InvestDecision.display_labels()  # {'build': 'Build', 'buy': 'Buy', ...}
     
+    # InvestEffort and InvestCost choices
+    effort_choices = InvestEffort.choices()
+    effort_labels = InvestEffort.display_labels()
+    cost_choices = InvestCost.choices()
+    cost_labels = InvestCost.display_labels()
+    
     # Pagination - 20 items per page
     page = request.GET.get('page', 1)
     paginator = Paginator(filtered, 20)
@@ -949,6 +955,8 @@ def investment_view(request):
         'pending_count': pending_count,
         # invest_choices as list of (value, label) tuples for template iteration
         'invest_choices': [(c, invest_labels.get(c, c.title())) for c in invest_choices],
+        'effort_choices': [(c, effort_labels.get(c, c)) for c in effort_choices],
+        'cost_choices': [(c, cost_labels.get(c, c)) for c in cost_choices],
         'filter_decision': filter_decision,
         # Decision dropdown options: All, Pending (filter concept, not stored), then enum values
         'decision_options': [('All', 'All'), ('Pending', 'Pending')] + [(c, invest_labels.get(c, c)) for c in invest_choices],
@@ -1017,7 +1025,7 @@ def save_investment_batch_view(request):
     - Wrapped in database transaction
     """
     from db import update_resource_invest, transaction, execute
-    from models.enums import InvestDecision
+    from models.enums import InvestDecision, InvestEffort, InvestCost
     
     decision_filter = request.POST.get('decision_filter', 'All')
     dirty_keys_str = request.POST.get('dirty_keys', '').strip()
@@ -1032,11 +1040,14 @@ def save_investment_batch_view(request):
     validated_rows = []
     errors = []
     valid_decisions = InvestDecision.choices()
+    valid_efforts = InvestEffort.choices()
+    valid_costs = InvestCost.choices()
     
     for key in dirty_keys:
         decision_input = request.POST.get(f'decision_{key}', '').strip() or None
         owner_input = request.POST.get(f'owner_{key}', '').strip() or ''
         effort_input = request.POST.get(f'effort_{key}', '').strip() or None
+        cost_input = request.POST.get(f'cost_{key}', '').strip() or None
         notes_input = request.POST.get(f'notes_{key}', '').strip() or None
         
         # Validate decision if provided
@@ -1044,11 +1055,27 @@ def save_investment_batch_view(request):
             errors.append({'key': key[:30], 'reason': f'Invalid decision: {decision_input}'})
             continue
         
+        # Validate effort if provided
+        if effort_input and effort_input not in valid_efforts:
+            errors.append({'key': key[:30], 'reason': f'Invalid effort: {effort_input}'})
+            continue
+        
+        # Validate cost if provided
+        if cost_input and cost_input not in valid_costs:
+            errors.append({'key': key[:30], 'reason': f'Invalid cost: {cost_input}'})
+            continue
+        
+        # Validate notes length (max 250)
+        if notes_input and len(notes_input) > 250:
+            errors.append({'key': key[:30], 'reason': 'Notes exceed 250 characters'})
+            continue
+        
         validated_rows.append({
             'resource_key': key,
             'decision': decision_input,
             'owner': owner_input,
             'effort': effort_input,
+            'cost': cost_input,
             'notes': notes_input,
         })
     
@@ -1089,6 +1116,7 @@ def save_investment_batch_view(request):
                     decision=row['decision'],
                     owner=row['owner'],
                     effort=row['effort'],
+                    cost=row['cost'],
                     notes=row['notes'],
                     expected_version=expected_version,
                     reviewed_by=request.user.username,
@@ -1102,6 +1130,105 @@ def save_investment_batch_view(request):
     messages.success(request, f'Saved {persisted_count} item(s)')
     page = request.POST.get('current_page', '1')
     return redirect(f'/investment/?decision_filter={decision_filter}&page={page}')
+
+
+@login_required
+@require_http_methods(["POST"])
+def save_investment_single_view(request):
+    """
+    AJAX endpoint to save a single investment item from modal.
+    
+    CONTRACT:
+    - Returns JSON response
+    - On success: {success: true, resource_key: str}
+    - On error: {success: false, error: str}
+    - Supports optimistic locking via version parameter
+    """
+    import json
+    from django.http import JsonResponse
+    from db import update_resource_invest, execute
+    from models.enums import InvestDecision, InvestEffort, InvestCost
+    
+    try:
+        # Parse JSON body
+        data = json.loads(request.body)
+        resource_key = data.get('resource_key', '').strip()
+        decision = data.get('decision', '').strip() or None
+        owner = data.get('owner', '').strip() or ''
+        effort = data.get('effort', '').strip() or None
+        cost = data.get('cost', '').strip() or None
+        notes = data.get('notes', '').strip() or None
+        expected_version = data.get('version')
+        
+        if not resource_key:
+            return JsonResponse({'success': False, 'error': 'Missing resource_key'}, status=400)
+        
+        # Validate decision
+        if decision and decision not in InvestDecision.choices():
+            return JsonResponse({'success': False, 'error': f'Invalid decision: {decision}'}, status=400)
+        
+        # Validate effort
+        if effort and effort not in InvestEffort.choices():
+            return JsonResponse({'success': False, 'error': f'Invalid effort: {effort}'}, status=400)
+        
+        # Validate cost
+        if cost and cost not in InvestCost.choices():
+            return JsonResponse({'success': False, 'error': f'Invalid cost: {cost}'}, status=400)
+        
+        # Validate notes length
+        if notes and len(notes) > 250:
+            return JsonResponse({'success': False, 'error': 'Notes exceed 250 characters'}, status=400)
+        
+        # Check version if provided (optimistic locking)
+        if expected_version is not None:
+            expected_version = int(expected_version)
+            current = execute("""
+                SELECT COALESCE(invest_version, 1) as version 
+                FROM resources WHERE resource_key = ?
+            """, (resource_key,), fetch="one")
+            if current and current['version'] != expected_version:
+                return JsonResponse({
+                    'success': False, 
+                    'error': 'This item was modified by another user. Please refresh and try again.'
+                }, status=409)
+        
+        # Update the resource
+        success = update_resource_invest(
+            resource_key=resource_key,
+            decision=decision,
+            owner=owner,
+            effort=effort,
+            cost=cost,
+            notes=notes,
+            expected_version=expected_version,
+            reviewed_by=request.user.username,
+        )
+        
+        if not success:
+            return JsonResponse({
+                'success': False,
+                'error': 'This item was modified by another user. Please refresh and try again.'
+            }, status=409)
+        
+        # Get the new version for the response
+        updated = execute("""
+            SELECT COALESCE(invest_version, 1) as version,
+                   invest_modified_at, invest_modified_by
+            FROM resources WHERE resource_key = ?
+        """, (resource_key,), fetch="one")
+        
+        return JsonResponse({
+            'success': True,
+            'resource_key': resource_key,
+            'new_version': updated['version'] if updated else 1,
+            'modified_at': str(updated['invest_modified_at']) if updated and updated['invest_modified_at'] else None,
+            'modified_by': updated['invest_modified_by'] if updated else None,
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
 # =============================================================================

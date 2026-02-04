@@ -683,6 +683,27 @@ def init_db() -> None:
                     else:
                         raise
                 
+                # Migration: Add invest_cost, invest_modified_at, invest_modified_by columns
+                for col_def in [
+                    ('invest_cost', 'VARCHAR(20) DEFAULT NULL'),
+                    ('invest_modified_at', 'TIMESTAMP DEFAULT NULL'),
+                    ('invest_modified_by', 'VARCHAR(50) DEFAULT NULL'),
+                ]:
+                    col_name, col_type = col_def
+                    try:
+                        cursor.execute(f"""
+                            ALTER TABLE resources 
+                            ADD COLUMN {col_name} {col_type}
+                        """)
+                        conn.commit()
+                        _logger.info(f"Migration: Added {col_name} column")
+                    except Exception as e:
+                        conn.rollback()
+                        if 'already exists' in str(e).lower() or 'duplicate' in str(e).lower():
+                            _logger.debug(f"Column {col_name} already exists, skipping")
+                        else:
+                            raise
+                
             conn.commit()
             _logger.info("init_db() completed successfully")
         finally:
@@ -975,6 +996,7 @@ def update_resource_invest(
     decision: str,
     owner: str,
     effort: str = None,
+    cost: str = None,
     notes: str = None,
     expected_version: int = None,
     reviewed_by: str = None,
@@ -982,6 +1004,17 @@ def update_resource_invest(
 ) -> bool:
     """
     Update investment fields for a resource with optimistic locking.
+    
+    Args:
+        resource_key: Unique resource identifier
+        decision: One of InvestDecision values (build, buy, assign_sme, defer)
+        owner: Free text owner name
+        effort: One of InvestEffort values (<1w, 1-2w, etc.)
+        cost: One of InvestCost values ($0, <$500, etc.)
+        notes: Free text notes (max 250 chars)
+        expected_version: For optimistic locking
+        reviewed_by: Username making the change
+        conn: Optional connection from transaction context
     
     Returns:
         True if update succeeded, False if version conflict
@@ -992,11 +1025,13 @@ def update_resource_invest(
         execute("""
             UPDATE resources SET
                 invest_decision = ?, invest_owner = ?, invest_effort = ?,
-                invest_notes = ?, invest_updated = ?,
+                invest_cost = ?, invest_notes = ?, invest_updated = ?,
                 invest_version = COALESCE(invest_version, 1) + 1,
+                invest_modified_at = NOW(),
+                invest_modified_by = ?,
                 last_reviewed_by = ?
             WHERE resource_key = ? AND COALESCE(invest_version, 1) = ?
-        """, (decision, owner, effort, notes, now, reviewed_by, resource_key, expected_version), conn=conn)
+        """, (decision, owner, effort, cost, notes, now, reviewed_by, reviewed_by, resource_key, expected_version), conn=conn)
         
         # Check if update happened
         check = execute(
@@ -1010,11 +1045,13 @@ def update_resource_invest(
         execute("""
             UPDATE resources SET
                 invest_decision = ?, invest_owner = ?, invest_effort = ?,
-                invest_notes = ?, invest_updated = ?,
+                invest_cost = ?, invest_notes = ?, invest_updated = ?,
                 invest_version = COALESCE(invest_version, 1) + 1,
+                invest_modified_at = NOW(),
+                invest_modified_by = ?,
                 last_reviewed_by = ?
             WHERE resource_key = ?
-        """, (decision, owner, effort, notes, now, reviewed_by, resource_key), conn=conn)
+        """, (decision, owner, effort, cost, notes, now, reviewed_by, reviewed_by, resource_key), conn=conn)
         return True
 
 
