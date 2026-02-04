@@ -175,29 +175,46 @@
 
 <style>
 /* ============================================
-   CHAT SIDEBAR - LIGHT THEME (matches TCM)
+   CHAT SIDEBAR - PERSISTENT PANEL (Gemini-style)
    ============================================ */
 
+/* Navbar height variable for positioning */
+:root {
+    --navbar-height: 56px;
+}
+
+/* Main content wrapper - shrinks when chat open on desktop */
+body.chat-open main,
+body.chat-open .container-fluid.mt-3 {
+    margin-right: var(--chat-sidebar-width, 350px);
+    transition: margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Sidebar: starts below navbar, persistent on desktop */
 .chat-sidebar {
     position: fixed;
-    top: 0;
-    right: -400px;
+    top: var(--navbar-height);
+    right: 0;
     width: 350px;
     min-width: 350px;
     max-width: 600px;
-    height: 100vh;
+    height: calc(100vh - var(--navbar-height));
     background: #ffffff;
     box-shadow: -4px 0 20px rgba(0, 29, 78, 0.15);
-    z-index: 1060;
+    z-index: 1040;
     display: flex;
     flex-direction: column;
-    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: translateX(100%);
+    visibility: hidden;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.3s;
 }
 
 .chat-sidebar.open {
-    right: 0;
+    transform: translateX(0);
+    visibility: visible;
 }
 
+/* Resize handle */
 .chat-resize-handle {
     position: absolute;
     left: 0;
@@ -215,6 +232,7 @@
     background: var(--payroc-cobalt, #0051C2);
 }
 
+/* Header */
 .chat-sidebar-header {
     display: flex;
     justify-content: space-between;
@@ -225,6 +243,7 @@
     color: var(--payroc-navy, #001D4E);
 }
 
+/* Conversation History */
 .chat-sidebar-history {
     padding: 0.75rem;
     background: var(--payroc-sky, #F4F7FE);
@@ -267,6 +286,7 @@
     color: white;
 }
 
+/* Messages Area */
 .chat-sidebar-messages {
     flex: 1;
     overflow-y: auto;
@@ -312,6 +332,7 @@
     margin-bottom: 0;
 }
 
+/* Input Area */
 .chat-sidebar-input {
     padding: 1rem;
     background: var(--payroc-sky, #F4F7FE);
@@ -323,42 +344,61 @@
     max-height: 120px;
 }
 
+/* Overlay - only visible on mobile/tablet */
 .chat-overlay {
     position: fixed;
-    top: 0;
+    top: var(--navbar-height);
     left: 0;
     width: 100%;
-    height: 100%;
+    height: calc(100vh - var(--navbar-height));
     background: rgba(0, 29, 78, 0.3);
-    z-index: 1055;
+    z-index: 1035;
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.3s, visibility 0.3s;
 }
 
-.chat-overlay.visible {
-    opacity: 1;
-    visibility: visible;
+/* Desktop: hide overlay, show persistent panel */
+@media (min-width: 992px) {
+    .chat-overlay {
+        display: none !important;
+    }
 }
 
+/* Tablet/Mobile: show overlay when open */
+@media (max-width: 991.98px) {
+    .chat-overlay.visible {
+        opacity: 1;
+        visibility: visible;
+    }
+    
+    /* Don't shrink content on mobile */
+    body.chat-open main,
+    body.chat-open .container-fluid.mt-3 {
+        margin-right: 0;
+    }
+}
+
+/* Small mobile: full width sidebar */
 @media (max-width: 576px) {
     .chat-sidebar {
         width: 100% !important;
         min-width: 100%;
         max-width: 100%;
-        right: -100%;
     }
     .chat-resize-handle {
         display: none;
     }
 }
 
+/* Touch devices: hide resize handle */
 @media (pointer: coarse) {
     .chat-resize-handle {
         display: none;
     }
 }
 
+/* Typing indicator */
 .typing-indicator {
     display: flex;
     gap: 4px;
@@ -399,12 +439,30 @@
     
     if (!toggleBtn || !sidebar) return;
     
-    const STORAGE_KEY = 'tcm_chat_width';
+    const WIDTH_KEY = 'tcm_chat_width';
+    const STATE_KEY = 'tcm_chat_open';
     const MIN_WIDTH = 350;
     const MAX_WIDTH = 600;
+    const DESKTOP_BREAKPOINT = 992;
     
+    // Check if desktop
+    function isDesktop() {
+        return window.innerWidth >= DESKTOP_BREAKPOINT;
+    }
+    
+    // Update CSS variable for main content margin
+    function updateContentMargin() {
+        if (isDesktop() && sidebar.classList.contains('open')) {
+            const width = sidebar.offsetWidth;
+            document.documentElement.style.setProperty('--chat-sidebar-width', width + 'px');
+        } else {
+            document.documentElement.style.setProperty('--chat-sidebar-width', '0px');
+        }
+    }
+    
+    // Load saved width (desktop only)
     if (window.matchMedia('(pointer: fine)').matches) {
-        const savedWidth = localStorage.getItem(STORAGE_KEY);
+        const savedWidth = localStorage.getItem(WIDTH_KEY);
         if (savedWidth) {
             const w = parseInt(savedWidth, 10);
             if (w >= MIN_WIDTH && w <= MAX_WIDTH) {
@@ -413,27 +471,61 @@
         }
     }
     
+    // Open sidebar
     function openSidebar() {
         sidebar.classList.add('open');
-        overlay.classList.add('visible');
+        document.body.classList.add('chat-open');
+        
+        if (!isDesktop()) {
+            overlay.classList.add('visible');
+        }
+        
+        updateContentMargin();
+        localStorage.setItem(STATE_KEY, 'open');
         setTimeout(() => input.focus(), 300);
     }
     
+    // Close sidebar
     function closeSidebar() {
         sidebar.classList.remove('open');
+        document.body.classList.remove('chat-open');
         overlay.classList.remove('visible');
+        updateContentMargin();
+        localStorage.setItem(STATE_KEY, 'closed');
     }
     
-    toggleBtn.addEventListener('click', openSidebar);
+    // Toggle sidebar
+    function toggleSidebar() {
+        if (sidebar.classList.contains('open')) {
+            closeSidebar();
+        } else {
+            openSidebar();
+        }
+    }
+    
+    // Event listeners
+    toggleBtn.addEventListener('click', toggleSidebar);
     closeBtn.addEventListener('click', closeSidebar);
     overlay.addEventListener('click', closeSidebar);
     
+    // Escape key closes on mobile, toggles on desktop
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && sidebar.classList.contains('open')) {
             closeSidebar();
         }
     });
     
+    // Handle window resize - update margin and overlay visibility
+    window.addEventListener('resize', () => {
+        updateContentMargin();
+        if (isDesktop()) {
+            overlay.classList.remove('visible');
+        } else if (sidebar.classList.contains('open')) {
+            overlay.classList.add('visible');
+        }
+    });
+    
+    // Resize handle (desktop + mouse only)
     let isResizing = false;
     
     if (resizeHandle && window.matchMedia('(pointer: fine)').matches) {
@@ -450,6 +542,7 @@
             const newWidth = window.innerWidth - e.clientX;
             if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) {
                 sidebar.style.width = newWidth + 'px';
+                updateContentMargin();
             }
         });
         
@@ -459,16 +552,18 @@
                 resizeHandle.classList.remove('dragging');
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
-                localStorage.setItem(STORAGE_KEY, sidebar.offsetWidth);
+                localStorage.setItem(WIDTH_KEY, sidebar.offsetWidth);
             }
         });
     }
     
+    // Textarea auto-resize
     input.addEventListener('input', function() {
         this.style.height = 'auto';
         this.style.height = Math.min(this.scrollHeight, 120) + 'px';
     });
     
+    // Send message (mock)
     function sendMessage() {
         const text = input.value.trim();
         if (!text) return;
@@ -521,6 +616,10 @@
     newChatBtn.addEventListener('click', () => {
         messagesContainer.innerHTML = '<div class="chat-message assistant"><div class="chat-message-content"><p>Hi! I\'m your TCM Assistant. Ask me anything about your training content.</p><p class="text-muted small mb-0">Try: "How many courses are in Onboarding?"</p></div></div>';
     });
+    
+    // Restore state on page load (desktop only, starts closed by default)
+    // Intentionally NOT restoring open state to match "closed by default" requirement
+    // The saved state is only used for width persistence
 })();
 </script>
 
