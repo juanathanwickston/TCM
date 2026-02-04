@@ -713,6 +713,61 @@ def init_db() -> None:
                     )
                 """)
                 
+                # =========================================================
+                # Chat Tables (for AI Chatbot)
+                # =========================================================
+                
+                # Chat conversations
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS chat_conversations (
+                        conversation_id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        title TEXT DEFAULT 'New conversation',
+                        created_at TIMESTAMP DEFAULT NOW(),
+                        updated_at TIMESTAMP DEFAULT NOW()
+                    )
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_chat_conv_user 
+                    ON chat_conversations(user_id)
+                """)
+                
+                # Chat messages
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS chat_messages (
+                        message_id SERIAL PRIMARY KEY,
+                        conversation_id INTEGER REFERENCES chat_conversations(conversation_id) ON DELETE CASCADE,
+                        role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+                        content TEXT NOT NULL,
+                        metadata JSONB,
+                        created_at TIMESTAMP DEFAULT NOW()
+                    )
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_chat_msg_conv 
+                    ON chat_messages(conversation_id)
+                """)
+                
+                # Undo buffer (per-user, single action)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS chat_undo_buffer (
+                        user_id INTEGER PRIMARY KEY,
+                        action_type TEXT,
+                        affected_keys TEXT[],
+                        previous_state JSONB,
+                        created_at TIMESTAMP DEFAULT NOW()
+                    )
+                """)
+                
+                # Pending actions (awaiting confirmation)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS chat_pending_actions (
+                        user_id INTEGER PRIMARY KEY,
+                        action_data JSONB NOT NULL,
+                        created_at TIMESTAMP DEFAULT NOW()
+                    )
+                """)
+                
             conn.commit()
             _logger.info("init_db() completed successfully")
         finally:

@@ -1725,3 +1725,139 @@ def reset_password_view(request, user_id):
     
     return JsonResponse({'success': True})
 
+
+# =============================================================================
+# CHAT API ENDPOINTS
+# =============================================================================
+
+@login_required
+@require_http_methods(["POST"])
+def api_chat(request):
+    """
+    Send a message to the AI chatbot and get a response.
+    
+    POST body:
+        message: str - User's message
+        conversation_id: int - Existing conversation ID (optional, creates new if missing)
+        context: dict - Current page context (optional)
+    
+    Returns:
+        response: str - Bot's response
+        action_pending: bool - True if awaiting confirmation
+        action_preview: dict - Details of pending action (if any)
+        conversation_id: int - Conversation ID (new or existing)
+    """
+    import json
+    from django.http import JsonResponse
+    from services.chat_service import ChatService, create_conversation
+    
+    try:
+        data = json.loads(request.body)
+        message = data.get('message', '').strip()
+        conversation_id = data.get('conversation_id')
+        context = data.get('context', {})
+        
+        if not message:
+            return JsonResponse({'error': 'Message required'}, status=400)
+        
+        # Create new conversation if needed
+        if not conversation_id:
+            conversation_id = create_conversation(request.user.id)
+        
+        # Process message
+        service = ChatService(request.user.id, request.user.username)
+        result = service.send_message(message, conversation_id, context)
+        
+        return JsonResponse(result)
+    
+    except ValueError as e:
+        # Missing API key
+        return JsonResponse({'error': str(e)}, status=500)
+    except Exception as e:
+        import logging
+        logging.error(f"Chat API error: {e}")
+        return JsonResponse({'error': 'Something went wrong. Please try again.'}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_chat_confirm(request):
+    """
+    Confirm and execute a pending action.
+    """
+    import json
+    from django.http import JsonResponse
+    from services.chat_service import ChatService
+    
+    try:
+        data = json.loads(request.body)
+        conversation_id = data.get('conversation_id')
+        
+        if not conversation_id:
+            return JsonResponse({'error': 'Conversation ID required'}, status=400)
+        
+        service = ChatService(request.user.id, request.user.username)
+        # Send 'yes' to trigger confirmation flow
+        result = service.send_message('yes', conversation_id, {})
+        
+        return JsonResponse(result)
+    
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_chat_undo(request):
+    """
+    Undo the last action.
+    """
+    from django.http import JsonResponse
+    from services.chat_service import ChatService
+    
+    try:
+        service = ChatService(request.user.id, request.user.username)
+        result = service.undo_last_action()
+        return JsonResponse(result)
+    
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_chat_conversations(request):
+    """
+    List user's conversations.
+    """
+    from django.http import JsonResponse
+    from services.chat_service import get_conversations
+    
+    convs = get_conversations(request.user.id)
+    return JsonResponse({'conversations': [dict(c) for c in convs]})
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_chat_messages(request, conversation_id):
+    """
+    Get messages for a specific conversation.
+    """
+    from django.http import JsonResponse
+    from services.chat_service import get_messages
+    
+    messages = get_messages(conversation_id)
+    return JsonResponse({'messages': [dict(m) for m in messages]})
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_chat_new(request):
+    """
+    Create a new conversation.
+    """
+    from django.http import JsonResponse
+    from services.chat_service import create_conversation
+    
+    conv_id = create_conversation(request.user.id)
+    return JsonResponse({'conversation_id': conv_id})

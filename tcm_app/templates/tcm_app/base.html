@@ -563,8 +563,52 @@ body.chat-open .container-fluid.mt-3 {
         this.style.height = Math.min(this.scrollHeight, 120) + 'px';
     });
     
-    // Send message (mock)
-    function sendMessage() {
+    // Chat state
+    let currentConversationId = null;
+    let actionPending = false;
+    const API_BASE = '/api/chat';
+    
+    // Get CSRF token
+    function getCsrfToken() {
+        return document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+               document.cookie.split('; ').find(c => c.startsWith('csrftoken='))?.split('=')[1] || '';
+    }
+    
+    // Load last conversation on page load
+    async function loadLastConversation() {
+        try {
+            const resp = await fetch(`${API_BASE}/conversations/`, {
+                credentials: 'same-origin',
+            });
+            if (!resp.ok) return;
+            const data = await resp.json();
+            if (data.conversations && data.conversations.length > 0) {
+                currentConversationId = data.conversations[0].conversation_id;
+                await loadMessages(currentConversationId);
+            }
+        } catch (e) {
+            console.debug('No previous conversations:', e);
+        }
+    }
+    
+    async function loadMessages(convId) {
+        try {
+            const resp = await fetch(`${API_BASE}/conversations/${convId}/`, {
+                credentials: 'same-origin',
+            });
+            if (!resp.ok) return;
+            const data = await resp.json();
+            if (data.messages && data.messages.length > 0) {
+                messagesContainer.innerHTML = '';
+                data.messages.forEach(m => addMessage(m.role, m.content));
+            }
+        } catch (e) {
+            console.debug('Failed to load messages:', e);
+        }
+    }
+    
+    // Send message to API
+    async function sendMessage() {
         const text = input.value.trim();
         if (!text) return;
         
@@ -574,10 +618,154 @@ body.chat-open .container-fluid.mt-3 {
         
         const typingEl = addTypingIndicator();
         
-        setTimeout(() => {
+        try {
+            const context = {
+                current_page: document.body.dataset.page || '{{ request.resolver_match.url_name|default:"dashboard" }}',
+                filters: {},
+                selected_resources: getSelectedResources(),
+            };
+            
+            const resp = await fetch(`${API_BASE}/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken(),
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    message: text,
+                    conversation_id: currentConversationId,
+                    context: context,
+                }),
+            });
+            
             typingEl.remove();
-            addMessage('assistant', 'I received: "' + text + '"\n\nBackend not connected yet.');
-        }, 1200);
+            
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                addMessage('assistant', err.error || 'Something went wrong. Try again?');
+                return;
+            }
+            
+            const data = await resp.json();
+            currentConversationId = data.conversation_id;
+            addMessage('assistant', data.response);
+            
+            if (data.action_pending) {
+                showConfirmationButtons();
+                actionPending = true;
+            }
+            
+            if (data.undo_available) {
+                showUndoButton();
+            }
+            
+        } catch (e) {
+            typingEl.remove();
+            addMessage('assistant', 'Connection error. Please try again.');
+        }
+    }
+    
+    function getSelectedResources() {
+        const checked = document.querySelectorAll('input[name="selected_resources"]:checked, input[type="checkbox"][data-resource-key]:checked');
+        return Array.from(checked).map(cb => cb.value || cb.dataset.resourceKey);
+    }
+    
+    function showConfirmationButtons() {
+        removeActionButtons();
+        const div = document.createElement('div');
+        div.className = 'chat-action-buttons d-flex gap-2 p-2';
+        div.innerHTML = `
+            <button class="btn btn-sm btn-primary" onclick="confirmAction()">Yes, go ahead</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="cancelAction()">Cancel</button>
+        `;
+        messagesContainer.appendChild(div);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+    
+    function removeActionButtons() {
+        const btns = messagesContainer.querySelector('.chat-action-buttons');
+        if (btns) btns.remove();
+    }
+    
+    window.confirmAction = async function() {
+        removeActionButtons();
+        const typingEl = addTypingIndicator();
+        
+        try {
+            const resp = await fetch(`${API_BASE}/confirm/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken(),
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({ conversation_id: currentConversationId }),
+            });
+            
+            typingEl.remove();
+            const data = await resp.json();
+            addMessage('assistant', data.response);
+            
+            if (data.undo_available) {
+                showUndoButton();
+            }
+            actionPending = false;
+            
+        } catch (e) {
+            typingEl.remove();
+            addMessage('assistant', 'Failed to apply changes. Try again?');
+        }
+    };
+    
+    window.cancelAction = function() {
+        removeActionButtons();
+        addMessage('assistant', 'No problem, cancelled. What else?');
+        actionPending = false;
+    };
+    
+    function showUndoButton() {
+        let undoBtn = document.getElementById('chatUndoBtn');
+        if (!undoBtn) {
+            undoBtn = document.createElement('button');
+            undoBtn.id = 'chatUndoBtn';
+            undoBtn.className = 'btn btn-sm btn-outline-warning ms-2';
+            undoBtn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Undo';
+            undoBtn.onclick = undoLastAction;
+            const headerBtns = document.querySelector('.chat-sidebar-header .d-flex');
+            if (headerBtns) headerBtns.appendChild(undoBtn);
+        }
+        undoBtn.style.display = 'inline-block';
+    }
+    
+    function hideUndoButton() {
+        const undoBtn = document.getElementById('chatUndoBtn');
+        if (undoBtn) undoBtn.style.display = 'none';
+    }
+    
+    async function undoLastAction() {
+        const typingEl = addTypingIndicator();
+        
+        try {
+            const resp = await fetch(`${API_BASE}/undo/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken(),
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({}),
+            });
+            
+            typingEl.remove();
+            const data = await resp.json();
+            addMessage('assistant', data.message);
+            hideUndoButton();
+            
+        } catch (e) {
+            typingEl.remove();
+            addMessage('assistant', 'Undo failed.');
+        }
     }
     
     function addMessage(role, content) {
@@ -613,13 +801,33 @@ body.chat-open .container-fluid.mt-3 {
         }
     });
     
-    newChatBtn.addEventListener('click', () => {
-        messagesContainer.innerHTML = '<div class="chat-message assistant"><div class="chat-message-content"><p>Hi! I\'m your TCM Assistant. Ask me anything about your training content.</p><p class="text-muted small mb-0">Try: "How many courses are in Onboarding?"</p></div></div>';
+    newChatBtn.addEventListener('click', async () => {
+        try {
+            const resp = await fetch(`${API_BASE}/new/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken(),
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({}),
+            });
+            const data = await resp.json();
+            currentConversationId = data.conversation_id;
+            messagesContainer.innerHTML = '';
+            addMessage('assistant', "Hey! What can I help you with?");
+            hideUndoButton();
+        } catch (e) {
+            console.error('Failed to create conversation:', e);
+        }
     });
     
-    // Restore state on page load (desktop only, starts closed by default)
-    // Intentionally NOT restoring open state to match "closed by default" requirement
-    // The saved state is only used for width persistence
+    // Load last conversation when sidebar opens  
+    toggleBtn.addEventListener('click', () => {
+        if (!currentConversationId && sidebar.classList.contains('open')) {
+            loadLastConversation();
+        }
+    });
 })();
 </script>
 

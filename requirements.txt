@@ -22,3 +22,5 @@ dj-database-url>=2.1.0
 whitenoise>=6.6.0
 gunicorn>=21.0.0
 
+# OpenAI (chatbot AI)
+openai>=1.0.0

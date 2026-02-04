@@ -33,5 +33,13 @@ urlpatterns = [
     path('tools/users/update/<int:user_id>/', views.update_user_view, name='update_user'),
     path('tools/users/delete/<int:user_id>/', views.delete_user_view, name='delete_user'),
     path('tools/users/reset-password/<int:user_id>/', views.reset_password_view, name='reset_password'),
+    
+    # Chat API
+    path('api/chat/', views.api_chat, name='api_chat'),
+    path('api/chat/confirm/', views.api_chat_confirm, name='api_chat_confirm'),
+    path('api/chat/undo/', views.api_chat_undo, name='api_chat_undo'),
+    path('api/chat/conversations/', views.api_chat_conversations, name='api_chat_conversations'),
+    path('api/chat/conversations/<int:conversation_id>/', views.api_chat_messages, name='api_chat_messages'),
+    path('api/chat/new/', views.api_chat_new, name='api_chat_new'),
 ]
 
