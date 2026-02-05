@@ -99,6 +99,11 @@ BEFORE CHANGING ANYTHING:
 - System shows preview and asks for confirmation
 - Explain consequences of bulk updates
 - Offer safer alternatives when relevant
+
+HANDLING FOLLOW-UP REQUESTS:
+- When user says "those", "them", "these resources" after a query, use the resource_keys from PREVIOUS QUERY CONTEXT
+- Pass resource_keys directly to prepare_scrub_update or prepare_invest_update  
+- If no resource_keys are available, ask user to first query the resources they want to update
 """
 
 # 10 Gold Examples for few-shot learning
@@ -508,6 +513,11 @@ class ChatService:
         # Build conversation history for context
         history = _get_conversation_history(conversation_id, limit=10)
         
+        # Inject stored query context into selected_resources for follow-up support
+        query_ctx = get_query_context(conversation_id)
+        if query_ctx and query_ctx.get('resource_keys'):
+            context['selected_resources'] = query_ctx['resource_keys'][:100]
+        
         # Call OpenAI with function calling
         try:
             result = self._call_openai(message, history, context, conversation_id)
@@ -541,12 +551,18 @@ class ChatService:
         query_ctx = get_query_context(conv_id)
         query_ctx_block = ""
         if query_ctx:
+            resource_keys = query_ctx.get('resource_keys', [])
+            keys_preview = resource_keys[:20] if resource_keys else []
+            keys_display = json.dumps(keys_preview) if keys_preview else "None"
+            filters_display = json.dumps(query_ctx.get('filters', {})) if query_ctx.get('filters') else query_ctx.get('query', 'N/A')
             query_ctx_block = f"""
-PREVIOUS QUERY (use for follow-ups like "those", "that list", "more details"):
+PREVIOUS QUERY CONTEXT (for follow-ups like "those", "them", "set these"):
 - Type: {query_ctx.get('type', 'query')}
-- Filters/Query: {json.dumps(query_ctx.get('filters', {})) if query_ctx.get('filters') else query_ctx.get('query', '')}
+- Filters/Query: {filters_display}
 - Count: {query_ctx.get('count', 0)}
-- Has resource keys: {'Yes - use same filters with return_type=list' if query_ctx.get('resource_keys') else 'No'}
+- Resource keys (first 20): {keys_display}
+
+CRITICAL FOLLOW-UP RULE: When user says "set those/them/these to X", you MUST pass these resource_keys to prepare_scrub_update. Do NOT call with empty resource_keys if keys are available above.
 """
         
         system_prompt = SYSTEM_PROMPT + "\n" + GOLD_EXAMPLES + f"""
@@ -594,13 +610,13 @@ CURRENT CONTEXT:
             return self._handle_query(args, conv_id)
         
         elif name == "prepare_scrub_update":
-            return self._prepare_scrub_update(args, context)
+            return self._prepare_scrub_update(args, context, conv_id)
         
         elif name == "prepare_invest_update":
-            return self._prepare_invest_update(args, context)
+            return self._prepare_invest_update(args, context, conv_id)
         
         elif name == "prepare_sales_stage_update":
-            return self._prepare_sales_stage_update(args, context)
+            return self._prepare_sales_stage_update(args, context, conv_id)
         
         # Strategic advisor tools
         elif name == "search_resources":
@@ -758,7 +774,7 @@ CURRENT CONTEXT:
         
         return " " + " ".join(parts) if parts else ""
     
-    def _prepare_scrub_update(self, args: Dict, context: Dict) -> Dict:
+    def _prepare_scrub_update(self, args: Dict, context: Dict, conv_id: int) -> Dict:
         """Prepare a scrub update and request confirmation."""
         updates = args.get('updates', {})
         resource_keys = args.get('resource_keys', [])
@@ -772,8 +788,15 @@ CURRENT CONTEXT:
         if not resource_keys:
             resource_keys = context.get('selected_resources', [])
         
+        # Auto-recovery: Last resort, check query_context directly
         if not resource_keys:
-            return {'response': "I need to know which resources to update. Can you be more specific or select some items?"}
+            query_ctx = get_query_context(conv_id)
+            if query_ctx and query_ctx.get('resource_keys'):
+                resource_keys = query_ctx['resource_keys'][:100]
+                logger.info(f"Auto-recovered {len(resource_keys)} keys from query_context")
+        
+        if not resource_keys:
+            return {'response': "I need to know which resources to update. Try 'show me X resources' first, then 'set those to Y'."}
         
         # Validate updates
         if updates.get('scrub_status') and updates['scrub_status'] not in CANONICAL_SCRUB_STATUSES:
@@ -854,7 +877,7 @@ CURRENT CONTEXT:
             'metadata': {'pending_action': action},
         }
     
-    def _prepare_invest_update(self, args: Dict, context: Dict) -> Dict:
+    def _prepare_invest_update(self, args: Dict, context: Dict, conv_id: int) -> Dict:
         """Prepare an investment update."""
         # Similar structure to scrub update
         updates = args.get('updates', {})
@@ -863,8 +886,15 @@ CURRENT CONTEXT:
         if not resource_keys:
             resource_keys = context.get('selected_resources', [])
         
+        # Auto-recovery: Last resort, check query_context directly
         if not resource_keys:
-            return {'response': "Which resources should I update?"}
+            query_ctx = get_query_context(conv_id)
+            if query_ctx and query_ctx.get('resource_keys'):
+                resource_keys = query_ctx['resource_keys'][:100]
+                logger.info(f"Auto-recovered {len(resource_keys)} keys from query_context")
+        
+        if not resource_keys:
+            return {'response': "Which resources should I update? Try 'show me X resources' first, then 'set those to Y'."}
         
         resources = self._get_resource_names(resource_keys)
         if not resources:
@@ -889,7 +919,7 @@ CURRENT CONTEXT:
             'action_preview': {'type': 'invest_update', 'count': len(names)},
         }
     
-    def _prepare_sales_stage_update(self, args: Dict, context: Dict) -> Dict:
+    def _prepare_sales_stage_update(self, args: Dict, context: Dict, conv_id: int) -> Dict:
         """Prepare a sales stage update."""
         resource_keys = args.get('resource_keys', [])
         sales_stage = args.get('sales_stage')
@@ -897,8 +927,15 @@ CURRENT CONTEXT:
         if not resource_keys:
             resource_keys = context.get('selected_resources', [])
         
+        # Auto-recovery: Last resort, check query_context directly
         if not resource_keys:
-            return {'response': "Which resources should I update?"}
+            query_ctx = get_query_context(conv_id)
+            if query_ctx and query_ctx.get('resource_keys'):
+                resource_keys = query_ctx['resource_keys'][:100]
+                logger.info(f"Auto-recovered {len(resource_keys)} keys from query_context")
+        
+        if not resource_keys:
+            return {'response': "Which resources should I update? Try 'show me X resources' first, then 'set those to Y'."}
         
         if sales_stage not in SALES_STAGE_KEYS:
             return {'response': f"'{sales_stage}' isn't a valid sales stage."}
@@ -1544,7 +1581,7 @@ CURRENT CONTEXT:
         params = []
         
         if filter_criteria.get('bucket'):
-            conditions.append("bucket = ?")
+            conditions.append("LOWER(bucket) = LOWER(?)")
             params.append(filter_criteria['bucket'])
         
         if filter_criteria.get('scrub_status'):
