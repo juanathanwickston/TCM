@@ -1546,7 +1546,8 @@ CURRENT CONTEXT:
         if not buffer:
             return {'success': False, 'message': "Nothing to undo."}
         
-        previous = json.loads(buffer['previous_state'])
+        prev_data = buffer['previous_state']
+        previous = json.loads(prev_data) if isinstance(prev_data, str) else prev_data
         restored = 0
         
         with db.transaction() as conn:
@@ -1715,7 +1716,8 @@ def get_pending_action(user_id: int) -> Optional[Dict]:
         (user_id,), fetch="one"
     )
     if result:
-        return json.loads(result['action_data'])
+        data = result['action_data']
+        return json.loads(data) if isinstance(data, str) else data
     return None
 
 
