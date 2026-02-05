@@ -640,7 +640,7 @@ CURRENT CONTEXT:
         params = []
         
         if filters.get('bucket'):
-            conditions.append("bucket = ?")
+            conditions.append("LOWER(bucket) = LOWER(?)")
             params.append(filters['bucket'])
         
         if filters.get('scrub_status'):
