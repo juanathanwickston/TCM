@@ -640,13 +640,26 @@ html.chat-preopen .chat-sidebar.open {
     // Load last conversation on page load
     async function loadLastConversation() {
         try {
+            // First try to restore saved conversation
+            const savedConvId = localStorage.getItem('tcm_chat_conv_id');
+            
             const resp = await fetch(`${API_BASE}/conversations/`, {
                 credentials: 'same-origin',
             });
             if (!resp.ok) return;
             const data = await resp.json();
+            
             if (data.conversations && data.conversations.length > 0) {
-                currentConversationId = data.conversations[0].conversation_id;
+                // Check if saved conversation still exists
+                const savedExists = savedConvId && data.conversations.some(c => c.conversation_id === parseInt(savedConvId));
+                
+                if (savedExists) {
+                    currentConversationId = parseInt(savedConvId);
+                } else {
+                    // Fall back to most recent
+                    currentConversationId = data.conversations[0].conversation_id;
+                    localStorage.setItem('tcm_chat_conv_id', currentConversationId);
+                }
                 await loadMessages(currentConversationId);
             }
         } catch (e) {
@@ -903,23 +916,44 @@ html.chat-preopen .chat-sidebar.open {
                         if (!confirm('Delete this conversation?')) return;
                         
                         const convId = btn.dataset.convId;
+                        const item = btn.closest('.chat-history-item');
+                        
+                        // Loading state
+                        btn.disabled = true;
+                        btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+                        
                         try {
                             const resp = await fetch(`${API_BASE}/conversations/${convId}/delete/`, {
                                 method: 'POST',
                                 credentials: 'same-origin',
-                                headers: { 'Content-Type': 'application/json' }
+                                headers: { 
+                                    'Content-Type': 'application/json',
+                                    'X-CSRFToken': getCsrfToken()
+                                }
                             });
                             if (resp.ok) {
                                 // Remove from UI
-                                btn.closest('.chat-history-item').remove();
+                                item.remove();
                                 // If this was the current conversation, reset
                                 if (parseInt(convId) === currentConversationId) {
                                     currentConversationId = null;
+                                    localStorage.removeItem('tcm_chat_conv_id');
                                     messagesContainer.innerHTML = '<div class="chat-message assistant"><div class="chat-message-content"><p>Hi! I\'m your TCM Assistant. Ask me anything about your training content.</p></div></div>';
                                 }
+                                // Check if list is empty
+                                if (!historyList.querySelector('.chat-history-item')) {
+                                    historyList.innerHTML = '<div class="text-muted small p-2">No previous conversations</div>';
+                                }
+                            } else {
+                                alert('Failed to delete. Please try again.');
+                                btn.disabled = false;
+                                btn.innerHTML = '<i class="bi bi-trash"></i>';
                             }
                         } catch (e) {
                             console.error('Failed to delete:', e);
+                            alert('Failed to delete. Please try again.');
+                            btn.disabled = false;
+                            btn.innerHTML = '<i class="bi bi-trash"></i>';
                         }
                     });
                 });
@@ -936,11 +970,15 @@ html.chat-preopen .chat-sidebar.open {
     async function loadConversation(convId) {
         try {
             currentConversationId = parseInt(convId);
-            messagesContainer.innerHTML = '';
+            localStorage.setItem('tcm_chat_conv_id', currentConversationId);
+            
+            // Show loading state
+            messagesContainer.innerHTML = '<div class="text-center text-muted p-3"><i class="bi bi-hourglass-split"></i> Loading...</div>';
             
             const resp = await fetch(`${API_BASE}/conversations/${convId}/`, { credentials: 'same-origin' });
             const data = await resp.json();
             
+            messagesContainer.innerHTML = '';
             if (data.messages && data.messages.length > 0) {
                 data.messages.forEach(m => addMessage(m.role, m.content));
             } else {
@@ -954,6 +992,7 @@ html.chat-preopen .chat-sidebar.open {
             hideUndoButton();
         } catch (e) {
             console.error('Failed to load conversation:', e);
+            messagesContainer.innerHTML = '<div class="text-center text-danger p-3">Failed to load conversation</div>';
         }
     }
     
@@ -970,6 +1009,15 @@ html.chat-preopen .chat-sidebar.open {
     });
     
     newChatBtn.addEventListener('click', async () => {
+        // Prevent creating duplicate empty conversations
+        // Check if current conversation only has the welcome message (1 child = empty)
+        if (currentConversationId && messagesContainer.children.length <= 1) {
+            // Reuse existing empty conversation
+            messagesContainer.innerHTML = '';
+            addMessage('assistant', "Hey! What can I help you with?");
+            return;
+        }
+        
         try {
             const resp = await fetch(`${API_BASE}/new/`, {
                 method: 'POST',
@@ -982,6 +1030,7 @@ html.chat-preopen .chat-sidebar.open {
             });
             const data = await resp.json();
             currentConversationId = data.conversation_id;
+            localStorage.setItem('tcm_chat_conv_id', currentConversationId);
             messagesContainer.innerHTML = '';
             addMessage('assistant', "Hey! What can I help you with?");
             hideUndoButton();
