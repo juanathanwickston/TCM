@@ -494,6 +494,15 @@ class ChatService:
         # Save user message
         _save_message(conversation_id, 'user', message)
         
+        # Auto-title: Set title from first user message if still "New conversation"
+        conv_info = db.execute(
+            "SELECT title FROM chat_conversations WHERE conversation_id = ?",
+            (conversation_id,), fetch="one"
+        )
+        if conv_info and conv_info.get('title') == 'New conversation':
+            new_title = message[:50] + ('...' if len(message) > 50 else '')
+            update_conversation_title(conversation_id, new_title)
+        
         # Check if this is a confirmation of pending action
         pending = get_pending_action(self.user_id)
         if pending and self._is_confirmation(message):
@@ -1642,6 +1651,14 @@ def create_conversation(user_id: int, title: str = "New conversation") -> int:
         fetch="one"
     )
     return result['conversation_id']
+
+
+def update_conversation_title(conversation_id: int, title: str):
+    """Update conversation title."""
+    db.execute(
+        "UPDATE chat_conversations SET title = ? WHERE conversation_id = ?",
+        (title[:100], conversation_id)  # Limit to 100 chars
+    )
 
 
 def get_conversations(user_id: int) -> List[Dict]:

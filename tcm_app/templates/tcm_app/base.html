@@ -118,6 +118,13 @@
     </main>
 
     {% if user.is_authenticated %}
+    <!-- Pre-render: Apply open class BEFORE page renders to prevent animation flash -->
+    <script>
+        if (localStorage.getItem('tcm_chat_open') === 'open') {
+            document.documentElement.classList.add('chat-preopen');
+        }
+    </script>
+    
     <!-- Chat Sidebar -->
     <div id="chatSidebar" class="chat-sidebar">
         <div class="chat-resize-handle" id="chatResizeHandle"></div>
@@ -142,7 +149,7 @@
                     </button>
                 </div>
             </div>
-            <div class="chat-history-list" id="chatHistoryList">
+            <div class="chat-history-list collapsed" id="chatHistoryList">
                 <!-- Conversations loaded dynamically -->
             </div>
         </div>
@@ -216,6 +223,16 @@ body.chat-open .container-fluid.mt-3 {
     visibility: visible;
 }
 
+/* Skip animation on initial page load when pre-opened */
+html.chat-preopen .chat-sidebar {
+    transform: translateX(0);
+    visibility: visible;
+    transition: none;
+}
+html.chat-preopen .chat-sidebar.open {
+    transition: none;
+}
+
 /* Resize handle */
 .chat-resize-handle {
     position: absolute;
@@ -266,6 +283,10 @@ body.chat-open .container-fluid.mt-3 {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+}
+
+.chat-history-list.collapsed {
+    display: none;
 }
 
 .chat-history-item {
@@ -533,6 +554,10 @@ body.chat-open .container-fluid.mt-3 {
     // Restore chat open state on page load
     if (savedState === 'open') {
         openSidebar();
+        // Remove preopen class after a tick to restore animations for future toggles
+        requestAnimationFrame(() => {
+            document.documentElement.classList.remove('chat-preopen');
+        });
     }
     
     // Resize handle (desktop + mouse only)
@@ -869,8 +894,17 @@ body.chat-open .container-fluid.mt-3 {
         }
     }
     
-    // History button click
-    historyBtn.addEventListener('click', loadConversations);
+    // History button click - toggle history panel
+    let historyExpanded = false;
+    historyBtn.addEventListener('click', () => {
+        historyExpanded = !historyExpanded;
+        if (historyExpanded) {
+            loadConversations();
+            historyList.classList.remove('collapsed');
+        } else {
+            historyList.classList.add('collapsed');
+        }
+    });
     
     newChatBtn.addEventListener('click', async () => {
         try {
