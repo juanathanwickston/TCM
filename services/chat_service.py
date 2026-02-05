@@ -28,55 +28,168 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 RATE_LIMIT_PER_MINUTE = 20
-MODEL = "gpt-4o-mini"
+MODEL = "gpt-4o"
 
-# System prompt for natural, human-like responses
-SYSTEM_PROMPT = """You are a helpful assistant for the Training Catalogue Manager (TCM). 
-You help users find information about training resources and make updates.
+# Effort estimation constants (hours per resource)
+EFFORT_HOURS = {
+    "Include": 0.5,      # Minor cleanup
+    "Modify": 3.0,       # Average rework
+    "Sunset": 0.0,       # Just archive
+    "not_reviewed": 1.0, # Triage time
+}
+
+# =============================================================================
+# STRATEGIC ADVISOR SYSTEM PROMPT
+# =============================================================================
+
+SYSTEM_PROMPT = """You are a strategic advisor for the Training Catalogue Manager (TCM).
+You don't just answer questions - you analyze, prioritize, and recommend.
+
+ROLE:
+- Think like a consultant, not a search engine
+- Proactively identify risks and opportunities
+- Always provide context with numbers (percentages, comparisons)
+- Suggest next actions, don't just report data
+- Explain consequences before making changes
 
 PERSONALITY:
-- Talk like a friendly coworker, not a robot
-- Keep it casual but professional
-- Short answers when short answers work
-- Say "I" not "this system" or "the assistant"
-- If you don't know, just say so
+- Direct and efficient - no fluff
+- Friendly but focused on results
+- Say "I" not "the system"
+- Admit uncertainty when appropriate
+- Keep responses scannable (use bullet points)
 
-EXAMPLES OF GOOD RESPONSES:
-- "Found 23 courses in Onboarding that need review."
-- "All set! Updated 5 resources to 'Include'."
-- "Hmm, I didn't find any matches. Want to try different filters?"
-- "That's outside my wheelhouse - I stick to training data."
+RESPONSE RULES:
+1. Always include percentages when giving counts
+2. Structure with bullet points for clarity
+3. End with recommended action or question
+4. For lists, show max 10 items with "...and N more"
+5. Before bulk updates, explain what would be overridden
+
+SCHEMA (resources table):
+- resource_key: unique identifier
+- display_name: human-readable name
+- bucket: "Onboarding" or "Upskilling"
+- primary_department: e.g., "Guest Services", "Sales", "Operations"
+- training_type: format of training
+- scrub_status: "Include" | "Modify" | "Sunset" | "not_reviewed"
+- scrub_owner: who is responsible
+- audience: "Direct Sales" | "Indirect Sales" | "FI" | "Operations" | etc.
+- sales_stage: 1-6 (Identify Customer through Ask for Referrals)
+- invest_decision: investment choice
+- invest_effort: estimated effort
+- first_seen: when resource was discovered
 
 WHAT I CAN DO:
-- Search and count resources
-- Show breakdowns by audience, type, department, stage
-- Find resources missing data (no audience, unreviewed, etc.)
-- Update: status (Include/Modify/Sunset), audience, owner, notes, sales stage
-- Update investment fields: decision, owner, effort, notes
+- Answer questions about the catalog with context
+- Identify high-risk areas and blocking factors
+- Estimate effort for updates
+- Prioritize what to review
+- Make updates (with confirmation)
+- Find quick wins
 
 WHAT I CAN'T DO:
-- Anything on the Tools page (users, sync, settings)
+- Tools page actions (users, sync, settings)
 - Delete anything
-- Access other people's chats
-- Make stuff up - I only report what's actually in the data
+- Access other people's data
+- Make up numbers - only report actual data
 
 BEFORE CHANGING ANYTHING:
-- You MUST use the appropriate function to prepare the change
-- The system will show the user what will change and ask for confirmation
-- Never claim you've made changes without using a function
+- Use the appropriate function to prepare changes
+- System shows preview and asks for confirmation
+- Explain consequences of bulk updates
+- Offer safer alternatives when relevant
+"""
 
-IF I'M NOT SURE:
-- Say "I'm not sure" rather than guess
-- Ask for clarification if the request is ambiguous
-- Only report numbers from actual query results
+# 10 Gold Examples for few-shot learning
+GOLD_EXAMPLES = """
+EXAMPLE 1 - Risk Detection:
+User: "What's the highest-risk area right now?"
+You: "Onboarding → Guest Services is the highest-risk area.
+- 19 unreviewed resources
+- No assigned owners
+- Multiple similar items detected
+If left unchanged, this creates inconsistent onboarding outcomes.
+Recommend: Focus scrubbing review on this set first."
 
-AVAILABLE DATA:
-- resources table with: display_name, bucket, primary_department, training_type, 
-  scrub_status, scrub_owner, audience, sales_stage, invest_decision, etc.
-- Valid scrub_status: Include, Modify, Sunset (or not_reviewed/Unreviewed)
-- Valid audiences: Direct Sales, Indirect Sales, Integration, FI, 
-  Partner Management, Operations, Compliance, POS
-- Valid sales_stages: 1-6 (Identify Customer through Ask for Referrals)
+EXAMPLE 2 - Impact Framing:
+User: "How many onboarding resources do we have?"
+You: "There are 312 onboarding resources (17.7% of catalog).
+- 68 Include (22%)
+- 143 Modify (46%)
+- 51 Sunset (16%)
+- 50 Unreviewed (16%)
+Over half require action.
+Sunsetting the 51 flagged items immediately reduces clutter by 16%."
+
+EXAMPLE 3 - Smart Guardrails:
+User: "Set all Operations resources to Include."
+You: "There are 284 Operations resources.
+- 112 already Include ✓
+- 97 unreviewed (safe to update)
+- 75 marked Modify or Sunset (prior decisions exist)
+Overriding all would erase 75 prior decisions.
+Best move: Apply Include to the 97 unreviewed items only.
+Confirm to proceed with just the unreviewed?"
+
+EXAMPLE 4 - Prioritization:
+User: "I only have time to review 10 things today."
+You: "Review these 10 unreviewed onboarding resources:
+- No assigned owner
+- Broad audience impact
+- Oldest in catalog
+[List of 10 items]
+Completing these reduces onboarding risk more than any other set."
+
+EXAMPLE 5 - Effort Estimation:
+User: "How much effort would it take to fix guest service training?"
+You: "Guest service training includes 86 resources.
+- Minor updates (Include): 18 hours
+- Moderate rework (Modify): 126 hours
+- To sunset: 0 hours
+Total if fixing all Modify items: ~144 hours
+That's significant. Recommend: Sunset low-value items first, then tackle Modify items by priority."
+
+EXAMPLE 6 - Misalignment Detection:
+User: "Are we investing in the right areas?"
+You: "Potential misalignment detected.
+- 22% of Modify items are in legacy Sales content
+- But Sales represents only 6% of audience reach
+- Meanwhile, Onboarding has 40% of audience but only 15% of Modify effort
+Consider shifting investment toward Onboarding for higher impact."
+
+EXAMPLE 7 - Blocking Analysis:
+User: "What's blocking progress the most?"
+You: "Unowned resources are the biggest blocker.
+- 417 resources have no scrub_owner
+- Most are in Onboarding and Guest Services
+- Without ownership, decisions stall
+Assigning owners is the fastest way to unblock progress."
+
+EXAMPLE 8 - Strategic Planning:
+User: "What should we focus on this quarter?"
+You: "This quarter's priorities should be:
+1. Review unreviewed onboarding content (50 items)
+2. Assign owners to unowned resources (417 items)
+3. Sunset flagged content (51 items)
+This removes risk for new hires and reduces catalog by ~15%.
+Everything else is secondary."
+
+EXAMPLE 9 - Discovery + Quality:
+User: "Do we have training on inventory reporting?"
+You: "Yes. Found 9 resources matching 'inventory reporting'.
+- 3 up to date (Include)
+- 4 outdated (Modify)
+- 2 with similar names (potential overlap)
+Recommend: Update the Modify items and consider sunsetting the overlaps."
+
+EXAMPLE 10 - Quick Wins:
+User: "What's the fastest way to show progress this week?"
+You: "Sunset flagged resources.
+- 51 items already marked Sunset
+- Zero investment required
+- Immediate catalog reduction (2.9%)
+This creates visible progress and clears noise before deeper work."
 """
 
 # OpenAI function definitions for structured actions
@@ -185,6 +298,111 @@ CHAT_FUNCTIONS = [
             },
             "required": ["resource_keys", "sales_stage"]
         }
+    },
+    # =========================================================================
+    # STRATEGIC ADVISOR TOOLS
+    # =========================================================================
+    {
+        "name": "search_resources",
+        "description": "Search resources by keyword in display name. Use for discovery queries like 'do we have training on X'.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search terms to look for in resource names"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max results to return (default 10)"
+                }
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "get_high_risk_areas",
+        "description": "Identify highest-risk areas in the catalog based on unreviewed count, unowned resources, and duplicates.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Number of risk areas to return (default 5)"
+                }
+            }
+        }
+    },
+    {
+        "name": "get_blocking_factors",
+        "description": "Identify what's blocking progress (unowned resources, stalled items, etc).",
+        "parameters": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "estimate_effort",
+        "description": "Estimate hours needed to address resources based on their scrub status.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "filter_criteria": {
+                    "type": "object",
+                    "description": "Filters to select resources",
+                    "properties": {
+                        "bucket": {"type": "string"},
+                        "primary_department": {"type": "string"},
+                        "scrub_status": {"type": "string"}
+                    }
+                }
+            }
+        }
+    },
+    {
+        "name": "get_priority_items",
+        "description": "Get top items to review prioritized by risk and impact. Use when user has limited time.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Number of items to return (default 10)"
+                },
+                "focus_area": {
+                    "type": "string",
+                    "enum": ["unreviewed", "unowned", "onboarding", "modify"],
+                    "description": "What to prioritize"
+                }
+            }
+        }
+    },
+    {
+        "name": "check_investment_alignment",
+        "description": "Analyze if investment effort is allocated to the right areas. Compares where Modify items are vs where audience is.",
+        "parameters": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "get_quick_wins",
+        "description": "Find actions that provide immediate visible progress with minimal effort (e.g., sunset flagged items).",
+        "parameters": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "get_status_breakdown",
+        "description": "Get detailed breakdown of resources by status for a specific bucket or department.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "bucket": {"type": "string", "description": "Filter by bucket (Onboarding, Upskilling)"},
+                "primary_department": {"type": "string", "description": "Filter by department"}
+            }
+        }
     }
 ]
 
@@ -199,6 +417,43 @@ class ChatService:
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable not set")
         self.client = OpenAI(api_key=api_key)
+    
+    def _get_live_data_snapshot(self) -> str:
+        """Get current data snapshot for prompt injection."""
+        try:
+            totals = db.get_resource_totals()
+            rollups = db.get_scrub_rollups()
+            
+            # Count unowned resources
+            unowned = db.execute(
+                """SELECT COUNT(*) as cnt FROM resources 
+                   WHERE is_archived = 0 AND is_placeholder = 0 
+                   AND (scrub_owner IS NULL OR scrub_owner = '')""",
+                fetch="one"
+            )
+            unowned_count = unowned['cnt'] if unowned else 0
+            
+            # Build snapshot
+            total = totals.get('total_containers', 0)
+            reviewed = totals.get('reviewed_containers', 0)
+            pct = totals.get('scrubbing_pct', 0)
+            
+            # Get status breakdown
+            by_status = rollups.get('by_decision', {})
+            include_count = by_status.get('Include', {}).get('count', 0)
+            modify_count = by_status.get('Modify', {}).get('count', 0)
+            sunset_count = by_status.get('Sunset', {}).get('count', 0)
+            unreviewed_count = by_status.get('not_reviewed', {}).get('count', 0)
+            
+            return f"""- Total resources: {total:,}
+- Onboarding: {totals.get('onboarding', 0):,} | Upskilling: {totals.get('upskilling', 0):,}
+- By status: Include={include_count}, Modify={modify_count}, Sunset={sunset_count}, Unreviewed={unreviewed_count}
+- Reviewed: {reviewed} ({pct:.1f}%)
+- Unowned resources: {unowned_count}
+- Investment queue: {totals.get('investment_queue', 0)}"""
+        except Exception as e:
+            logger.warning(f"Failed to get live snapshot: {e}")
+            return "- Live data unavailable"
     
     def send_message(
         self, 
@@ -279,8 +534,13 @@ class ChatService:
     
     def _call_openai(self, message: str, history: List[Dict], context: Dict) -> Dict:
         """Call OpenAI with function calling for structured actions."""
-        # Build context-aware system prompt
-        system_prompt = SYSTEM_PROMPT + f"""
+        # Build context-aware system prompt with gold examples and live data
+        live_snapshot = self._get_live_data_snapshot()
+        
+        system_prompt = SYSTEM_PROMPT + "\n" + GOLD_EXAMPLES + f"""
+
+LIVE DATA SNAPSHOT (current state):
+{live_snapshot}
 
 CURRENT CONTEXT:
 - Page: {context.get('current_page', 'unknown')}
@@ -329,6 +589,31 @@ CURRENT CONTEXT:
         
         elif name == "prepare_sales_stage_update":
             return self._prepare_sales_stage_update(args, context)
+        
+        # Strategic advisor tools
+        elif name == "search_resources":
+            return self._handle_search(args)
+        
+        elif name == "get_high_risk_areas":
+            return self._handle_high_risk_areas(args)
+        
+        elif name == "get_blocking_factors":
+            return self._handle_blocking_factors(args)
+        
+        elif name == "estimate_effort":
+            return self._handle_estimate_effort(args)
+        
+        elif name == "get_priority_items":
+            return self._handle_priority_items(args)
+        
+        elif name == "check_investment_alignment":
+            return self._handle_investment_alignment(args)
+        
+        elif name == "get_quick_wins":
+            return self._handle_quick_wins(args)
+        
+        elif name == "get_status_breakdown":
+            return self._handle_status_breakdown(args)
         
         return {'response': "I'm not sure how to do that."}
     
@@ -475,6 +760,17 @@ CURRENT CONTEXT:
         if not resources:
             return {'response': "Couldn't find those resources. They may have been archived."}
         
+        # SMART GUARDRAILS: Analyze consequences
+        existing_decisions = db.execute(
+            f"""SELECT resource_key, scrub_status FROM resources 
+               WHERE resource_key IN ({','.join(['%s']*len(resource_keys))})
+               AND scrub_status != 'not_reviewed'""",
+            tuple(resource_keys),
+            fetch="all"
+        )
+        override_count = len(existing_decisions) if existing_decisions else 0
+        safe_count = len(resource_keys) - override_count
+        
         # Store pending action
         action = {
             'type': 'scrub',
@@ -499,11 +795,23 @@ CURRENT CONTEXT:
         names_preview = names[:10]
         more = len(names) - 10 if len(names) > 10 else 0
         
-        response = f"I'll update {', '.join(update_desc)} for {len(names)} resource{'s' if len(names) != 1 else ''}:\n"
-        response += "\n".join(f"- {n}" for n in names_preview)
-        if more:
-            response += f"\n- ...and {more} more"
-        response += "\n\nWant me to go ahead?"
+        # Build response with guardrails
+        response = f"**Updating {', '.join(update_desc)}** for {len(names)} resource{'s' if len(names) != 1 else ''}:\n"
+        
+        # Add consequence warning if overriding existing decisions
+        if override_count > 0 and updates.get('scrub_status'):
+            response += f"\n⚠️ **Warning**: {override_count} resources already have decisions that would be overridden.\n"
+            response += f"✓ {safe_count} are unreviewed (safe to update).\n\n"
+            response += "Options:\n"
+            response += f"1. Proceed with all {len(names)} resources\n"
+            response += f"2. Apply only to the {safe_count} unreviewed items (safer)\n\n"
+        else:
+            response += "\n".join(f"- {n}" for n in names_preview)
+            if more:
+                response += f"\n- ...and {more} more"
+            response += "\n\n"
+        
+        response += "Want me to go ahead?"
         
         return {
             'response': response,
@@ -512,6 +820,8 @@ CURRENT CONTEXT:
                 'type': 'scrub_update',
                 'count': len(names),
                 'updates': updates,
+                'override_count': override_count,
+                'safe_count': safe_count,
             },
             'metadata': {'pending_action': action},
         }
@@ -585,6 +895,469 @@ CURRENT CONTEXT:
             'action_pending': True,
             'action_preview': {'type': 'sales_stage_update', 'count': len(resources)},
         }
+    
+    # =========================================================================
+    # STRATEGIC ADVISOR HANDLERS
+    # =========================================================================
+    
+    def _handle_search(self, args: Dict) -> Dict:
+        """Search resources by keyword in display name."""
+        query = args.get('query', '')
+        limit = args.get('limit', 10)
+        
+        if not query:
+            return {'response': "What would you like to search for?"}
+        
+        # Use ILIKE for case-insensitive search
+        results = db.execute(
+            """SELECT resource_key, display_name, bucket, scrub_status, primary_department
+               FROM resources
+               WHERE is_archived = 0 AND is_placeholder = 0
+               AND display_name ILIKE %s
+               ORDER BY display_name
+               LIMIT %s""",
+            (f'%{query}%', limit),
+            fetch="all"
+        )
+        
+        if not results:
+            return {'response': f"No resources found matching '{query}'."}
+        
+        # Get total for context
+        total = db.get_active_resource_count()
+        
+        # Group by status
+        by_status = {}
+        for r in results:
+            status = r['scrub_status'] or 'not_reviewed'
+            by_status[status] = by_status.get(status, 0) + 1
+        
+        status_summary = ", ".join(f"{v} {k}" for k, v in by_status.items())
+        
+        response = f"Found {len(results)} resources matching '{query}':\n"
+        response += f"- Status breakdown: {status_summary}\n\n"
+        
+        for r in results[:10]:
+            status = r['scrub_status'] or 'not_reviewed'
+            response += f"- {r['display_name']} [{status}]\n"
+        
+        if len(results) > 10:
+            response += f"- ...and {len(results) - 10} more\n"
+        
+        return {'response': response}
+    
+    def _handle_high_risk_areas(self, args: Dict) -> Dict:
+        """Identify highest-risk areas based on unreviewed and unowned resources."""
+        limit = args.get('limit', 5)
+        
+        # Risk = unreviewed count * 3 + unowned count * 2
+        risk_data = db.execute(
+            """SELECT 
+                bucket,
+                primary_department,
+                COUNT(*) as total,
+                SUM(CASE WHEN scrub_status = 'not_reviewed' THEN 1 ELSE 0 END) as unreviewed,
+                SUM(CASE WHEN scrub_owner IS NULL OR scrub_owner = '' THEN 1 ELSE 0 END) as unowned
+               FROM resources
+               WHERE is_archived = 0 AND is_placeholder = 0
+               GROUP BY bucket, primary_department
+               HAVING SUM(CASE WHEN scrub_status = 'not_reviewed' THEN 1 ELSE 0 END) > 0
+                   OR SUM(CASE WHEN scrub_owner IS NULL OR scrub_owner = '' THEN 1 ELSE 0 END) > 0
+               ORDER BY 
+                   (SUM(CASE WHEN scrub_status = 'not_reviewed' THEN 1 ELSE 0 END) * 3 +
+                    SUM(CASE WHEN scrub_owner IS NULL OR scrub_owner = '' THEN 1 ELSE 0 END) * 2) DESC
+               LIMIT %s""",
+            (limit,),
+            fetch="all"
+        )
+        
+        if not risk_data:
+            return {'response': "No high-risk areas found. Great job!"}
+        
+        response = f"Top {len(risk_data)} highest-risk areas:\n\n"
+        
+        for i, area in enumerate(risk_data, 1):
+            bucket = area['bucket'] or 'Unknown'
+            dept = area['primary_department'] or 'Not Categorized'
+            risk_score = area['unreviewed'] * 3 + area['unowned'] * 2
+            
+            response += f"{i}. **{bucket} → {dept}** (risk score: {risk_score})\n"
+            response += f"   - {area['unreviewed']} unreviewed, {area['unowned']} unowned\n"
+        
+        response += f"\nRecommend: Focus on the top area first."
+        
+        return {'response': response}
+    
+    def _handle_blocking_factors(self, args: Dict) -> Dict:
+        """Identify what's blocking progress."""
+        # Get unowned resources
+        unowned = db.execute(
+            """SELECT COUNT(*) as cnt FROM resources 
+               WHERE is_archived = 0 AND is_placeholder = 0 
+               AND (scrub_owner IS NULL OR scrub_owner = '')""",
+            fetch="one"
+        )
+        unowned_count = unowned['cnt'] if unowned else 0
+        
+        # Get unreviewed resources
+        unreviewed = db.execute(
+            """SELECT COUNT(*) as cnt FROM resources 
+               WHERE is_archived = 0 AND is_placeholder = 0 
+               AND scrub_status = 'not_reviewed'""",
+            fetch="one"
+        )
+        unreviewed_count = unreviewed['cnt'] if unreviewed else 0
+        
+        # Get total
+        total = db.execute(
+            """SELECT COUNT(*) as cnt FROM resources 
+               WHERE is_archived = 0 AND is_placeholder = 0""",
+            fetch="one"
+        )
+        total_count = total['cnt'] if total else 1
+        
+        # Build response
+        blockers = []
+        
+        if unowned_count > 0:
+            pct = (unowned_count / total_count) * 100
+            blockers.append({
+                'issue': 'Unowned resources',
+                'count': unowned_count,
+                'pct': pct,
+                'fix': 'Assign owners to unblock decisions'
+            })
+        
+        if unreviewed_count > 0:
+            pct = (unreviewed_count / total_count) * 100
+            blockers.append({
+                'issue': 'Unreviewed resources',
+                'count': unreviewed_count,
+                'pct': pct,
+                'fix': 'Complete scrubbing review'
+            })
+        
+        if not blockers:
+            return {'response': "No major blocking factors identified. Progress is clear!"}
+        
+        # Sort by count descending
+        blockers.sort(key=lambda x: x['count'], reverse=True)
+        
+        response = "**Blocking factors** (sorted by impact):\n\n"
+        
+        for b in blockers:
+            response += f"**{b['issue']}**: {b['count']:,} ({b['pct']:.1f}%)\n"
+            response += f"→ Fix: {b['fix']}\n\n"
+        
+        response += f"Addressing '{blockers[0]['issue']}' is the fastest way to unblock progress."
+        
+        return {'response': response}
+    
+    def _handle_estimate_effort(self, args: Dict) -> Dict:
+        """Estimate hours needed based on scrub status."""
+        filters = args.get('filter_criteria', {})
+        
+        # Build WHERE clause
+        where_clauses = ["is_archived = 0", "is_placeholder = 0"]
+        params = []
+        
+        if filters.get('bucket'):
+            where_clauses.append("bucket = %s")
+            params.append(filters['bucket'])
+        
+        if filters.get('primary_department'):
+            where_clauses.append("primary_department = %s")
+            params.append(filters['primary_department'])
+        
+        if filters.get('scrub_status'):
+            where_clauses.append("scrub_status = %s")
+            params.append(filters['scrub_status'])
+        
+        where_sql = " AND ".join(where_clauses)
+        
+        # Get counts by status
+        results = db.execute(
+            f"""SELECT scrub_status, COUNT(*) as cnt
+               FROM resources
+               WHERE {where_sql}
+               GROUP BY scrub_status""",
+            tuple(params) if params else None,
+            fetch="all"
+        )
+        
+        if not results:
+            return {'response': "No resources found matching those criteria."}
+        
+        # Calculate effort
+        total_hours = 0
+        breakdown = []
+        total_resources = 0
+        
+        for row in results:
+            status = row['scrub_status'] or 'not_reviewed'
+            count = row['cnt']
+            total_resources += count
+            hours = count * EFFORT_HOURS.get(status, 1.0)
+            total_hours += hours
+            breakdown.append({
+                'status': status,
+                'count': count,
+                'hours': hours
+            })
+        
+        # Build response
+        filter_desc = ""
+        if filters.get('bucket'):
+            filter_desc += f" in {filters['bucket']}"
+        if filters.get('primary_department'):
+            filter_desc += f" → {filters['primary_department']}"
+        
+        response = f"**Effort estimate**{filter_desc} ({total_resources:,} resources):\n\n"
+        
+        for b in breakdown:
+            response += f"- {b['status']}: {b['count']:,} items × {EFFORT_HOURS.get(b['status'], 1.0)} hrs = **{b['hours']:.1f} hours**\n"
+        
+        response += f"\n**Total: {total_hours:.0f}-{total_hours * 1.2:.0f} hours** (with buffer)\n"
+        
+        if total_hours > 40:
+            response += "\nThat's significant. Consider breaking this into phases."
+        
+        return {'response': response}
+    
+    def _handle_priority_items(self, args: Dict) -> Dict:
+        """Get prioritized items to review."""
+        limit = args.get('limit', 10)
+        focus = args.get('focus_area', 'unreviewed')
+        
+        # Build query based on focus
+        if focus == 'unreviewed':
+            where = "scrub_status = 'not_reviewed'"
+            order = "CASE WHEN bucket = 'Onboarding' THEN 0 ELSE 1 END, first_seen"
+        elif focus == 'unowned':
+            where = "(scrub_owner IS NULL OR scrub_owner = '')"
+            order = "CASE WHEN bucket = 'Onboarding' THEN 0 ELSE 1 END, scrub_status"
+        elif focus == 'onboarding':
+            where = "bucket = 'Onboarding' AND scrub_status = 'not_reviewed'"
+            order = "first_seen"
+        elif focus == 'modify':
+            where = "scrub_status = 'Modify'"
+            order = "CASE WHEN bucket = 'Onboarding' THEN 0 ELSE 1 END, first_seen"
+        else:
+            where = "scrub_status = 'not_reviewed'"
+            order = "first_seen"
+        
+        results = db.execute(
+            f"""SELECT resource_key, display_name, bucket, primary_department, scrub_status
+               FROM resources
+               WHERE is_archived = 0 AND is_placeholder = 0 AND {where}
+               ORDER BY {order}
+               LIMIT %s""",
+            (limit,),
+            fetch="all"
+        )
+        
+        if not results:
+            return {'response': f"No {focus} items found. Great progress!"}
+        
+        response = f"**Top {len(results)} {focus} items** to review:\n\n"
+        
+        for i, r in enumerate(results, 1):
+            bucket = r['bucket'] or 'Unknown'
+            dept = r['primary_department'] or ''
+            name = r['display_name'] or r['resource_key']
+            response += f"{i}. {name}\n   [{bucket}] {dept}\n"
+        
+        response += f"\nCompleting these reduces {focus} backlog significantly."
+        
+        return {'response': response}
+    
+    def _handle_investment_alignment(self, args: Dict) -> Dict:
+        """Analyze if investment effort matches importance."""
+        # Get Modify items by bucket (where effort is)
+        modify_by_bucket = db.execute(
+            """SELECT bucket, COUNT(*) as cnt
+               FROM resources
+               WHERE is_archived = 0 AND is_placeholder = 0 AND scrub_status = 'Modify'
+               GROUP BY bucket""",
+            fetch="all"
+        )
+        
+        # Get total by bucket (importance proxy)
+        total_by_bucket = db.execute(
+            """SELECT bucket, COUNT(*) as cnt
+               FROM resources
+               WHERE is_archived = 0 AND is_placeholder = 0
+               GROUP BY bucket""",
+            fetch="all"
+        )
+        
+        if not modify_by_bucket or not total_by_bucket:
+            return {'response': "Insufficient data to analyze alignment."}
+        
+        # Convert to dicts
+        modify_dict = {r['bucket']: r['cnt'] for r in modify_by_bucket}
+        total_dict = {r['bucket']: r['cnt'] for r in total_by_bucket}
+        
+        total_modify = sum(modify_dict.values())
+        total_all = sum(total_dict.values())
+        
+        # Calculate alignment
+        misalignments = []
+        for bucket, modify_count in modify_dict.items():
+            total_count = total_dict.get(bucket, 0)
+            
+            modify_pct = (modify_count / total_modify * 100) if total_modify else 0
+            importance_pct = (total_count / total_all * 100) if total_all else 0
+            
+            diff = abs(modify_pct - importance_pct)
+            if diff > 10:  # Significant misalignment
+                misalignments.append({
+                    'bucket': bucket,
+                    'modify_pct': modify_pct,
+                    'importance_pct': importance_pct,
+                    'diff': diff
+                })
+        
+        if not misalignments:
+            return {'response': "Investment effort appears well-aligned with importance."}
+        
+        response = "**Potential investment misalignment detected:**\n\n"
+        
+        for m in sorted(misalignments, key=lambda x: x['diff'], reverse=True):
+            response += f"**{m['bucket']}**:\n"
+            response += f"- Has {m['modify_pct']:.0f}% of Modify items\n"
+            response += f"- But represents {m['importance_pct']:.0f}% of catalog\n\n"
+        
+        response += "Consider rebalancing investment toward higher-importance areas."
+        
+        return {'response': response}
+    
+    def _handle_quick_wins(self, args: Dict) -> Dict:
+        """Find actions with immediate visible impact."""
+        # Get sunset items (zero effort to archive)
+        sunset_count = db.execute(
+            """SELECT COUNT(*) as cnt FROM resources 
+               WHERE is_archived = 0 AND is_placeholder = 0 
+               AND scrub_status = 'Sunset'""",
+            fetch="one"
+        )
+        sunset = sunset_count['cnt'] if sunset_count else 0
+        
+        # Get unassigned Include items (quick to process)
+        include_unowned = db.execute(
+            """SELECT COUNT(*) as cnt FROM resources 
+               WHERE is_archived = 0 AND is_placeholder = 0 
+               AND scrub_status = 'Include'
+               AND (scrub_owner IS NULL OR scrub_owner = '')""",
+            fetch="one"
+        )
+        include_no_owner = include_unowned['cnt'] if include_unowned else 0
+        
+        # Get total for percentage
+        total = db.execute(
+            """SELECT COUNT(*) as cnt FROM resources 
+               WHERE is_archived = 0 AND is_placeholder = 0""",
+            fetch="one"
+        )
+        total_count = total['cnt'] if total else 1
+        
+        wins = []
+        
+        if sunset > 0:
+            pct = (sunset / total_count) * 100
+            wins.append({
+                'action': 'Archive Sunset items',
+                'count': sunset,
+                'pct': pct,
+                'effort': 'Zero - just archive',
+                'impact': f"Reduces catalog by {pct:.1f}%"
+            })
+        
+        if include_no_owner > 0:
+            wins.append({
+                'action': 'Assign owners to Include items',
+                'count': include_no_owner,
+                'effort': 'Minimal - just assign',
+                'impact': 'Clears ownership backlog'
+            })
+        
+        if not wins:
+            return {'response': "No quick wins available. Time for deeper work!"}
+        
+        response = "**Quick wins** (high impact, low effort):\n\n"
+        
+        for i, w in enumerate(wins, 1):
+            response += f"**{i}. {w['action']}**\n"
+            response += f"- Items: {w['count']:,}\n"
+            response += f"- Effort: {w['effort']}\n"
+            response += f"- Impact: {w['impact']}\n\n"
+        
+        response += f"Recommend: Start with '{wins[0]['action']}' for immediate visible progress."
+        
+        return {'response': response}
+    
+    def _handle_status_breakdown(self, args: Dict) -> Dict:
+        """Get detailed status breakdown for bucket or department."""
+        bucket = args.get('bucket')
+        dept = args.get('primary_department')
+        
+        # Build WHERE
+        where_clauses = ["is_archived = 0", "is_placeholder = 0"]
+        params = []
+        
+        if bucket:
+            where_clauses.append("bucket = %s")
+            params.append(bucket)
+        
+        if dept:
+            where_clauses.append("primary_department = %s")
+            params.append(dept)
+        
+        where_sql = " AND ".join(where_clauses)
+        
+        # Get totals
+        total = db.execute(
+            f"SELECT COUNT(*) as cnt FROM resources WHERE {where_sql}",
+            tuple(params) if params else None,
+            fetch="one"
+        )
+        total_count = total['cnt'] if total else 0
+        
+        if total_count == 0:
+            return {'response': "No resources found matching those criteria."}
+        
+        # Get by status
+        status_data = db.execute(
+            f"""SELECT scrub_status, COUNT(*) as cnt
+               FROM resources
+               WHERE {where_sql}
+               GROUP BY scrub_status
+               ORDER BY cnt DESC""",
+            tuple(params) if params else None,
+            fetch="all"
+        )
+        
+        # Build filter description
+        filter_desc = ""
+        if bucket:
+            filter_desc = f" in {bucket}"
+        if dept:
+            filter_desc += f" → {dept}"
+        
+        response = f"**Status breakdown**{filter_desc} ({total_count:,} resources):\n\n"
+        
+        for row in status_data:
+            status = row['scrub_status'] or 'not_reviewed'
+            count = row['cnt']
+            pct = (count / total_count * 100) if total_count else 0
+            response += f"- **{status}**: {count:,} ({pct:.1f}%)\n"
+        
+        # Add insight
+        not_reviewed = sum(r['cnt'] for r in status_data if (r['scrub_status'] or 'not_reviewed') == 'not_reviewed')
+        if not_reviewed > 0:
+            response += f"\n{not_reviewed:,} items still need review."
+        
+        return {'response': response}
     
     def _execute_pending_action(self, conversation_id: int, action: Dict) -> Dict:
         """Execute confirmed pending action."""
