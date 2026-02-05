@@ -133,15 +133,17 @@
         <div class="chat-sidebar-history" id="chatHistory">
             <div class="chat-history-header">
                 <span class="small text-muted">Conversations</span>
-                <button type="button" class="btn btn-sm btn-outline-primary" id="newChatBtn" title="New Chat">
-                    <i class="bi bi-plus-lg"></i>
-                </button>
+                <div class="d-flex gap-1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="historyBtn" title="Show History">
+                        <i class="bi bi-clock-history"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="newChatBtn" title="New Chat">
+                        <i class="bi bi-plus-lg"></i>
+                    </button>
+                </div>
             </div>
             <div class="chat-history-list" id="chatHistoryList">
-                <div class="chat-history-item active">
-                    <i class="bi bi-chat me-2"></i>
-                    <span>New conversation</span>
-                </div>
+                <!-- Conversations loaded dynamically -->
             </div>
         </div>
         
@@ -471,6 +473,9 @@ body.chat-open .container-fluid.mt-3 {
         }
     }
     
+    // Restore open state from localStorage (persist across page navigation)
+    const savedState = localStorage.getItem(STATE_KEY);
+    
     // Open sidebar
     function openSidebar() {
         sidebar.classList.add('open');
@@ -524,6 +529,11 @@ body.chat-open .container-fluid.mt-3 {
             overlay.classList.add('visible');
         }
     });
+    
+    // Restore chat open state on page load
+    if (savedState === 'open') {
+        openSidebar();
+    }
     
     // Resize handle (desktop + mouse only)
     let isResizing = false;
@@ -800,6 +810,67 @@ body.chat-open .container-fluid.mt-3 {
             sendMessage();
         }
     });
+    
+    // Get history elements
+    const historyBtn = document.getElementById('historyBtn');
+    const historyList = document.getElementById('chatHistoryList');
+    
+    // Load conversations from API
+    async function loadConversations() {
+        try {
+            historyList.innerHTML = '<div class="text-center py-2"><span class="spinner-border spinner-border-sm"></span></div>';
+            const resp = await fetch(`${API_BASE}/conversations/`, { credentials: 'same-origin' });
+            const data = await resp.json();
+            
+            if (data.conversations && data.conversations.length > 0) {
+                historyList.innerHTML = data.conversations.map(c => `
+                    <div class="chat-history-item${c.conversation_id === currentConversationId ? ' active' : ''}" 
+                         data-conv-id="${c.conversation_id}">
+                        <i class="bi bi-chat me-2"></i>
+                        <span>${c.title || 'Untitled'}</span>
+                    </div>
+                `).join('');
+                
+                // Add click handlers
+                historyList.querySelectorAll('.chat-history-item').forEach(item => {
+                    item.addEventListener('click', () => loadConversation(item.dataset.convId));
+                });
+            } else {
+                historyList.innerHTML = '<div class="text-muted small p-2">No previous conversations</div>';
+            }
+        } catch (e) {
+            console.error('Failed to load conversations:', e);
+            historyList.innerHTML = '<div class="text-danger small p-2">Failed to load</div>';
+        }
+    }
+    
+    // Load a specific conversation
+    async function loadConversation(convId) {
+        try {
+            currentConversationId = parseInt(convId);
+            messagesContainer.innerHTML = '';
+            
+            const resp = await fetch(`${API_BASE}/conversations/${convId}/`, { credentials: 'same-origin' });
+            const data = await resp.json();
+            
+            if (data.messages && data.messages.length > 0) {
+                data.messages.forEach(m => addMessage(m.role, m.content));
+            } else {
+                addMessage('assistant', "Hey! What can I help you with?");
+            }
+            
+            // Update active state in history
+            historyList.querySelectorAll('.chat-history-item').forEach(item => {
+                item.classList.toggle('active', item.dataset.convId === convId.toString());
+            });
+            hideUndoButton();
+        } catch (e) {
+            console.error('Failed to load conversation:', e);
+        }
+    }
+    
+    // History button click
+    historyBtn.addEventListener('click', loadConversations);
     
     newChatBtn.addEventListener('click', async () => {
         try {
