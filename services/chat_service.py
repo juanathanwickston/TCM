@@ -1618,12 +1618,12 @@ CURRENT CONTEXT:
     
     def _is_confirmation(self, message: str) -> bool:
         """Check if message is confirming pending action."""
-        confirmations = {'yes', 'y', 'confirm', 'go ahead', 'proceed', 'do it', 'ok', 'sure', 'yep', 'yeah'}
+        confirmations = {'yes', 'y', 'confirm', 'confirmed', 'go ahead', 'proceed', 'do it', 'ok', 'sure', 'yep', 'yeah', 'absolutely', 'definitely'}
         return message.strip().lower() in confirmations
     
     def _is_cancellation(self, message: str) -> bool:
         """Check if message is cancelling pending action."""
-        cancellations = {'no', 'n', 'cancel', 'stop', 'nevermind', 'never mind', 'nope', 'nah'}
+        cancellations = {'no', 'n', 'cancel', 'cancelled', 'stop', 'nevermind', 'never mind', 'nope', 'nah', 'abort', 'wait'}
         return message.strip().lower() in cancellations
 
 
