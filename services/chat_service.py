@@ -510,7 +510,7 @@ class ChatService:
         
         # Call OpenAI with function calling
         try:
-            result = self._call_openai(message, history, context)
+            result = self._call_openai(message, history, context, conversation_id)
         except Exception as e:
             logger.error(f"OpenAI error: {e}")
             response = "Something went wrong on my end. Mind trying that again?"
@@ -532,13 +532,25 @@ class ChatService:
             'conversation_id': conversation_id,
         }
     
-    def _call_openai(self, message: str, history: List[Dict], context: Dict) -> Dict:
+    def _call_openai(self, message: str, history: List[Dict], context: Dict, conv_id: int) -> Dict:
         """Call OpenAI with function calling for structured actions."""
         # Build context-aware system prompt with gold examples and live data
         live_snapshot = self._get_live_data_snapshot()
         
+        # Load previous query context for follow-up support
+        query_ctx = get_query_context(conv_id)
+        query_ctx_block = ""
+        if query_ctx:
+            query_ctx_block = f"""
+PREVIOUS QUERY (use for follow-ups like "those", "that list", "more details"):
+- Type: {query_ctx.get('type', 'query')}
+- Filters/Query: {json.dumps(query_ctx.get('filters', {})) if query_ctx.get('filters') else query_ctx.get('query', '')}
+- Count: {query_ctx.get('count', 0)}
+- Has resource keys: {'Yes - use same filters with return_type=list' if query_ctx.get('resource_keys') else 'No'}
+"""
+        
         system_prompt = SYSTEM_PROMPT + "\n" + GOLD_EXAMPLES + f"""
-
+{query_ctx_block}
 LIVE DATA SNAPSHOT (current state):
 {live_snapshot}
 
@@ -570,16 +582,16 @@ CURRENT CONTEXT:
             function_args = json.loads(tool_call.function.arguments)
             
             # Execute the function
-            return self._execute_function(function_name, function_args, context)
+            return self._execute_function(function_name, function_args, context, conv_id)
         
         # Plain text response
         return {'response': response_message.content or "I'm not sure how to help with that."}
     
-    def _execute_function(self, name: str, args: Dict, context: Dict) -> Dict:
+    def _execute_function(self, name: str, args: Dict, context: Dict, conv_id: int) -> Dict:
         """Execute a function call from OpenAI."""
         
         if name == "query_resources":
-            return self._handle_query(args)
+            return self._handle_query(args, conv_id)
         
         elif name == "prepare_scrub_update":
             return self._prepare_scrub_update(args, context)
@@ -592,7 +604,7 @@ CURRENT CONTEXT:
         
         # Strategic advisor tools
         elif name == "search_resources":
-            return self._handle_search(args)
+            return self._handle_search(args, conv_id)
         
         elif name == "get_high_risk_areas":
             return self._handle_high_risk_areas(args)
@@ -604,7 +616,7 @@ CURRENT CONTEXT:
             return self._handle_estimate_effort(args)
         
         elif name == "get_priority_items":
-            return self._handle_priority_items(args)
+            return self._handle_priority_items(args, conv_id)
         
         elif name == "check_investment_alignment":
             return self._handle_investment_alignment(args)
@@ -617,7 +629,7 @@ CURRENT CONTEXT:
         
         return {'response': "I'm not sure how to do that."}
     
-    def _handle_query(self, args: Dict) -> Dict:
+    def _handle_query(self, args: Dict, conv_id: int) -> Dict:
         """Handle a query_resources function call."""
         filters = args.get('filters', {})
         return_type = args.get('return_type', 'count')
@@ -664,6 +676,14 @@ CURRENT CONTEXT:
             else:
                 response = f"Found {count:,} resource{'s' if count != 1 else ''}{filter_desc}."
             
+            # Store context for follow-ups
+            save_query_context(conv_id, {
+                'type': 'query',
+                'filters': filters,
+                'count': count,
+                'resource_keys': None
+            })
+            
             return {'response': response}
         
         elif return_type == 'list':
@@ -686,6 +706,14 @@ CURRENT CONTEXT:
             
             if len(results) == limit:
                 response += f"\n\n(Showing first {limit}. There may be more.)"
+            
+            # Store context for follow-ups
+            save_query_context(conv_id, {
+                'type': 'query',
+                'filters': filters,
+                'count': len(results),
+                'resource_keys': [r['resource_key'] for r in results]
+            })
             
             return {
                 'response': response,
@@ -900,7 +928,7 @@ CURRENT CONTEXT:
     # STRATEGIC ADVISOR HANDLERS
     # =========================================================================
     
-    def _handle_search(self, args: Dict) -> Dict:
+    def _handle_search(self, args: Dict, conv_id: int) -> Dict:
         """Search resources by keyword in display name."""
         query = args.get('query', '')
         limit = args.get('limit', 10)
@@ -943,6 +971,14 @@ CURRENT CONTEXT:
         
         if len(results) > 10:
             response += f"- ...and {len(results) - 10} more\n"
+        
+        # Store context for follow-ups
+        save_query_context(conv_id, {
+            'type': 'search',
+            'query': query,
+            'count': len(results),
+            'resource_keys': [r['resource_key'] for r in results]
+        })
         
         return {'response': response}
     
@@ -1124,7 +1160,7 @@ CURRENT CONTEXT:
         
         return {'response': response}
     
-    def _handle_priority_items(self, args: Dict) -> Dict:
+    def _handle_priority_items(self, args: Dict, conv_id: int) -> Dict:
         """Get prioritized items to review."""
         limit = args.get('limit', 10)
         focus = args.get('focus_area', 'unreviewed')
@@ -1168,6 +1204,14 @@ CURRENT CONTEXT:
             response += f"{i}. {name}\n   [{bucket}] {dept}\n"
         
         response += f"\nCompleting these reduces {focus} backlog significantly."
+        
+        # Store context for follow-ups
+        save_query_context(conv_id, {
+            'type': 'priority',
+            'focus': focus,
+            'count': len(results),
+            'resource_keys': [r['resource_key'] for r in results]
+        })
         
         return {'response': response}
     
@@ -1641,3 +1685,27 @@ def get_pending_action(user_id: int) -> Optional[Dict]:
 def clear_pending_action(user_id: int):
     """Clear pending action for user."""
     db.execute("DELETE FROM chat_pending_actions WHERE user_id = ?", (user_id,))
+
+
+# ============================================================================
+# Query Context Management (for follow-up support)
+# ============================================================================
+
+def save_query_context(conv_id: int, context: Dict):
+    """Save last query context for follow-ups."""
+    db.execute(
+        "UPDATE chat_conversations SET query_context = ? WHERE conversation_id = ?",
+        (json.dumps(context), conv_id)
+    )
+
+
+def get_query_context(conv_id: int) -> Optional[Dict]:
+    """Get last query context."""
+    result = db.execute(
+        "SELECT query_context FROM chat_conversations WHERE conversation_id = ?",
+        (conv_id,), fetch="one"
+    )
+    if result and result.get('query_context'):
+        ctx = result['query_context']
+        return json.loads(ctx) if isinstance(ctx, str) else ctx
+    return None

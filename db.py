@@ -768,6 +768,12 @@ def init_db() -> None:
                     )
                 """)
                 
+                # Add query_context column for follow-up support
+                cursor.execute("""
+                    ALTER TABLE chat_conversations 
+                    ADD COLUMN IF NOT EXISTS query_context JSONB
+                """)
+                
             conn.commit()
             _logger.info("init_db() completed successfully")
         finally:
