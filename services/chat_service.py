@@ -1661,6 +1661,48 @@ def update_conversation_title(conversation_id: int, title: str):
     )
 
 
+def delete_conversation(conversation_id: int, user_id: int):
+    """Delete a conversation and its messages. Only allows deletion of own conversations."""
+    # Verify ownership
+    conv = db.execute(
+        "SELECT user_id FROM chat_conversations WHERE conversation_id = ?",
+        (conversation_id,), fetch="one"
+    )
+    if not conv or conv['user_id'] != user_id:
+        raise ValueError("Conversation not found or not owned by user")
+    
+    # Delete messages first (foreign key constraint)
+    db.execute(
+        "DELETE FROM chat_messages WHERE conversation_id = ?",
+        (conversation_id,)
+    )
+    # Delete conversation
+    db.execute(
+        "DELETE FROM chat_conversations WHERE conversation_id = ?",
+        (conversation_id,)
+    )
+
+
+def backfill_conversation_titles():
+    """One-time backfill of conversation titles from first message."""
+    rows = db.execute(
+        """SELECT DISTINCT ON (c.conversation_id) 
+                  c.conversation_id, m.content
+           FROM chat_conversations c
+           JOIN chat_messages m ON m.conversation_id = c.conversation_id
+           WHERE c.title = 'New conversation'
+           AND m.role = 'user'
+           ORDER BY c.conversation_id, m.message_id""",
+        fetch="all"
+    )
+    count = 0
+    for row in rows:
+        new_title = row['content'][:50] + ('...' if len(row['content']) > 50 else '')
+        update_conversation_title(row['conversation_id'], new_title)
+        count += 1
+    return count
+
+
 def get_conversations(user_id: int) -> List[Dict]:
     """Get all conversations for a user."""
     return db.execute(

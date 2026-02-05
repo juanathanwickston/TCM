@@ -18,6 +18,18 @@
     <link href="{% static 'css/tcm.css' %}" rel="stylesheet">
 
     {% block extra_css %}{% endblock %}
+    
+    <!-- Pre-render: Set chat state BEFORE body renders -->
+    <script>
+        (function() {
+            var s = localStorage.getItem('tcm_chat_open');
+            if (s === 'open') {
+                document.documentElement.classList.add('chat-preopen');
+                var w = localStorage.getItem('tcm_chat_width') || '400';
+                document.documentElement.style.setProperty('--chat-sidebar-width', w + 'px');
+            }
+        })();
+    </script>
 </head>
 
 <body>
@@ -118,13 +130,6 @@
     </main>
 
     {% if user.is_authenticated %}
-    <!-- Pre-render: Apply open class BEFORE page renders to prevent animation flash -->
-    <script>
-        if (localStorage.getItem('tcm_chat_open') === 'open') {
-            document.documentElement.classList.add('chat-preopen');
-        }
-    </script>
-    
     <!-- Chat Sidebar -->
     <div id="chatSidebar" class="chat-sidebar">
         <div class="chat-resize-handle" id="chatResizeHandle"></div>
@@ -307,6 +312,26 @@ html.chat-preopen .chat-sidebar.open {
 .chat-history-item.active {
     background: var(--payroc-cobalt, #0051C2);
     color: white;
+}
+
+.chat-history-item .delete-btn {
+    opacity: 0;
+    margin-left: auto;
+    padding: 0.25rem;
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+
+.chat-history-item:hover .delete-btn {
+    opacity: 0.6;
+}
+
+.chat-history-item .delete-btn:hover {
+    opacity: 1;
+    color: #dc3545;
 }
 
 /* Messages Area */
@@ -553,7 +578,10 @@ html.chat-preopen .chat-sidebar.open {
     
     // Restore chat open state on page load
     if (savedState === 'open') {
-        openSidebar();
+        // Just sync classes - layout already set by pre-render script in <head>
+        sidebar.classList.add('open');
+        document.body.classList.add('chat-open');
+        updateContentMargin();  // Safe now - CSS variable already set
         // Remove preopen class after a tick to restore animations for future toggles
         requestAnimationFrame(() => {
             document.documentElement.classList.remove('chat-preopen');
@@ -853,12 +881,47 @@ html.chat-preopen .chat-sidebar.open {
                          data-conv-id="${c.conversation_id}">
                         <i class="bi bi-chat me-2"></i>
                         <span>${c.title || 'Untitled'}</span>
+                        <button class="delete-btn" data-conv-id="${c.conversation_id}" title="Delete conversation">
+                            <i class="bi bi-trash"></i>
+                        </button>
                     </div>
                 `).join('');
                 
-                // Add click handlers
+                // Add click handlers for loading conversations
                 historyList.querySelectorAll('.chat-history-item').forEach(item => {
-                    item.addEventListener('click', () => loadConversation(item.dataset.convId));
+                    item.addEventListener('click', (e) => {
+                        // Don't load if clicking delete button
+                        if (e.target.closest('.delete-btn')) return;
+                        loadConversation(item.dataset.convId);
+                    });
+                });
+                
+                // Add click handlers for delete buttons
+                historyList.querySelectorAll('.delete-btn').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        if (!confirm('Delete this conversation?')) return;
+                        
+                        const convId = btn.dataset.convId;
+                        try {
+                            const resp = await fetch(`${API_BASE}/conversations/${convId}/delete/`, {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: { 'Content-Type': 'application/json' }
+                            });
+                            if (resp.ok) {
+                                // Remove from UI
+                                btn.closest('.chat-history-item').remove();
+                                // If this was the current conversation, reset
+                                if (parseInt(convId) === currentConversationId) {
+                                    currentConversationId = null;
+                                    messagesContainer.innerHTML = '<div class="chat-message assistant"><div class="chat-message-content"><p>Hi! I\'m your TCM Assistant. Ask me anything about your training content.</p></div></div>';
+                                }
+                            }
+                        } catch (e) {
+                            console.error('Failed to delete:', e);
+                        }
+                    });
                 });
             } else {
                 historyList.innerHTML = '<div class="text-muted small p-2">No previous conversations</div>';

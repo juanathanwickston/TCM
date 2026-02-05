@@ -1861,3 +1861,19 @@ def api_chat_new(request):
     
     conv_id = create_conversation(request.user.id)
     return JsonResponse({'conversation_id': conv_id})
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_chat_delete(request, conversation_id):
+    """
+    Delete a conversation and its messages.
+    """
+    from django.http import JsonResponse
+    from services.chat_service import delete_conversation
+    
+    try:
+        delete_conversation(conversation_id, request.user.id)
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

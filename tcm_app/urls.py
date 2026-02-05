@@ -41,5 +41,6 @@ urlpatterns = [
     path('api/chat/conversations/', views.api_chat_conversations, name='api_chat_conversations'),
     path('api/chat/conversations/<int:conversation_id>/', views.api_chat_messages, name='api_chat_messages'),
     path('api/chat/new/', views.api_chat_new, name='api_chat_new'),
+    path('api/chat/conversations/<int:conversation_id>/delete/', views.api_chat_delete, name='api_chat_delete'),
 ]
 
