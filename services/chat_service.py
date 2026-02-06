@@ -78,17 +78,31 @@ IDENTITY (Critical - Use These Exact Rules):
 - Refer to "our catalogue" and "your resources"
 - I work FOR the training team, not as a separate entity
 
-RESPONSE RULES:
-1. Always include percentages when giving counts
-2. Structure with bullet points for clarity
-3. End with recommended action or question
-4. For lists, show max 10 items with "...and N more"
-5. Before bulk updates, explain what would be overridden
-6. ALWAYS confirm what filter was applied: "Found 37 job_aids resources" not just "Found 37 resources"
+FORMATTING:
+- No bold markers (**) in responses - plain text only
+- No percentages unless user explicitly asks for them
+- Plain lists with dashes
+- No parenthetical instructions like "(say 'continue'...)"
+- Keep replies short and skimmable
+
+TONE:
+- Calm and confident, never defensive
+- Never apologize unless there's an actual error
+- Acknowledge the question before answering
+- Assume good intent from the user
+
+LANGUAGE (use human-friendly words):
+- Say "Here are job aids" NOT "Resources of type 'job_aids'"
+- Say "These are" NOT "Classified under"
+- Say "I didn't find any" NOT "No resources matching those criteria"
+- Say "Status" NOT "Scrub status"
+- Say "Not reviewed" NOT "not_reviewed"
+- NEVER say "taxonomy" to users
+- Before bulk updates, explain what would change
 
 CONVERSATIONAL INTELLIGENCE (Critical - When NOT to call functions):
 - "Is this for X?" / "Was that for Y?" → Answer about PREVIOUS output, don't repeat query
-- "Did you understand?" / "Did you see my question?" → Apologize and ask for clarification
+- "Did you understand?" / "Did you see my question?" → Acknowledge clearly, then ask what they need
 - "What did you show me?" / "What was that?" → Describe the previous output
 - "What filters are active?" → Explain current context from PREVIOUS QUERY CONTEXT
 - Greetings, thanks, complaints → Respond conversationally, no function needed
@@ -98,7 +112,7 @@ FILTER CONTEXT RULES (Critical - Maintain conversation continuity):
 - When user asks for a breakdown AFTER a filtered query, APPLY THE SAME FILTERS
 - Example: User says "show job aids" then "break down by department" → breakdown should be for job_aids only
 - If user wants to clear filters, they'll say "all resources" or "clear filters" or "start over"
-- When showing results, ALWAYS state what filters were applied
+- When showing results, state what type or filter is active
 
 =============================================================================
 COMPLETE TAXONOMY (Exact Values Only - Never Invent Values)
@@ -1045,13 +1059,12 @@ CURRENT CONTEXT:
             )
             total = total_result['cnt'] if total_result else 1
             
-            # Build natural response with percentage
-            filter_desc = self._describe_filters(filters)
+            # Build natural response
+            type_label = self._get_type_label(filters)
             if count == 0:
-                response = f"I didn't find any resources{filter_desc}."
+                response = f"I didn't find any {type_label}."
             else:
-                pct = (count / total * 100) if total > 0 else 0
-                response = f"Found **{count:,}** resource{'s' if count != 1 else ''}{filter_desc} ({pct:.1f}% of catalog)."
+                response = f"There are {count:,} {type_label} in the catalog."
             
             # Store context for follow-ups
             save_query_context(conv_id, {
@@ -1084,20 +1097,21 @@ CURRENT CONTEXT:
             )
             
             if not results:
-                return {'response': f"I didn't find any resources{self._describe_filters(filters)}."}
+                type_label = self._get_type_label(filters)
+                return {'response': f"I didn't find any {type_label}."}
             
             items = []
             for r in results:
-                name = r['display_name'] or r['resource_key']
-                status = r['scrub_status'] or 'Unreviewed'
-                items.append(f"- {name} ({status})")
+                name = self._clean_display_name(r['display_name'] or r['resource_key'])
+                status = (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed')
+                items.append(f"- {name} \u2013 {status}")
             
-            filter_desc = self._describe_filters(filters)
-            response = f"Here are {len(results)} of {total_matching} resources{filter_desc}:\n" + "\n".join(items)
+            type_label = self._get_type_label(filters)
+            response = f"Here are {type_label}.\nShowing {len(results)} of {total_matching}.\n\n" + "\n".join(items)
             
             remaining = total_matching - len(results)
             if remaining > 0:
-                response += f"\n\n({remaining} more available. Say 'continue' or 'show more' for next page.)"
+                response += f"\n\nYou can say \"show more\" to see the rest."
             
             # Store context for follow-ups with pagination support
             save_query_context(conv_id, {
@@ -1134,18 +1148,16 @@ CURRENT CONTEXT:
             )
             
             if not results:
-                return {'response': "No data found for that summary."}
+                type_label = self._get_type_label(filters)
+                return {'response': f"I didn't find any {type_label} to break down."}
             
-            # Calculate total for percentages
             total = sum(r['cnt'] for r in results)
-            field_label = group_field.replace('_', ' ').title()
-            filter_desc = self._describe_filters(filters)
+            field_label = group_field.replace('_', ' ').replace('scrub status', 'status')
             
-            lines = [f"**Breakdown by {field_label}**{filter_desc}:\n"]
+            lines = [f"Here's the {field_label} breakdown:\n"]
             for r in results:
-                value = r[group_field] or 'Unassigned'
-                pct = (r['cnt'] / total * 100) if total else 0
-                lines.append(f"- {value}: **{r['cnt']:,}** ({pct:.1f}%)")
+                value = (r[group_field] or 'Unassigned').replace('not_reviewed', 'Not reviewed')
+                lines.append(f"- {value}: {r['cnt']:,}")
             
             return {'response': '\n'.join(lines)}
         
@@ -1194,20 +1206,20 @@ CURRENT CONTEXT:
         
         items = []
         for r in results:
-            name = r['display_name'] or r['resource_key']
-            status = r['scrub_status'] or 'Unreviewed'
-            items.append(f"- {name} ({status})")
+            name = self._clean_display_name(r['display_name'] or r['resource_key'])
+            status = (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed')
+            items.append(f"- {name} \u2013 {status}")
         
         # Show position in full list
         start_num = new_offset + 1
         end_num = new_offset + len(results)
-        response = f"Showing {start_num}-{end_num} of {total_count}:\n" + "\n".join(items)
+        response = f"Showing {start_num}-{end_num} of {total_count}.\n\n" + "\n".join(items)
         
         remaining = total_count - end_num
         if remaining > 0:
-            response += f"\n\n({remaining} more available. Say 'continue' for next page.)"
+            response += f"\n\nYou can say \"show more\" to see the rest."
         else:
-            response += "\n\n(End of list.)"
+            response += "\n\nThat's everything."
         
         # Update context with new offset
         save_query_context(conv_id, {
@@ -1248,6 +1260,32 @@ CURRENT CONTEXT:
         response += f"\n\n**Rule:** {info['rule']}"
         
         return {'response': response}
+    
+    # Known file extensions to strip from display names
+    _STRIP_EXTENSIONS = {'.pdf', '.mp4', '.docx', '.doc', '.xlsx', '.xls', '.png', 
+                         '.jpg', '.jpeg', '.gif', '.pptx', '.ppt', '.csv', '.txt',
+                         '.zip', '.html', '.htm', '.mov', '.wmv', '.avi', '.mp3'}
+    
+    def _clean_display_name(self, name: str) -> str:
+        """Strip known file extensions from display name.
+        Only strips extensions from the known allowlist to avoid
+        mangling names like 'oneServer 3.2'."""
+        import os
+        _, ext = os.path.splitext(name)
+        if ext.lower() in self._STRIP_EXTENSIONS:
+            return name[:-len(ext)]
+        return name
+    
+    def _get_type_label(self, filters: Dict) -> str:
+        """Get a human-friendly label for the current filter context.
+        Returns things like 'job aids', 'self directed training', or 'resources'."""
+        if filters.get('training_type'):
+            return filters['training_type'].replace('_', ' ')
+        if filters.get('bucket'):
+            return f"{filters['bucket']} resources"
+        if filters.get('primary_department'):
+            return f"{filters['primary_department']} resources"
+        return "resources"
     
     def _describe_filters(self, filters: Dict, verbose: bool = False) -> str:
         """
@@ -1304,7 +1342,7 @@ CURRENT CONTEXT:
         # Training type value filter
         if filters.get('training_type'):
             type_label = filters['training_type'].replace('_', ' ').title()
-            parts.append(f"of type '{type_label}'" if not verbose else f"training_type='{filters['training_type']}'")
+            parts.append(f"({type_label})" if not verbose else f"training_type='{filters['training_type']}'")
         
         if filters.get('has_owner') is True:
             parts.append("with an owner" if not verbose else "scrub_owner IS NOT NULL")
