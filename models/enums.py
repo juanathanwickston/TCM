@@ -120,11 +120,16 @@ FUNCTIONAL_AREAS = [
     "Partner Management", "Operations", "Compliance", "General"
 ]
 
-TRAINING_TYPES = [
-    "Video",
-    "Job Aid / PDF",
-    "SOP / Process Document",
-    "Slide Deck",
-    "Interactive / eLearning",
-    "Live / Instructor-Led"
+# DEPRECATED: TRAINING_TYPES moved to services/container_service.py
+# The authoritative source is TRAINING_TYPE_LABELS in container_service.py
+# Valid keys: instructor_led_in_person, instructor_led_virtual, self_directed,
+#             video_on_demand, job_aids, resources
+# DO NOT USE THIS CONSTANT - it contains stale values
+_DEPRECATED_TRAINING_TYPES = [
+    "Video",  # WRONG - use video_on_demand
+    "Job Aid / PDF",  # WRONG - use job_aids
+    "SOP / Process Document",  # WRONG - use resources
+    "Slide Deck",  # WRONG - use resources
+    "Interactive / eLearning",  # WRONG - use self_directed
+    "Live / Instructor-Led"  # WRONG - use instructor_led_in_person or instructor_led_virtual
 ]
