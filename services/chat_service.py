@@ -446,6 +446,7 @@ CHAT_FUNCTIONS = [
                         "has_scrub_reason": {"type": "boolean", "description": "True = has scrub reason, False = no scrub reason"},
                         "has_invest_decision": {"type": "boolean", "description": "True = has investment decision, False = no investment decision"},
                         "has_training_type": {"type": "boolean", "description": "True = has training type, False = no training type"},
+                        "training_type": {"type": "string", "description": "Filter by training type: job_aids, video_on_demand, self_directed, instructor_led_virtual, instructor_led_in_person, resources. Also accepts 'Job Aids', 'Video On Demand' etc."},
                         "has_owner": {"type": "boolean", "description": "True = has scrub owner assigned, False = unowned"},
                         "search_text": {"type": "string", "description": "Search in display_name (use for keyword searches)"},
                     }
@@ -458,6 +459,11 @@ CHAT_FUNCTIONS = [
                 "limit": {
                     "type": "integer",
                     "description": "Max items to return for list (default 10)"
+                },
+                "group_by": {
+                    "type": "string",
+                    "enum": ["scrub_status", "bucket", "audience", "primary_department", "training_type", "sales_stage", "invest_decision"],
+                    "description": "For 'summary' return type: group results by this field instead of scrub_status"
                 }
             },
             "required": ["return_type"]
@@ -975,6 +981,22 @@ CURRENT CONTEXT:
         elif filters.get('has_training_type') is False:
             conditions.append("(training_type IS NULL OR training_type = '')")
         
+        # Training type value filter (with user-friendly normalization)
+        if filters.get('training_type'):
+            raw_type = filters['training_type'].lower().strip()
+            # Normalize common user inputs to database keys
+            type_map = {
+                'job aids': 'job_aids', 'job aid': 'job_aids', 'job_aids': 'job_aids',
+                'video on demand': 'video_on_demand', 'video': 'video_on_demand', 'video_on_demand': 'video_on_demand',
+                'self directed': 'self_directed', 'self-directed': 'self_directed', 'self_directed': 'self_directed',
+                'instructor led virtual': 'instructor_led_virtual', 'virtual': 'instructor_led_virtual', 'instructor_led_virtual': 'instructor_led_virtual',
+                'instructor led in person': 'instructor_led_in_person', 'in person': 'instructor_led_in_person', 'instructor_led_in_person': 'instructor_led_in_person',
+                'resources': 'resources', 'resource': 'resources',
+            }
+            normalized = type_map.get(raw_type.replace('-', ' ').replace('_', ' '), raw_type.replace(' ', '_'))
+            conditions.append("training_type = ?")
+            params.append(normalized)
+        
         if filters.get('has_owner') is True:
             conditions.append("(scrub_owner IS NOT NULL AND scrub_owner != '')")
         elif filters.get('has_owner') is False:
@@ -1074,23 +1096,36 @@ CURRENT CONTEXT:
             }
         
         elif return_type == 'summary':
-            # Group by a field for summary
+            # Group by specified field (default: scrub_status)
+            group_field = args.get('group_by', 'scrub_status')
+            valid_group_fields = ['scrub_status', 'bucket', 'audience', 'primary_department', 
+                                  'training_type', 'sales_stage', 'invest_decision']
+            if group_field not in valid_group_fields:
+                group_field = 'scrub_status'
+            
             results = db.execute(
-                f"""SELECT scrub_status, COUNT(*) as cnt 
+                f"""SELECT {group_field}, COUNT(*) as cnt 
                     FROM resources WHERE {where_clause}
-                    GROUP BY scrub_status""",
+                    GROUP BY {group_field}
+                    ORDER BY cnt DESC""",
                 tuple(params), fetch="all"
             )
             
             if not results:
                 return {'response': "No data found for that summary."}
             
-            lines = ["Here's the breakdown by status:"]
-            for r in results:
-                status = r['scrub_status'] or 'Unreviewed'
-                lines.append(f"- {status}: {r['cnt']:,}")
+            # Calculate total for percentages
+            total = sum(r['cnt'] for r in results)
+            field_label = group_field.replace('_', ' ').title()
+            filter_desc = self._describe_filters(filters)
             
-            return {'response': "\n".join(lines)}
+            lines = [f"**Breakdown by {field_label}**{filter_desc}:\n"]
+            for r in results:
+                value = r[group_field] or 'Unassigned'
+                pct = (r['cnt'] / total * 100) if total else 0
+                lines.append(f"- {value}: **{r['cnt']:,}** ({pct:.1f}%)")
+            
+            return {'response': '\n'.join(lines)}
         
         return {'response': "Not sure what you're looking for."}
     
