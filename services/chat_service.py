@@ -575,24 +575,7 @@ CHAT_FUNCTIONS = [
     # =========================================================================
     # STRATEGIC ADVISOR TOOLS
     # =========================================================================
-    {
-        "name": "search_resources",
-        "description": "Search resources by keyword in display name. Use for discovery queries like 'do we have training on X'.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Search terms to look for in resource names"
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Max results to return (default 10)"
-                }
-            },
-            "required": ["query"]
-        }
-    },
+
     {
         "name": "get_high_risk_areas",
         "description": "Identify highest-risk areas in the catalog based on unreviewed count, unowned resources, and duplicates.",
@@ -921,9 +904,7 @@ CURRENT CONTEXT:
             return self._prepare_sales_stage_update(args, context, conv_id)
         
         # Strategic advisor tools
-        elif name == "search_resources":
-            return self._handle_search(args, conv_id)
-        
+
         elif name == "get_high_risk_areas":
             return self._handle_high_risk_areas(args)
         
@@ -1267,11 +1248,11 @@ CURRENT CONTEXT:
         info = taxonomy_fields[field]
         
         # Build response
-        response = f"## {info['name']}\n\n"
+        response = f"{info['name']}\n\n"
         response += f"{info['definition']}\n\n"
-        response += "**Valid Values:**\n"
+        response += "Valid values:\n"
         response += "\n".join(f"- {v}" for v in info['values'])
-        response += f"\n\n**Rule:** {info['rule']}"
+        response += f"\n\nRule: {info['rule']}"
         
         return {'response': response}
     
@@ -1575,60 +1556,7 @@ CURRENT CONTEXT:
     # STRATEGIC ADVISOR HANDLERS
     # =========================================================================
     
-    def _handle_search(self, args: Dict, conv_id: int) -> Dict:
-        """Search resources by keyword in display name."""
-        query = args.get('query', '')
-        limit = args.get('limit', 10)
-        
-        if not query:
-            return {'response': "What would you like to search for?"}
-        
-        # Use ILIKE for case-insensitive search
-        results = db.execute(
-            """SELECT resource_key, display_name, bucket, scrub_status, primary_department
-               FROM resources
-               WHERE is_archived = 0 AND is_placeholder = 0
-               AND display_name ILIKE %s
-               ORDER BY display_name
-               LIMIT %s""",
-            (f'%{query}%', limit),
-            fetch="all"
-        )
-        
-        if not results:
-            return {'response': f"No resources found matching '{query}'."}
-        
-        # Get total for context
-        total = db.get_active_resource_count()
-        
-        # Group by status
-        by_status = {}
-        for r in results:
-            status = r['scrub_status'] or 'not_reviewed'
-            by_status[status] = by_status.get(status, 0) + 1
-        
-        status_summary = ", ".join(f"{v} {k}" for k, v in by_status.items())
-        
-        response = f"Found {len(results)} resources matching '{query}':\n"
-        response += f"- Status breakdown: {status_summary}\n\n"
-        
-        for r in results[:10]:
-            status = r['scrub_status'] or 'not_reviewed'
-            response += f"- {r['display_name']} [{status}]\n"
-        
-        if len(results) > 10:
-            response += f"- ...and {len(results) - 10} more\n"
-        
-        # Store context for follow-ups
-        save_query_context(conv_id, {
-            'type': 'search',
-            'query': query,
-            'count': len(results),
-            'resource_keys': [r['resource_key'] for r in results]
-        })
-        
-        return {'response': response}
-    
+
     def _handle_high_risk_areas(self, args: Dict) -> Dict:
         """Identify highest-risk areas based on unreviewed and unowned resources."""
         limit = args.get('limit', 5)
@@ -1662,12 +1590,11 @@ CURRENT CONTEXT:
         for i, area in enumerate(risk_data, 1):
             bucket = area['bucket'] or 'Unknown'
             dept = area['primary_department'] or 'Not Categorized'
-            risk_score = area['unreviewed'] * 3 + area['unowned'] * 2
             
-            response += f"{i}. **{bucket} → {dept}** (risk score: {risk_score})\n"
-            response += f"   - {area['unreviewed']} unreviewed, {area['unowned']} unowned\n"
+            response += f"{i}. {bucket} - {dept}\n"
+            response += f"   {area['unreviewed']} unreviewed, {area['unowned']} unowned\n"
         
-        response += f"\nRecommend: Focus on the top area first."
+        response += f"\nFocus on the top area first."
         
         return {'response': response}
     
@@ -1726,13 +1653,13 @@ CURRENT CONTEXT:
         # Sort by count descending
         blockers.sort(key=lambda x: x['count'], reverse=True)
         
-        response = "**Blocking factors** (sorted by impact):\n\n"
+        response = "Blocking factors, sorted by impact:\n\n"
         
         for b in blockers:
-            response += f"**{b['issue']}**: {b['count']:,} ({b['pct']:.1f}%)\n"
-            response += f"→ Fix: {b['fix']}\n\n"
+            response += f"- {b['issue']}: {b['count']:,}\n"
+            response += f"  Fix: {b['fix']}\n\n"
         
-        response += f"Addressing '{blockers[0]['issue']}' is the fastest way to unblock progress."
+        response += f"Addressing {blockers[0]['issue'].lower()} is the fastest way to unblock progress."
         
         return {'response': response}
     
@@ -1795,12 +1722,12 @@ CURRENT CONTEXT:
         if filters.get('primary_department'):
             filter_desc += f" → {filters['primary_department']}"
         
-        response = f"**Effort estimate**{filter_desc} ({total_resources:,} resources):\n\n"
+        response = f"Effort estimate{filter_desc} ({total_resources:,} resources):\n\n"
         
         for b in breakdown:
-            response += f"- {b['status']}: {b['count']:,} items × {EFFORT_HOURS.get(b['status'], 1.0)} hrs = **{b['hours']:.1f} hours**\n"
+            response += f"- {b['status']}: {b['count']:,} items, about {b['hours']:.1f} hours\n"
         
-        response += f"\n**Total: {total_hours:.0f}-{total_hours * 1.2:.0f} hours** (with buffer)\n"
+        response += f"\nTotal: {total_hours:.0f}-{total_hours * 1.2:.0f} hours (with buffer)\n"
         
         if total_hours > 40:
             response += "\nThat's significant. Consider breaking this into phases."
@@ -1842,13 +1769,13 @@ CURRENT CONTEXT:
         if not results:
             return {'response': f"No {focus} items found. Great progress!"}
         
-        response = f"**Top {len(results)} {focus} items** to review:\n\n"
+        response = f"Top {len(results)} {focus} items to review:\n\n"
         
         for i, r in enumerate(results, 1):
             bucket = r['bucket'] or 'Unknown'
             dept = r['primary_department'] or ''
             name = r['display_name'] or r['resource_key']
-            response += f"{i}. {name}\n   [{bucket}] {dept}\n"
+            response += f"{i}. {name}\n   {bucket} - {dept}\n"
         
         response += f"\nCompleting these reduces {focus} backlog significantly."
         
@@ -1912,10 +1839,10 @@ CURRENT CONTEXT:
         if not misalignments:
             return {'response': "Investment effort appears well-aligned with importance."}
         
-        response = "**Potential investment misalignment detected:**\n\n"
+        response = "Potential investment misalignment detected:\n\n"
         
         for m in sorted(misalignments, key=lambda x: x['diff'], reverse=True):
-            response += f"**{m['bucket']}**:\n"
+            response += f"{m['bucket']}:\n"
             response += f"- Has {m['modify_pct']:.0f}% of Modify items\n"
             response += f"- But represents {m['importance_pct']:.0f}% of catalog\n\n"
         
@@ -1975,15 +1902,14 @@ CURRENT CONTEXT:
         if not wins:
             return {'response': "No quick wins available. Time for deeper work!"}
         
-        response = "**Quick wins** (high impact, low effort):\n\n"
+        response = "Quick wins (high impact, low effort):\n\n"
         
         for i, w in enumerate(wins, 1):
-            response += f"**{i}. {w['action']}**\n"
-            response += f"- Items: {w['count']:,}\n"
-            response += f"- Effort: {w['effort']}\n"
-            response += f"- Impact: {w['impact']}\n\n"
+            response += f"{i}. {w['action']}\n"
+            response += f"   {w['count']:,} items - {w['effort'].lower()}\n"
+            response += f"   Impact: {w['impact']}\n\n"
         
-        response += f"Recommend: Start with '{wins[0]['action']}' for immediate visible progress."
+        response += f"Start with {wins[0]['action'].lower()} for immediate visible progress."
         
         return {'response': response}
     
@@ -2035,13 +1961,12 @@ CURRENT CONTEXT:
         if dept:
             filter_desc += f" → {dept}"
         
-        response = f"**Status breakdown**{filter_desc} ({total_count:,} resources):\n\n"
+        response = f"Status breakdown{filter_desc} ({total_count:,} resources):\n\n"
         
         for row in status_data:
             status = row['scrub_status'] or 'not_reviewed'
             count = row['cnt']
-            pct = (count / total_count * 100) if total_count else 0
-            response += f"- **{status}**: {count:,} ({pct:.1f}%)\n"
+            response += f"- {status}: {count:,}\n"
         
         # Add insight
         not_reviewed = sum(r['cnt'] for r in status_data if (r['scrub_status'] or 'not_reviewed') == 'not_reviewed')
