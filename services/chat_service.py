@@ -23,6 +23,11 @@ from services.scrub_rules import (
     VALID_SCRUB_DECISIONS, CANONICAL_AUDIENCES, CANONICAL_SCRUB_STATUSES
 )
 from services.sales_stage import SALES_STAGE_KEYS, SALES_STAGE_LABELS
+from services.taxonomy import (
+    validate_taxonomy_update, get_field_options, get_taxonomy_fields,
+    CANONICAL_BUCKETS, VALID_INVEST_DECISIONS, VALID_TRAINING_TYPES,
+    get_valid_departments
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +68,15 @@ PERSONALITY:
 - Say "I" not "the system"
 - Admit uncertainty when appropriate
 - Keep responses scannable (use bullet points)
+
+IDENTITY (Critical - Use These Exact Rules):
+- I am the TCM Assistant, the AI interface for the Training Catalogue Manager
+- If asked who I am: "I'm the TCM Assistant, built to help manage the Payroc training catalogue."
+- If asked who made me or what model I am: "I'm the TCM Assistant, designed specifically for this training catalogue."
+- NEVER mention OpenAI, GPT, ChatGPT, or any model names
+- NEVER say "as an AI" or "as a language model"
+- Refer to "our catalogue" and "your resources"
+- I work FOR the training team, not as a separate entity
 
 RESPONSE RULES:
 1. Always include percentages when giving counts
@@ -431,6 +445,12 @@ CHAT_FUNCTIONS = [
                         "has_audience": {"type": "boolean", "description": "True = has audience, False = missing"},
                         "primary_department": {"type": "string"},
                         "sales_stage": {"type": "string"},
+                        "has_sales_stage": {"type": "boolean", "description": "True = has sales stage assigned, False = no sales stage"},
+                        "has_scrub_reason": {"type": "boolean", "description": "True = has scrub reason, False = no scrub reason"},
+                        "has_invest_decision": {"type": "boolean", "description": "True = has investment decision, False = no investment decision"},
+                        "has_training_type": {"type": "boolean", "description": "True = has training type, False = no training type"},
+                        "has_owner": {"type": "boolean", "description": "True = has scrub owner assigned, False = unowned"},
+                        "search_text": {"type": "string", "description": "Search in display_name (use for keyword searches)"},
                     }
                 },
                 "return_type": {
@@ -623,6 +643,31 @@ CHAT_FUNCTIONS = [
                 "bucket": {"type": "string", "description": "Filter by bucket (Onboarding, Upskilling)"},
                 "primary_department": {"type": "string", "description": "Filter by department"}
             }
+        }
+    },
+    {
+        "name": "continue_list",
+        "description": "Continue showing more results from the previous query. Use when user says 'continue', 'show more', 'next', 'more'.",
+        "parameters": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "explain_taxonomy",
+        "description": "Explain a TCM taxonomy field, its valid values, and when to use it. Use this when user asks about field meanings, valid values, or classification rules.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "field": {
+                    "type": "string",
+                    "enum": ["bucket", "audience", "scrub_status", "scrub_reason", 
+                             "sales_stage", "invest_decision", "invest_effort", 
+                             "invest_cost", "training_type", "primary_department"],
+                    "description": "Which taxonomy field to explain"
+                }
+            },
+            "required": ["field"]
         }
     }
 ]
@@ -868,6 +913,12 @@ CURRENT CONTEXT:
         elif name == "get_status_breakdown":
             return self._handle_status_breakdown(args)
         
+        elif name == "continue_list":
+            return self._handle_continue_list(args, conv_id)
+        
+        elif name == "explain_taxonomy":
+            return self._handle_explain_taxonomy(args)
+        
         return {'response': "I'm not sure how to do that."}
     
     def _handle_query(self, args: Dict, conv_id: int) -> Dict:
@@ -901,6 +952,42 @@ CURRENT CONTEXT:
             conditions.append("primary_department = ?")
             params.append(filters['primary_department'])
         
+        # Sales stage filter
+        if filters.get('sales_stage'):
+            conditions.append("sales_stage = ?")
+            params.append(filters['sales_stage'])
+        
+        # Has/missing filters for all major fields
+        if filters.get('has_sales_stage') is True:
+            conditions.append("(sales_stage IS NOT NULL AND sales_stage != '')")
+        elif filters.get('has_sales_stage') is False:
+            conditions.append("(sales_stage IS NULL OR sales_stage = '')")
+        
+        if filters.get('has_scrub_reason') is True:
+            conditions.append("(scrub_reasons IS NOT NULL AND scrub_reasons != '')")
+        elif filters.get('has_scrub_reason') is False:
+            conditions.append("(scrub_reasons IS NULL OR scrub_reasons = '')")
+        
+        if filters.get('has_invest_decision') is True:
+            conditions.append("(invest_decision IS NOT NULL AND invest_decision != '')")
+        elif filters.get('has_invest_decision') is False:
+            conditions.append("(invest_decision IS NULL OR invest_decision = '')")
+        
+        if filters.get('has_training_type') is True:
+            conditions.append("(training_type IS NOT NULL AND training_type != '')")
+        elif filters.get('has_training_type') is False:
+            conditions.append("(training_type IS NULL OR training_type = '')")
+        
+        if filters.get('has_owner') is True:
+            conditions.append("(scrub_owner IS NOT NULL AND scrub_owner != '')")
+        elif filters.get('has_owner') is False:
+            conditions.append("(scrub_owner IS NULL OR scrub_owner = '')")
+        
+        # Text search in display_name
+        if filters.get('search_text'):
+            conditions.append("LOWER(display_name) LIKE LOWER(?)")
+            params.append(f"%{filters['search_text']}%")
+        
         where_clause = " AND ".join(conditions)
         
         if return_type == 'count':
@@ -910,24 +997,45 @@ CURRENT CONTEXT:
             )
             count = result['cnt'] if result else 0
             
-            # Build natural response
+            # Get total for percentage calculation
+            total_result = db.execute(
+                "SELECT COUNT(*) as cnt FROM resources WHERE is_archived = 0 AND is_placeholder = 0",
+                fetch="one"
+            )
+            total = total_result['cnt'] if total_result else 1
+            
+            # Build natural response with percentage
             filter_desc = self._describe_filters(filters)
             if count == 0:
                 response = f"I didn't find any resources{filter_desc}."
             else:
-                response = f"Found {count:,} resource{'s' if count != 1 else ''}{filter_desc}."
+                pct = (count / total * 100) if total > 0 else 0
+                response = f"Found **{count:,}** resource{'s' if count != 1 else ''}{filter_desc} ({pct:.1f}% of catalog)."
             
             # Store context for follow-ups
             save_query_context(conv_id, {
                 'type': 'query',
                 'filters': filters,
                 'count': count,
-                'resource_keys': None
+                'total_count': total,
+                'resource_keys': None,
+                'where_clause': where_clause,
+                'params': list(params)
             })
             
             return {'response': response}
         
         elif return_type == 'list':
+            # First get total count
+            total_result = db.execute(
+                f"SELECT COUNT(*) as cnt FROM resources WHERE {where_clause}",
+                tuple(params), fetch="one"
+            )
+            total_matching = total_result['cnt'] if total_result else 0
+            
+            # Enforce hard limit of 10
+            limit = min(limit, 10)
+            
             results = db.execute(
                 f"""SELECT resource_key, display_name, bucket, scrub_status, audience 
                     FROM resources WHERE {where_clause} LIMIT ?""",
@@ -943,17 +1051,24 @@ CURRENT CONTEXT:
                 status = r['scrub_status'] or 'Unreviewed'
                 items.append(f"- {name} ({status})")
             
-            response = f"Here are {len(results)} resource{'s' if len(results) != 1 else ''}{self._describe_filters(filters)}:\n" + "\n".join(items)
+            filter_desc = self._describe_filters(filters)
+            response = f"Here are {len(results)} of {total_matching} resources{filter_desc}:\n" + "\n".join(items)
             
-            if len(results) == limit:
-                response += f"\n\n(Showing first {limit}. There may be more.)"
+            remaining = total_matching - len(results)
+            if remaining > 0:
+                response += f"\n\n({remaining} more available. Say 'continue' or 'show more' for next page.)"
             
-            # Store context for follow-ups
+            # Store context for follow-ups with pagination support
             save_query_context(conv_id, {
-                'type': 'query',
+                'type': 'list',
                 'filters': filters,
                 'count': len(results),
-                'resource_keys': [r['resource_key'] for r in results]
+                'total_count': total_matching,
+                'offset': 0,
+                'limit': limit,
+                'resource_keys': [r['resource_key'] for r in results],
+                'where_clause': where_clause,
+                'params': list(params)
             })
             
             return {
@@ -982,22 +1097,170 @@ CURRENT CONTEXT:
         
         return {'response': "Not sure what you're looking for."}
     
-    def _describe_filters(self, filters: Dict) -> str:
-        """Create human-readable filter description."""
+    def _handle_continue_list(self, args: Dict, conv_id: int) -> Dict:
+        """
+        Handle continue_list function call for DB-driven pagination.
+        Always queries the database for the next page - never fabricates data.
+        """
+        # Get stored context from previous query
+        context = get_query_context(conv_id)
+        
+        if not context or context.get('type') != 'list':
+            return {
+                'response': "I don't have a list to continue. Please run a query first, "
+                           "like 'show me unreviewed resources' or 'list resources in Onboarding'."
+            }
+        
+        # Get pagination info from context
+        where_clause = context.get('where_clause')
+        params = context.get('params', [])
+        offset = context.get('offset', 0)
+        limit = context.get('limit', 10)
+        total_count = context.get('total_count', 0)
+        
+        if not where_clause:
+            return {'response': "I can't continue - the previous query context is incomplete."}
+        
+        # Calculate new offset
+        new_offset = offset + limit
+        
+        if new_offset >= total_count:
+            return {'response': f"That's all {total_count} resources! No more to show."}
+        
+        # Query database for next page (NEVER fabricate data)
+        results = db.execute(
+            f"""SELECT resource_key, display_name, bucket, scrub_status, audience 
+                FROM resources WHERE {where_clause} 
+                LIMIT ? OFFSET ?""",
+            tuple(params) + (limit, new_offset), fetch="all"
+        )
+        
+        if not results:
+            return {'response': f"That's all! No more resources to show."}
+        
+        items = []
+        for r in results:
+            name = r['display_name'] or r['resource_key']
+            status = r['scrub_status'] or 'Unreviewed'
+            items.append(f"- {name} ({status})")
+        
+        # Show position in full list
+        start_num = new_offset + 1
+        end_num = new_offset + len(results)
+        response = f"Showing {start_num}-{end_num} of {total_count}:\n" + "\n".join(items)
+        
+        remaining = total_count - end_num
+        if remaining > 0:
+            response += f"\n\n({remaining} more available. Say 'continue' for next page.)"
+        else:
+            response += "\n\n(End of list.)"
+        
+        # Update context with new offset
+        save_query_context(conv_id, {
+            **context,
+            'offset': new_offset,
+            'resource_keys': [r['resource_key'] for r in results]
+        })
+        
+        return {
+            'response': response,
+            'metadata': {'query_results': [dict(r) for r in results]}
+        }
+    
+    def _handle_explain_taxonomy(self, args: Dict) -> Dict:
+        """
+        Explain a TCM taxonomy field with all valid values and usage guidance.
+        Uses centralized taxonomy metadata from taxonomy.py.
+        """
+        field = args.get('field')
+        
+        # Get taxonomy fields lazily (enables dynamic departments)
+        taxonomy_fields = get_taxonomy_fields()
+        
+        if not field or field not in taxonomy_fields:
+            available = ', '.join(taxonomy_fields.keys())
+            return {
+                'response': f"I can explain these taxonomy fields: {available}\n\n"
+                           "Ask me about any of these to learn what values are valid and how to use them."
+            }
+        
+        info = taxonomy_fields[field]
+        
+        # Build response
+        response = f"## {info['name']}\n\n"
+        response += f"{info['definition']}\n\n"
+        response += "**Valid Values:**\n"
+        response += "\n".join(f"- {v}" for v in info['values'])
+        response += f"\n\n**Rule:** {info['rule']}"
+        
+        return {'response': response}
+    
+    def _describe_filters(self, filters: Dict, verbose: bool = False) -> str:
+        """
+        Create human-readable filter description.
+        
+        Args:
+            filters: Filter dictionary
+            verbose: If True, show SQL-like logic for transparency
+        """
         if not filters:
-            return ""
+            return "" if not verbose else " (all active resources)"
         
         parts = []
-        if filters.get('bucket'):
-            parts.append(f"in {filters['bucket']}")
-        if filters.get('scrub_status'):
-            parts.append(f"with status '{filters['scrub_status']}'")
-        if filters.get('has_audience') is False:
-            parts.append("without an audience")
-        if filters.get('audience'):
-            parts.append(f"for {filters['audience']}")
         
-        return " " + " ".join(parts) if parts else ""
+        # Exact value filters
+        if filters.get('bucket'):
+            parts.append(f"in {filters['bucket']}" if not verbose else f"bucket='{filters['bucket']}'")
+        if filters.get('scrub_status'):
+            status = filters['scrub_status']
+            parts.append(f"with status '{status}'" if not verbose else f"scrub_status='{status}'")
+        if filters.get('audience'):
+            parts.append(f"for {filters['audience']}" if not verbose else f"audience='{filters['audience']}'")
+        if filters.get('primary_department'):
+            parts.append(f"in {filters['primary_department']}" if not verbose else f"department='{filters['primary_department']}'")
+        if filters.get('sales_stage'):
+            parts.append(f"at {filters['sales_stage']}" if not verbose else f"sales_stage='{filters['sales_stage']}'")
+        
+        # Has/missing filters
+        if filters.get('has_audience') is False:
+            parts.append("without an audience" if not verbose else "audience IS NULL")
+        elif filters.get('has_audience') is True:
+            parts.append("with an audience" if not verbose else "audience IS NOT NULL")
+        
+        if filters.get('has_sales_stage') is True:
+            parts.append("with a sales stage" if not verbose else "sales_stage IS NOT NULL")
+        elif filters.get('has_sales_stage') is False:
+            parts.append("without a sales stage" if not verbose else "sales_stage IS NULL")
+        
+        if filters.get('has_scrub_reason') is True:
+            parts.append("with a scrub reason" if not verbose else "scrub_reasons IS NOT NULL")
+        elif filters.get('has_scrub_reason') is False:
+            parts.append("without a scrub reason" if not verbose else "scrub_reasons IS NULL")
+        
+        if filters.get('has_invest_decision') is True:
+            parts.append("with an investment decision" if not verbose else "invest_decision IS NOT NULL")
+        elif filters.get('has_invest_decision') is False:
+            parts.append("without an investment decision" if not verbose else "invest_decision IS NULL")
+        
+        if filters.get('has_training_type') is True:
+            parts.append("with a training type" if not verbose else "training_type IS NOT NULL")
+        elif filters.get('has_training_type') is False:
+            parts.append("without a training type" if not verbose else "training_type IS NULL")
+        
+        if filters.get('has_owner') is True:
+            parts.append("with an owner" if not verbose else "scrub_owner IS NOT NULL")
+        elif filters.get('has_owner') is False:
+            parts.append("without an owner" if not verbose else "scrub_owner IS NULL")
+        
+        # Search text
+        if filters.get('search_text'):
+            parts.append(f"matching '{filters['search_text']}'" if not verbose else f"display_name LIKE '%{filters['search_text']}%'")
+        
+        if not parts:
+            return "" if not verbose else " (all active resources)"
+        
+        separator = " AND " if verbose else " "
+        return " " + separator.join(parts)
     
     def _prepare_scrub_update(self, args: Dict, context: Dict, conv_id: int) -> Dict:
         """Prepare a scrub update and request confirmation."""
@@ -1023,12 +1286,23 @@ CURRENT CONTEXT:
         if not resource_keys:
             return {'response': "I need to know which resources to update. Try 'show me X resources' first, then 'set those to Y'."}
         
-        # Validate updates
-        if updates.get('scrub_status') and updates['scrub_status'] not in CANONICAL_SCRUB_STATUSES:
-            return {'response': f"'{updates['scrub_status']}' isn't a valid status. Use Include, Modify, or Sunset."}
-        
-        if updates.get('audience') and updates['audience'] not in CANONICAL_AUDIENCES:
-            return {'response': f"'{updates['audience']}' isn't a recognized audience. Valid options: {', '.join(CANONICAL_AUDIENCES)}"}
+        # Validate updates using centralized taxonomy validation
+        is_valid, error_msg = validate_taxonomy_update(updates)
+        if not is_valid:
+            # Provide helpful suggestions based on the field
+            field_match = None
+            for field_name in ['audience', 'scrub_status', 'scrub_reason', 'sales_stage', 'bucket']:
+                if field_name in error_msg.lower():
+                    field_match = field_name
+                    break
+            
+            if field_match:
+                options = get_field_options(field_match)
+                return {
+                    'response': f"⚠️ {error_msg}\n\n**Valid {field_match.replace('_', ' ').title()} options:**\n" +
+                               "\n".join(f"- {opt}" for opt in options)
+                }
+            return {'response': f"⚠️ {error_msg}"}
         
         # Get resource names for confirmation
         resources = self._get_resource_names(resource_keys)
