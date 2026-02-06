@@ -470,7 +470,7 @@ CHAT_FUNCTIONS = [
                         "audience": {"type": "string"},
                         "has_audience": {"type": "boolean", "description": "True = has audience, False = missing"},
                         "primary_department": {"type": "string"},
-                        "sales_stage": {"type": "string"},
+                        "sales_stage": {"type": "string", "description": "Filter by sales stage. Valid keys: stage_1_identify, stage_2_appointment, stage_3_prep, stage_4_make_sale, stage_5_close, stage_6_referrals. Also accepts shorthand like 'close', 'identify', 'appointment', 'prep', 'make the sale', 'referrals'.", "enum": ["stage_1_identify", "stage_2_appointment", "stage_3_prep", "stage_4_make_sale", "stage_5_close", "stage_6_referrals"]},
                         "has_sales_stage": {"type": "boolean", "description": "True = has sales stage assigned, False = no sales stage"},
                         "has_scrub_reason": {"type": "boolean", "description": "True = has scrub reason, False = no scrub reason"},
                         "has_invest_decision": {"type": "boolean", "description": "True = has investment decision, False = no investment decision"},
@@ -993,8 +993,22 @@ CURRENT CONTEXT:
         
         # Sales stage filter
         if filters.get('sales_stage'):
+            raw_stage = filters['sales_stage'].lower().strip()
+            # Normalize common user inputs to database keys
+            stage_map = {
+                'identify': 'stage_1_identify', 'identify the customer': 'stage_1_identify', '1': 'stage_1_identify',
+                'appointment': 'stage_2_appointment', 'ask for appointment': 'stage_2_appointment', '2': 'stage_2_appointment',
+                'prep': 'stage_3_prep', 'prep for appointment': 'stage_3_prep', '3': 'stage_3_prep',
+                'make the sale': 'stage_4_make_sale', 'make sale': 'stage_4_make_sale', '4': 'stage_4_make_sale',
+                'close': 'stage_5_close', 'close the sale': 'stage_5_close', '5': 'stage_5_close',
+                'referrals': 'stage_6_referrals', 'ask for referrals': 'stage_6_referrals', '6': 'stage_6_referrals',
+            }
+            # Also accept the raw keys directly
+            for key in SALES_STAGE_KEYS:
+                stage_map[key] = key
+            normalized = stage_map.get(raw_stage, filters['sales_stage'])
             conditions.append("sales_stage = ?")
-            params.append(filters['sales_stage'])
+            params.append(normalized)
         
         # Has/missing filters for all major fields
         if filters.get('has_sales_stage') is True:
