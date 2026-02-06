@@ -84,6 +84,21 @@ RESPONSE RULES:
 3. End with recommended action or question
 4. For lists, show max 10 items with "...and N more"
 5. Before bulk updates, explain what would be overridden
+6. ALWAYS confirm what filter was applied: "Found 37 job_aids resources" not just "Found 37 resources"
+
+CONVERSATIONAL INTELLIGENCE (Critical - When NOT to call functions):
+- "Is this for X?" / "Was that for Y?" → Answer about PREVIOUS output, don't repeat query
+- "Did you understand?" / "Did you see my question?" → Apologize and ask for clarification
+- "What did you show me?" / "What was that?" → Describe the previous output
+- "What filters are active?" → Explain current context from PREVIOUS QUERY CONTEXT
+- Greetings, thanks, complaints → Respond conversationally, no function needed
+- If unsure what user wants → ASK for clarification, don't guess a function
+
+FILTER CONTEXT RULES (Critical - Maintain conversation continuity):
+- When user asks for a breakdown AFTER a filtered query, APPLY THE SAME FILTERS
+- Example: User says "show job aids" then "break down by department" → breakdown should be for job_aids only
+- If user wants to clear filters, they'll say "all resources" or "clear filters" or "start over"
+- When showing results, ALWAYS state what filters were applied
 
 =============================================================================
 COMPLETE TAXONOMY (Exact Values Only - Never Invent Values)
@@ -930,6 +945,13 @@ CURRENT CONTEXT:
         return_type = args.get('return_type', 'count')
         limit = args.get('limit', 10)
         
+        # FILTER INHERITANCE: If no filters specified and we have previous context, inherit filters
+        # This handles "break down by department" after "show me job aids"
+        if not filters and return_type == 'summary':
+            query_ctx = get_query_context(conv_id)
+            if query_ctx and query_ctx.get('filters'):
+                filters = query_ctx['filters']
+        
         # Build WHERE clause
         conditions = ["is_archived = 0", "is_placeholder = 0"]
         params = []
@@ -1278,6 +1300,11 @@ CURRENT CONTEXT:
             parts.append("with a training type" if not verbose else "training_type IS NOT NULL")
         elif filters.get('has_training_type') is False:
             parts.append("without a training type" if not verbose else "training_type IS NULL")
+        
+        # Training type value filter
+        if filters.get('training_type'):
+            type_label = filters['training_type'].replace('_', ' ').title()
+            parts.append(f"of type '{type_label}'" if not verbose else f"training_type='{filters['training_type']}'")
         
         if filters.get('has_owner') is True:
             parts.append("with an owner" if not verbose else "scrub_owner IS NOT NULL")
