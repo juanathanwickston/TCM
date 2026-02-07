@@ -115,6 +115,11 @@ CONVERSATIONAL INTELLIGENCE (Critical - When NOT to call functions):
 - Greetings, thanks, complaints → Respond conversationally, no function needed
 - If unsure what user wants → ASK for clarification, don't guess a function
 
+FUNCTION ROUTING RULES:
+- For "breakdown", "break down by", or "summary" → ALWAYS use query_resources with return_type=summary
+- For "how long" or "effort" → use estimate_effort
+- For "status breakdown" → use get_status_breakdown
+
 FILTER CONTEXT RULES (Critical - Maintain conversation continuity):
 - When user asks for a breakdown AFTER a filtered query, APPLY THE SAME FILTERS
 - Example: User says "show job aids" then "break down by department" → breakdown should be for job_aids only
@@ -1176,10 +1181,10 @@ CURRENT CONTEXT:
             
             # Build display text (fallback for single-pass)
             items = []
-            for r in results:
+            for idx, r in enumerate(results):
                 name = self._clean_display_name(r['display_name'] or r['resource_key'])
                 status = (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed')
-                parts = [f"- {name} \u2013 {status}"]
+                parts = [f"{idx + 1}) {name} \u2014 {status}"]
                 if r.get('sales_stage'):
                     stage_label = SALES_STAGE_LABELS.get(r['sales_stage'], r['sales_stage'])
                     parts.append(f"[{stage_label}]")
@@ -1207,9 +1212,9 @@ CURRENT CONTEXT:
             
             # Build structured data for two-pass LLM formatting
             resource_data = []
-            for r in results:
+            for idx, r in enumerate(results):
                 resource_data.append({
-                    'name': self._clean_display_name(r['display_name'] or r['resource_key']),
+                    'name': f"{idx + 1}) {self._clean_display_name(r['display_name'] or r['resource_key'])}",
                     'bucket': r['bucket'] or 'Unassigned',
                     'status': (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed'),
                     'audience': r['audience'] or 'Unassigned',
@@ -1409,25 +1414,32 @@ CURRENT CONTEXT:
         return value.replace('_', ' ').title()
     
     def _clean_display_name(self, name: str) -> str:
-        """Strip known file extensions from display name.
+        """Strip known file extensions and underscores from display name.
         Only strips extensions from the known allowlist to avoid
         mangling names like 'oneServer 3.2'."""
         import os
         _, ext = os.path.splitext(name)
         if ext.lower() in self._STRIP_EXTENSIONS:
-            return name[:-len(ext)]
+            name = name[:-len(ext)]
+        # Replace underscores with spaces for display
+        name = name.replace('_', ' ')
         return name
     
     def _get_type_label(self, filters: Dict) -> str:
-        """Get a human-friendly label for the current filter context.
-        Returns things like 'job aids', 'self directed training', or 'resources'."""
-        if filters.get('training_type'):
-            return filters['training_type'].replace('_', ' ')
+        """Get a human-friendly label combining ALL active filter context.
+        e.g. 'Onboarding POS - Sales resources' instead of just 'Onboarding resources'."""
+        parts = []
         if filters.get('bucket'):
-            return f"{filters['bucket']} resources"
+            parts.append(filters['bucket'])
         if filters.get('primary_department'):
-            return f"{filters['primary_department']} resources"
-        return "resources"
+            parts.append(filters['primary_department'])
+        if filters.get('audience'):
+            parts.append(filters['audience'])
+        if filters.get('training_type'):
+            parts.append(filters['training_type'].replace('_', ' '))
+        if not parts:
+            return "resources"
+        return ' '.join(parts) + ' resources'
     
     def _describe_filters(self, filters: Dict, verbose: bool = False) -> str:
         """
@@ -1843,7 +1855,8 @@ CURRENT CONTEXT:
         )
         
         if not results:
-            return {'response': "No resources found matching those criteria."}
+            filter_desc = self._describe_filters(filters)
+            return {'response': f"No resources found{filter_desc} for effort estimate."}
         
         # Calculate effort
         total_hours = 0
@@ -2090,7 +2103,13 @@ CURRENT CONTEXT:
         total_count = total['cnt'] if total else 0
         
         if total_count == 0:
-            return {'response': "No resources found matching those criteria."}
+            filter_parts = []
+            if bucket:
+                filter_parts.append(bucket)
+            if dept:
+                filter_parts.append(dept.strip('%'))
+            filter_desc = f" in {', '.join(filter_parts)}" if filter_parts else ""
+            return {'response': f"No resources found{filter_desc} for status breakdown."}
         
         # Get by status
         status_data = db.execute(
