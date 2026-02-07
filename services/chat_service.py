@@ -1027,11 +1027,9 @@ CURRENT CONTEXT:
         """Server-side formatting enforcement.
         
         Strips markdown formatting the LLM might add despite prompt instructions.
-        This is guaranteed to work, unlike prompt-only rules.
+        Bold (**text**) is kept — the frontend renders it as <strong>.
         """
         import re
-        # Remove bold markers: **text** → text
-        text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
         # Remove markdown headers: ## Header → Header
         text = re.sub(r'^#{1,3}\s+', '', text, flags=re.MULTILINE)
         # Remove arrow symbols that leak from old prompts

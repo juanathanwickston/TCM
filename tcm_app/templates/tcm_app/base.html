@@ -380,6 +380,20 @@ html.chat-preopen .chat-sidebar.open {
     margin-bottom: 0;
 }
 
+.chat-message-content ul,
+.chat-message-content ol {
+    margin: 0.25rem 0;
+    padding-left: 1.25rem;
+}
+
+.chat-message-content li {
+    margin-bottom: 0.15rem;
+}
+
+.chat-message-content li:last-child {
+    margin-bottom: 0;
+}
+
 /* Input Area */
 .chat-sidebar-input {
     padding: 1rem;
@@ -845,10 +859,53 @@ html.chat-preopen .chat-sidebar.open {
         }
     }
     
+    function formatMarkdown(text) {
+        // Escape HTML first (security)
+        text = escapeHtml(text);
+        
+        // Bold: **text** → <strong>text</strong>
+        text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        
+        // Split into lines and build HTML
+        const lines = text.split('\n');
+        let html = '';
+        let inUl = false;
+        let inOl = false;
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            const bulletMatch = line.match(/^[-•]\s+(.+)/);
+            const numMatch = line.match(/^(\d+)[.):]\s+(.+)/);
+            
+            if (bulletMatch) {
+                if (inOl) { html += '</ol>'; inOl = false; }
+                if (!inUl) { html += '<ul>'; inUl = true; }
+                html += '<li>' + bulletMatch[1] + '</li>';
+            } else if (numMatch) {
+                if (inUl) { html += '</ul>'; inUl = false; }
+                if (!inOl) { html += '<ol>'; inOl = true; }
+                html += '<li>' + numMatch[2] + '</li>';
+            } else {
+                if (inUl) { html += '</ul>'; inUl = false; }
+                if (inOl) { html += '</ol>'; inOl = false; }
+                if (line === '') {
+                    html += '<br>';
+                } else {
+                    html += '<p>' + line + '</p>';
+                }
+            }
+        }
+        if (inUl) html += '</ul>';
+        if (inOl) html += '</ol>';
+        
+        return html;
+    }
+    
     function addMessage(role, content) {
         const div = document.createElement('div');
         div.className = 'chat-message ' + role;
-        div.innerHTML = '<div class="chat-message-content"><p>' + escapeHtml(content).replace(/\n/g, '<br>') + '</p></div>';
+        const inner = role === 'assistant' ? formatMarkdown(content) : '<p>' + escapeHtml(content) + '</p>';
+        div.innerHTML = '<div class="chat-message-content">' + inner + '</div>';
         messagesContainer.appendChild(div);
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
         return div;
