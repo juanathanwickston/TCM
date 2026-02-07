@@ -928,11 +928,26 @@ CURRENT CONTEXT:
             
             if needs_two_pass and result.get('data'):
                 # Pass 2: Send raw data back to LLM for natural language response
+                # Include formatting instructions to keep output compact
+                pass2_payload = {
+                    'formatting': (
+                        'Present results compactly. For resource lists: '
+                        'start with a 1-line count (e.g. "2 resources in Ask for Appointment:"), '
+                        'then each resource as: numbered name on line 1, '
+                        'status | audience | bucket on an indented line 2. '
+                        'End with 1-2 sentence recommendation if actionable. '
+                        'Never show resource_key values. '
+                        'Do not echo the user\'s question back. '
+                        'Do not use bold, headers, or markdown formatting. '
+                        'For breakdowns: use simple "label: count" lines.'
+                    ),
+                    'data': result['data']
+                }
                 messages.append(response_message)  # Assistant's function call
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
-                    "content": json.dumps(result['data'], default=str)
+                    "content": json.dumps(pass2_payload, default=str)
                 })
                 
                 final_response = self.client.chat.completions.create(
@@ -1254,13 +1269,9 @@ CURRENT CONTEXT:
             for r in results:
                 resource_data.append({
                     'name': self._clean_display_name(r['display_name'] or r['resource_key']),
-                    'resource_key': r['resource_key'],
                     'bucket': r['bucket'] or 'Unassigned',
                     'status': (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed'),
                     'audience': r['audience'] or 'Unassigned',
-                    'sales_stage': SALES_STAGE_LABELS.get(r.get('sales_stage', ''), r.get('sales_stage', '')) or 'None',
-                    'department': r.get('primary_department', '') or 'Unassigned',
-                    'training_type': (r.get('training_type', '') or 'Unassigned').replace('_', ' ').title(),
                 })
             
             return {
@@ -1396,13 +1407,9 @@ CURRENT CONTEXT:
         for r in results:
             resource_data.append({
                 'name': self._clean_display_name(r['display_name'] or r['resource_key']),
-                'resource_key': r['resource_key'],
                 'bucket': r['bucket'] or 'Unassigned',
                 'status': (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed'),
                 'audience': r['audience'] or 'Unassigned',
-                'sales_stage': SALES_STAGE_LABELS.get(r.get('sales_stage', ''), r.get('sales_stage', '')) or 'None',
-                'department': r.get('primary_department', '') or 'Unassigned',
-                'training_type': (r.get('training_type', '') or 'Unassigned').replace('_', ' ').title(),
             })
         
         return {
