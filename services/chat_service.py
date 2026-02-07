@@ -839,7 +839,7 @@ CURRENT CONTEXT:
             tools=[{"type": "function", "function": f} for f in self._functions],
             tool_choice="auto",
             temperature=0.3,
-            max_tokens=800,
+            max_completion_tokens=800,
         )
         
         # Log usage for Pass 1
@@ -893,7 +893,7 @@ CURRENT CONTEXT:
                     model=MODEL,
                     messages=messages,
                     temperature=0.3,
-                    max_tokens=1000,
+                    max_completion_tokens=1000,
                 )
                 
                 # Log usage for Pass 2
