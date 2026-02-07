@@ -306,6 +306,8 @@ WHAT I CAN'T DO
 - Access other people's data
 - Make up numbers - only report actual data
 - Discuss confidential or non-catalog information
+- Always call them "resources" — never "materials", "items", "courses", or "content"
+- Keep recommendations professional and objective — no editorializing about data quality
 
 BEFORE CHANGING ANYTHING:
 - Use the appropriate prepare_* function to stage changes
@@ -938,7 +940,9 @@ CURRENT CONTEXT:
                         'End with 1-2 sentence recommendation if actionable. '
                         'Never show resource_key values. '
                         'Do not echo the user\'s question back. '
-                        'Do not use bold, headers, or markdown formatting. '
+                        'Use **bold** for key labels and counts. Do not use markdown headers. '
+                        'Always call them "resources" (never "materials", "items", "courses"). '
+                        'Keep recommendations professional and brief — no editorializing. '
                         'For breakdowns: use simple "label: count" lines.'
                     ),
                     'data': result['data']
@@ -1309,13 +1313,13 @@ CURRENT CONTEXT:
             
             lines = [f"Here's the {field_label} breakdown:\n"]
             for r in results:
-                value = (r[group_field] or 'Unassigned').replace('not_reviewed', 'Not reviewed')
+                value = self._format_enum_label(r[group_field], group_field)
                 lines.append(f"- {value}: {r['cnt']:,}")
             
             # Build structured data for two-pass
             breakdown_data = []
             for r in results:
-                value = (r[group_field] or 'Unassigned').replace('not_reviewed', 'Not reviewed')
+                value = self._format_enum_label(r[group_field], group_field)
                 breakdown_data.append({'group': value, 'count': r['cnt']})
             
             return {
@@ -1453,6 +1457,17 @@ CURRENT CONTEXT:
     _STRIP_EXTENSIONS = {'.pdf', '.mp4', '.docx', '.doc', '.xlsx', '.xls', '.png', 
                          '.jpg', '.jpeg', '.gif', '.pptx', '.ppt', '.csv', '.txt',
                          '.zip', '.html', '.htm', '.mov', '.wmv', '.avi', '.mp3'}
+    
+    def _format_enum_label(self, value, field: str = '') -> str:
+        """Convert raw enum/DB values to user-friendly labels.
+        e.g. 'self_directed' -> 'Self Directed', 'not_reviewed' -> 'Not Reviewed'"""
+        if not value:
+            return 'Unassigned'
+        # Sales stages have their own label map
+        if field == 'sales_stage' and value in SALES_STAGE_LABELS:
+            return SALES_STAGE_LABELS[value]
+        # Generic: replace underscores, title case
+        return value.replace('_', ' ').title()
     
     def _clean_display_name(self, name: str) -> str:
         """Strip known file extensions from display name.
