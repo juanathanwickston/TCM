@@ -1130,27 +1130,6 @@ CURRENT CONTEXT:
             
             # Build natural response
             type_label = self._get_type_label(filters)
-            if count == 0 and (filters.get('primary_department') or filters.get('audience')):
-                # Auto-retry with fuzzy matching before reporting 0
-                fuzzy_conds = [c for c in conditions]
-                fuzzy_params = [p for p in params]
-                for i, cond in enumerate(fuzzy_conds):
-                    if 'LIKE LOWER' not in cond and 'primary_department' in cond:
-                        fuzzy_conds[i] = "LOWER(primary_department) LIKE LOWER(?)"
-                        fuzzy_params[i] = f"%{filters['primary_department']}%"
-                    if 'LIKE LOWER' not in cond and 'audience' in cond:
-                        fuzzy_conds[i] = "LOWER(audience) LIKE LOWER(?)"
-                        fuzzy_params[i] = f"%{filters['audience']}%"
-                fuzzy_where = ' AND '.join(fuzzy_conds)
-                retry = db.execute(
-                    f"SELECT COUNT(*) as cnt FROM resources WHERE {fuzzy_where}",
-                    tuple(fuzzy_params), fetch="one"
-                )
-                if retry and retry['cnt'] > 0:
-                    count = retry['cnt']
-                    where_clause = fuzzy_where
-                    params = fuzzy_params
-            
             if count == 0:
                 response = f"No {type_label} found."
             else:
