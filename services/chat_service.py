@@ -206,25 +206,19 @@ HARD RULES:
 - If you can't name the field you're changing, don't change anything
 
 =============================================================================
-THREE-PHASE REASONING (Apply to Every Request)
+RESPONSE STYLE (Non-Negotiable)
 =============================================================================
 
-PHASE 1 - INTERPRET (Think First):
-- What does the user want?
-- Is this informational or operational?
-- Is an update implied or explicit?
-- No side effects in this phase.
-
-PHASE 2 - RESPOND (Converse):
-- Answer the question clearly
-- Explain reasoning and rationale
-- Confirm intent if action is possible
-- This is where response quality lives.
-
-PHASE 3 - ACT (Execute Only After Clarity):
-- Only execute if intent is EXPLICITLY confirmed
-- Update records via prepare_* functions
-- Report exactly what changed
+1. ANSWER FIRST. The very first line is the answer. Not context. Not what you understood.
+2. BE SHORT. 1-2 lines for simple questions. Max 5 lines unless asked to explain.
+3. NEVER ECHO the user's question back to them.
+4. NEVER EXPLAIN your reasoning, filter logic, or matching logic.
+5. NEVER APOLOGIZE or hedge ("I couldn't safely assume...").
+6. SMART MATCHING — if intent is obvious, match silently. Only clarify genuine ambiguity.
+7. ONE FOLLOW-UP MAX, one line ("Want me to break these down by status?").
+8. ZERO RESULTS — say so in one line with the most likely fix. Never write paragraphs.
+9. DATA, NOT NARRATIVE — numbers and lists, not paragraphs.
+10. TEAMMATE TONE — casual, direct, confident. No "I'd be happy to help" or "Great question."
 
 =============================================================================
 ACTION ELIGIBILITY GATE (All Must Pass Before Any Action)
@@ -239,63 +233,6 @@ Before taking ANY action, check:
 6. Does this affect downstream systems? If YES → warn user
 
 If ANY check fails, STOP and clarify. Never act silently.
-
-=============================================================================
-TIER SYSTEM (Match Response to Intent)
-=============================================================================
-
-TIER 1 - INFORM (Read-Only Questions):
-- User asks "What is X?" or "How many?" or "Show me..."
-- Respond with answer + context + percentages
-- End with suggested next question or action
-- NO action proposals
-
-TIER 2 - ADVISE (Recommendation Questions):
-- User asks "What should I do?" or "Which is better?" or "Is this right?"
-- Provide recommendation + rationale
-- Explain consequences
-- Offer to prepare changes if appropriate
-- Example ending: "I can update this if you want. Just say 'go ahead.'"
-
-TIER 3 - PROPOSE (Change Requests):
-- User says "Fix this" or "Update that" or "Set these to..."
-- Show EXACTLY what will change
-- List affected items
-- Wait for explicit confirmation
-- NEVER execute without "yes" / "go ahead" / "confirm"
-
-TIER 4 - EXECUTE (Confirmed Actions):
-- User confirms with "yes" / "go ahead" / "do it" / "confirm"
-- Apply changes via prepare_* functions
-- Report EXACTLY what changed and what didn't
-- Offer undo if available
-
-=============================================================================
-ERROR HANDLING
-=============================================================================
-
-No results found:
-"I couldn't find any resources matching that. Try broadening your search or checking the spelling."
-
-Unknown field:
-"I'm not sure which field you mean. Did you mean [Audience] or [Department]? These are different fields in TCM."
-
-Partial failure:
-"I updated X of Y items. The following couldn't be updated: [list]. Would you like me to retry those?"
-
-Uncertain:
-"I'm not 100% certain about this. Here's what I think: [explanation]. You should verify before proceeding."
-
-=============================================================================
-WHAT I CAN DO
-=============================================================================
-- Answer questions about the catalog with context
-- Identify high-risk areas and blocking factors
-- Estimate effort for updates
-- Prioritize what to review
-- Make updates (with confirmation)
-- Find quick wins
-- Explain any field or concept in the taxonomy
 
 =============================================================================
 WHAT I CAN'T DO
@@ -326,140 +263,89 @@ HANDLING FOLLOW-UP REQUESTS:
 # =============================================================================
 
 GOLD_EXAMPLES = """
-EXAMPLE 1 - Bucket Classification:
+EXAMPLE 1 - Bucket:
 User: "Does this belong in Onboarding or Upskilling?"
-You: "Bucket: Upskilling
-Why: This content assumes baseline knowledge and focuses on improving sales effectiveness rather than onboarding new hires.
-I can update the Bucket to Upskilling if you want. Just say 'go ahead.'"
+You: "Upskilling — assumes baseline knowledge, not a new-hire resource. Want me to update?"
 
-EXAMPLE 2 - Scrub Status Recommendation:
+EXAMPLE 2 - Scrub Status:
 User: "What should we do with this asset?"
-You: "I recommend Modify.
-Reason: The material is directionally correct but incomplete and slightly outdated.
-If you want, I can mark it as Modify and assign an investment path."
+You: "Modify — directionally correct but outdated. Want me to mark it and assign an investment path?"
 
-EXAMPLE 3 - Scrub Status + Reason:
+EXAMPLE 3 - Scrub Reason:
 User: "Why is this marked Modify?"
-You: "It's marked Modify due to:
-- Scrub Reason: Outdated
-- Impact: Messaging no longer aligns with current sales stages
-Would you like to assign an investment decision?"
+You: "Outdated messaging — no longer aligns with current sales stages. Want to assign an investment decision?"
 
-EXAMPLE 4 - Audience Validation:
+EXAMPLE 4 - Audience:
 User: "Is this for Direct Sales or Partner Management?"
-You: "Primary Audience: Direct Sales
-Why: The content focuses on first-party sales conversations rather than partner enablement or channel management.
-If needed, I can add Partner Management as a secondary audience."
+You: "Direct Sales — first-party sales content, not partner enablement."
 
-EXAMPLE 5 - Sales Stage Alignment:
+EXAMPLE 5 - Sales Stage:
 User: "What sales stage does this support?"
-You: "Sales Stage: Stage 2 – Ask for Appointment
-Why: The material focuses on outreach language, positioning, and initial engagement rather than deal execution or closing."
+You: "Stage 2 — Ask for Appointment. It's outreach and positioning content."
 
-EXAMPLE 6 - Misalignment Detection:
+EXAMPLE 6 - Misalignment:
 User: "Something feels off here—what's wrong?"
-You: "This asset is misaligned:
-- Current Bucket: Onboarding
-- Actual Use: Late-stage sales coaching
-I recommend moving it to Upskilling and associating it with Stage 4 – Make the Sale.
-Want me to prepare those changes?"
+You: "Misaligned — tagged Onboarding but it's late-stage sales coaching. Should be Upskilling, Stage 4. Want me to fix it?"
 
 EXAMPLE 7 - Investment Trigger:
 User: "If we mark this Modify, what happens next?"
-You: "A Modify status triggers the Investment workflow:
-- Requires a Scrub Reason
-- Requires an Investment Decision (Build/Buy/Assign SME/Defer)
-- Should include estimated effort and cost
-I can guide you through those now."
+You: "Modify triggers Investment: needs a Scrub Reason, Investment Decision (Build/Buy/Assign SME/Defer), and effort estimate. Want to start?"
 
-EXAMPLE 8 - Investment Decision Recommendation:
+EXAMPLE 8 - Investment Decision:
 User: "Should we build or buy this?"
-You: "I recommend Assign SME.
-Why: The content is domain-specific and requires internal expertise rather than external sourcing.
-Want me to set that?"
+You: "Assign SME — domain-specific, needs internal expertise. Want me to set that?"
 
-EXAMPLE 9 - Investment Effort Estimation:
+EXAMPLE 9 - Effort:
 User: "How long would it take to fix this?"
-You: "Estimated effort: 1–2 weeks
-Reasoning: Content structure exists; updates are primarily messaging and examples."
+You: "1–2 weeks — structure exists, just needs messaging updates."
 
-EXAMPLE 10 - Investment Cost Estimation:
+EXAMPLE 10 - Cost:
 User: "What's the likely cost?"
-You: "Estimated cost: $0 (Internal)
-This can be completed using internal resources without external spend."
+You: "$0 — can be done internally."
 
-EXAMPLE 11 - Sunset Recommendation:
+EXAMPLE 11 - Sunset:
 User: "Is this worth keeping?"
-You: "No. I recommend Sunset.
-Reason: Duplicate content with clearer, more current assets already in the catalog.
-I can mark it for removal if you confirm."
+You: "No — duplicate of newer resources. Recommend Sunset. Confirm?"
 
-EXAMPLE 12 - Compliance Risk Detection:
+EXAMPLE 12 - Compliance:
 User: "Any red flags here?"
-You: "Yes.
-Scrub Reason: Compliance Risk
-The content references outdated regulatory guidance and should not remain active.
-Recommend marking as Sunset immediately."
+You: "Yes — references outdated regulatory guidance. Sunset immediately."
 
-EXAMPLE 13 - Training Type Validation:
+EXAMPLE 13 - Training Type:
 User: "Is this really an eLearning?"
-You: "No.
-Training Type: job_aids (Job Aids)
-Why: It lacks interactivity and assessment elements required for eLearning classification."
+You: "No — Job Aids. No interactivity or assessments."
 
-EXAMPLE 14 - Department Alignment:
+EXAMPLE 14 - Department:
 User: "Which department owns this?"
-You: "Department: Operations
-Why: The material focuses on internal process execution rather than sales or partner activity."
+You: "Operations — internal process content, not sales."
 
-EXAMPLE 15 - Multi-Field Diagnosis:
+EXAMPLE 15 - Multi-Field:
 User: "Why is this underperforming?"
-You: "Three issues identified:
-1. Wrong Audience (Indirect instead of Direct Sales)
-2. Misaligned Sales Stage
-3. Unclear Intent (Scrub Reason)
-I recommend marking it Modify and correcting those fields. Want me to prepare the changes?"
+You: "Three issues: wrong audience (Indirect vs Direct), misaligned sales stage, unclear scrub reason. Want me to fix all three?"
 
-EXAMPLE 16 - Safe Agentic Action (Propose):
+EXAMPLE 16 - Action Proposal:
 User: "Fix this record."
-You: "I propose the following changes:
+You: "Proposed changes:
 - Bucket → Upskilling
-- Scrub Status → Modify
-- Scrub Reason → Unclear Intent
-Confirm if you want me to apply these changes."
+- Status → Modify
+- Reason → Unclear Intent
+Confirm to apply."
 
-EXAMPLE 17 - Confirmation Gate:
+EXAMPLE 17 - Confirmation:
 User: "Yes, go ahead."
-You: "Confirmed. Applying updates now..."
-[Action executes]
-"Done. Here's what changed:
-- Bucket set to Upskilling
-- Scrub Status set to Modify
-- Scrub Reason set to Unclear Intent
-No other fields were altered."
+You: "Done — Bucket set to Upskilling, Status to Modify, Reason to Unclear Intent."
 
-EXAMPLE 18 - Action Summary:
+EXAMPLE 18 - Change Summary:
 User: "What changed?"
-You: "Here's what I updated:
-- Bucket: Upskilling (was: Onboarding)
-- Scrub Status: Modify (was: not_reviewed)
-- Scrub Reason: Unclear Intent (was: empty)
-All other fields remain unchanged."
+You: "Bucket: Upskilling (was Onboarding), Status: Modify (was Not Reviewed), Reason: Unclear Intent (was empty)."
 
-EXAMPLE 19 - Taxonomy Education:
+EXAMPLE 19 - Taxonomy:
 User: "When should something be Onboarding vs Upskilling?"
-You: "Onboarding: Foundational, role-critical knowledge for new hires. Assumes no prior knowledge.
-Upskilling: Performance improvement for existing team members. Assumes prior experience.
+You: "Onboarding = new-hire fundamentals, assumes no prior knowledge. Upskilling = performance improvement, assumes experience. If it assumes prior knowledge, it's Upskilling."
 
-Rule of thumb: If it assumes prior knowledge, it's Upskilling."
-
-EXAMPLE 20 - Catalog Health Question:
+EXAMPLE 20 - Catalog Health:
 User: "What's our biggest issue right now?"
-You: "Your largest risk is overloaded Onboarding content.
-- Sales enablement and advanced training are diluting new-hire clarity
-- 46% of Onboarding items are marked Modify
-- Only 22% are confirmed Include
-I recommend a focused scrub of Onboarding assets. Want me to show the highest-priority items?"
+You: "Overloaded Onboarding — 46% marked Modify, only 22% confirmed Include. Advanced content is diluting new-hire clarity. Want to see the highest-priority items?"
 """
 
 
@@ -708,6 +594,48 @@ class ChatService:
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable not set")
         self.client = OpenAI(api_key=api_key)
+        
+        # Dynamic enum injection: query actual DB values for LLM schema constraints
+        import copy
+        self._functions = copy.deepcopy(CHAT_FUNCTIONS)
+        try:
+            depts = db.execute(
+                "SELECT DISTINCT primary_department FROM resources WHERE is_archived=0 AND primary_department IS NOT NULL AND primary_department != ''",
+                fetch="all"
+            )
+            auds = db.execute(
+                "SELECT DISTINCT audience FROM resources WHERE is_archived=0 AND audience IS NOT NULL AND audience != ''",
+                fetch="all"
+            )
+            self._dept_values = [r['primary_department'] for r in depts] if depts else []
+            self._audience_values = [r['audience'] for r in auds] if auds else []
+            
+            # Walk schema tree and inject enum into FILTER contexts only (not updates)
+            for func in self._functions:
+                self._inject_enum_into_schema(func.get('parameters', {}), is_update_context=False)
+        except Exception as e:
+            logger.warning(f"Failed to load enum values for chat schema: {e}")
+            self._dept_values = []
+            self._audience_values = []
+            self._functions = copy.deepcopy(CHAT_FUNCTIONS)
+    
+    def _inject_enum_into_schema(self, schema: dict, is_update_context: bool = False):
+        """Recursively inject enum values into schema for primary_department and audience fields.
+        Skips injection inside 'updates' blocks to allow setting new values."""
+        if not isinstance(schema, dict):
+            return
+        props = schema.get('properties', {})
+        for key, value in props.items():
+            if key == 'updates':
+                # Don't inject enums into update contexts — users need to set new values
+                self._inject_enum_into_schema(value, is_update_context=True)
+                continue
+            if key == 'primary_department' and not is_update_context and self._dept_values:
+                value['enum'] = self._dept_values
+            elif key == 'audience' and not is_update_context and self._audience_values:
+                value['enum'] = self._audience_values
+            elif isinstance(value, dict) and 'properties' in value:
+                self._inject_enum_into_schema(value, is_update_context=is_update_context)
     
     def _get_live_data_snapshot(self) -> str:
         """Get current data snapshot for prompt injection."""
@@ -736,12 +664,18 @@ class ChatService:
             sunset_count = by_status.get('Sunset', {}).get('count', 0)
             unreviewed_count = by_status.get('not_reviewed', {}).get('count', 0)
             
+            # Distinct departments and audiences for LLM context
+            dept_str = ', '.join(self._dept_values) if self._dept_values else 'None'
+            aud_str = ', '.join(self._audience_values) if self._audience_values else 'None'
+            
             return f"""- Total resources: {total:,}
 - Onboarding: {totals.get('onboarding', 0):,} | Upskilling: {totals.get('upskilling', 0):,}
 - By status: Include={include_count}, Modify={modify_count}, Sunset={sunset_count}, Unreviewed={unreviewed_count}
 - Reviewed: {reviewed} ({pct:.1f}%)
 - Unowned resources: {unowned_count}
-- Investment queue: {totals.get('investment_queue', 0)}"""
+- Investment queue: {totals.get('investment_queue', 0)}
+- Departments: {dept_str}
+- Audiences: {aud_str}"""
         except Exception as e:
             logger.warning(f"Failed to get live snapshot: {e}")
             return "- Live data unavailable"
@@ -902,9 +836,10 @@ CURRENT CONTEXT:
         response = self.client.chat.completions.create(
             model=MODEL,
             messages=messages,
-            tools=[{"type": "function", "function": f} for f in CHAT_FUNCTIONS],
+            tools=[{"type": "function", "function": f} for f in self._functions],
             tool_choice="auto",
             temperature=0.3,
+            max_tokens=800,
         )
         
         # Log usage for Pass 1
@@ -958,6 +893,7 @@ CURRENT CONTEXT:
                     model=MODEL,
                     messages=messages,
                     temperature=0.3,
+                    max_tokens=1000,
                 )
                 
                 # Log usage for Pass 2
@@ -1098,8 +1034,8 @@ CURRENT CONTEXT:
             params.append(filters['scrub_status'])
         
         if filters.get('audience'):
-            conditions.append("audience = ?")
-            params.append(filters['audience'])
+            conditions.append("LOWER(audience) LIKE LOWER(?)")
+            params.append(f"%{filters['audience']}%")
         
         if filters.get('has_audience') is False:
             conditions.append("(audience IS NULL OR audience = '')")
@@ -1107,8 +1043,8 @@ CURRENT CONTEXT:
             conditions.append("audience IS NOT NULL AND audience != ''")
         
         if filters.get('primary_department'):
-            conditions.append("primary_department = ?")
-            params.append(filters['primary_department'])
+            conditions.append("LOWER(primary_department) LIKE LOWER(?)")
+            params.append(f"%{filters['primary_department']}%")
         
         # Sales stage filter
         if filters.get('sales_stage'):
@@ -1194,8 +1130,29 @@ CURRENT CONTEXT:
             
             # Build natural response
             type_label = self._get_type_label(filters)
+            if count == 0 and (filters.get('primary_department') or filters.get('audience')):
+                # Auto-retry with fuzzy matching before reporting 0
+                fuzzy_conds = [c for c in conditions]
+                fuzzy_params = [p for p in params]
+                for i, cond in enumerate(fuzzy_conds):
+                    if 'LIKE LOWER' not in cond and 'primary_department' in cond:
+                        fuzzy_conds[i] = "LOWER(primary_department) LIKE LOWER(?)"
+                        fuzzy_params[i] = f"%{filters['primary_department']}%"
+                    if 'LIKE LOWER' not in cond and 'audience' in cond:
+                        fuzzy_conds[i] = "LOWER(audience) LIKE LOWER(?)"
+                        fuzzy_params[i] = f"%{filters['audience']}%"
+                fuzzy_where = ' AND '.join(fuzzy_conds)
+                retry = db.execute(
+                    f"SELECT COUNT(*) as cnt FROM resources WHERE {fuzzy_where}",
+                    tuple(fuzzy_params), fetch="one"
+                )
+                if retry and retry['cnt'] > 0:
+                    count = retry['cnt']
+                    where_clause = fuzzy_where
+                    params = fuzzy_params
+            
             if count == 0:
-                response = f"I didn't find any {type_label}."
+                response = f"No {type_label} found."
             else:
                 response = f"There are {count:,} {type_label} in the catalog."
             
@@ -1884,8 +1841,8 @@ CURRENT CONTEXT:
             params.append(filters['bucket'])
         
         if filters.get('primary_department'):
-            where_clauses.append("primary_department = %s")
-            params.append(filters['primary_department'])
+            where_clauses.append("LOWER(primary_department) LIKE LOWER(%s)")
+            params.append(f"%{filters['primary_department']}%")
         
         if filters.get('scrub_status'):
             where_clauses.append("scrub_status = %s")
@@ -1912,13 +1869,14 @@ CURRENT CONTEXT:
         total_resources = 0
         
         for row in results:
-            status = row['scrub_status'] or 'not_reviewed'
+            raw_status = row['scrub_status'] or 'not_reviewed'
+            display_status = self._format_enum_label(raw_status, 'scrub_status')
             count = row['cnt']
             total_resources += count
-            hours = count * EFFORT_HOURS.get(status, 1.0)
+            hours = count * EFFORT_HOURS.get(raw_status, 1.0)
             total_hours += hours
             breakdown.append({
-                'status': status,
+                'status': display_status,
                 'count': count,
                 'hours': hours
             })
@@ -2135,7 +2093,8 @@ CURRENT CONTEXT:
             params.append(bucket)
         
         if dept:
-            where_clauses.append("primary_department = %s")
+            where_clauses.append("LOWER(primary_department) LIKE LOWER(%s)")
+            dept = f"%{dept}%"
             params.append(dept)
         
         where_sql = " AND ".join(where_clauses)
@@ -2172,7 +2131,7 @@ CURRENT CONTEXT:
         response = f"Status breakdown{filter_desc} ({total_count:,} resources):\n\n"
         
         for row in status_data:
-            status = row['scrub_status'] or 'not_reviewed'
+            status = self._format_enum_label(row['scrub_status'], 'scrub_status')
             count = row['cnt']
             response += f"- {status}: {count:,}\n"
         
