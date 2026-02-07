@@ -870,15 +870,16 @@ CURRENT CONTEXT:
                     'formatting': (
                         'Present results compactly. For resource lists: '
                         'start with a 1-line count (e.g. "2 resources in Ask for Appointment:"), '
-                        'then each resource as: numbered name on line 1, '
-                        'status | audience | bucket on an indented line 2. '
+                        'then each resource as a single numbered line: '
+                        '"1) Name — Status | Audience | Bucket". '
+                        'Do NOT put status on a separate line. No bullet points for metadata. '
                         'End with 1-2 sentence recommendation if actionable. '
                         'Never show resource_key values. '
                         'Do not echo the user\'s question back. '
                         'Use **bold** for key labels and counts. Do not use markdown headers. '
                         'Always call them "resources" (never "materials", "items", "courses"). '
                         'Keep recommendations professional and brief — no editorializing. '
-                        'For breakdowns: use simple "label: count" lines.'
+                        'For breakdowns: use simple "- label: count" lines.'
                     ),
                     'data': result['data']
                 }
@@ -974,6 +975,8 @@ CURRENT CONTEXT:
         text = re.sub(r'^#{1,3}\s+', '', text, flags=re.MULTILINE)
         # Remove arrow symbols that leak from old prompts
         text = text.replace(' → ', ' - ')
+        # Strip bullet markers from status/metadata lines (frontend turns - into <li>)
+        text = re.sub(r'^[-•*]\s+(Status:|Audience:|Bucket:)', r'  \1', text, flags=re.MULTILINE)
         return text
     
     def _log_usage(self, response, conv_id: int, call_type: str):
