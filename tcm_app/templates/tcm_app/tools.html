@@ -28,6 +28,12 @@
         </li>
         {% if is_superuser %}
         <li class="nav-item" role="presentation">
+            <button class="nav-link" id="usage-tab" data-bs-toggle="tab" data-bs-target="#usage-pane" 
+                    type="button" role="tab">
+                <i class="bi bi-graph-up me-1"></i>AI Usage
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
             <button class="nav-link" id="users-tab" data-bs-toggle="tab" data-bs-target="#users-pane" 
                     type="button" role="tab">
                 <i class="bi bi-people me-1"></i>Users
@@ -100,6 +106,26 @@
         </div>
 
         {% if is_superuser %}
+        <!-- AI Usage Tab -->
+        <div class="tab-pane fade" id="usage-pane" role="tabpanel">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>AI Usage</h5>
+                    <div class="btn-group btn-group-sm" id="usagePeriodGroup">
+                        <button type="button" class="btn btn-outline-secondary active" data-period="daily">Daily</button>
+                        <button type="button" class="btn btn-outline-secondary" data-period="weekly">Weekly</button>
+                        <button type="button" class="btn btn-outline-secondary" data-period="monthly">Monthly</button>
+                    </div>
+                </div>
+                <div class="card-body" id="usageContent">
+                    <div class="text-center text-muted py-3">
+                        <div class="spinner-border spinner-border-sm me-2"></div>
+                        Loading usage data...
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Users Tab -->
         <div class="tab-pane fade" id="users-pane" role="tabpanel">
             <div class="card">
@@ -603,6 +629,80 @@
     if (confirmInput && clearButton) {
         confirmInput.addEventListener('input', function() {
             clearButton.disabled = (this.value.trim() !== 'CLEAR ALL DATA');
+        });
+    }
+    
+    // ── AI Usage Tab ──
+    const usageTab = document.getElementById('usage-tab');
+    const usageContent = document.getElementById('usage-content');
+    let usagePeriod = 'daily';
+    
+    async function loadUsage() {
+        const el = document.getElementById('usageContent');
+        if (!el) return;
+        el.innerHTML = '<div class="text-center text-muted py-3"><div class="spinner-border spinner-border-sm me-2"></div>Loading...</div>';
+        
+        try {
+            const resp = await fetch(`/api/ai-usage/?period=${usagePeriod}`);
+            const data = await resp.json();
+            
+            const t = data.totals || {};
+            const rows = data.breakdown || [];
+            
+            const fmtNum = n => (n || 0).toLocaleString();
+            const fmtCost = n => '$' + (n || 0).toFixed(2);
+            
+            let html = `<div class="d-flex gap-4 mb-3" style="font-size: 0.95rem;">`;
+            html += `<span><strong>${fmtNum(t.total_calls)}</strong> calls</span>`;
+            html += `<span><strong>${fmtNum(t.total_tokens)}</strong> tokens</span>`;
+            html += `<span><strong>${fmtCost(t.total_cost_usd)}</strong> est. cost</span>`;
+            if (t.total_conversations > 0) {
+                html += `<span class="text-muted">${fmtNum(t.avg_tokens_per_conversation)} avg/conv</span>`;
+            }
+            html += `</div>`;
+            
+            if (rows.length > 0) {
+                html += `<table class="table table-sm table-hover mb-2" style="font-size: 0.85rem;">`;
+                html += `<thead><tr><th>Period</th><th class="text-end">Calls</th><th class="text-end">In Tokens</th><th class="text-end">Out Tokens</th><th class="text-end">Cost</th></tr></thead><tbody>`;
+                for (const r of rows) {
+                    const d = new Date(r.period);
+                    let label;
+                    if (usagePeriod === 'monthly') label = d.toLocaleDateString('en-US', {month: 'long', year: 'numeric'});
+                    else if (usagePeriod === 'weekly') label = 'Week of ' + d.toLocaleDateString('en-US', {month: 'short', day: 'numeric'});
+                    else label = d.toLocaleDateString('en-US', {month: 'short', day: 'numeric'});
+                    
+                    html += `<tr><td>${label}</td>`;
+                    html += `<td class="text-end">${fmtNum(r.calls)}</td>`;
+                    html += `<td class="text-end">${fmtNum(r.prompt_tokens)}</td>`;
+                    html += `<td class="text-end">${fmtNum(r.completion_tokens)}</td>`;
+                    html += `<td class="text-end">${fmtCost(r.estimated_cost_usd)}</td></tr>`;
+                }
+                html += `</tbody></table>`;
+            } else {
+                html += `<p class="text-muted small mb-0">No usage recorded yet.</p>`;
+            }
+            
+            html += `<p class="text-muted mb-0" style="font-size: 0.75rem;">Model: gpt-5.2 &middot; $1.75/1M in, $14.00/1M out</p>`;
+            el.innerHTML = html;
+        } catch (err) {
+            el.innerHTML = '<div class="text-danger">Failed to load usage data.</div>';
+        }
+    }
+    
+    if (usageTab) {
+        usageTab.addEventListener('shown.bs.tab', loadUsage);
+    }
+    
+    // Period toggle
+    const periodGroup = document.getElementById('usagePeriodGroup');
+    if (periodGroup) {
+        periodGroup.addEventListener('click', function(e) {
+            const btn = e.target.closest('[data-period]');
+            if (!btn) return;
+            periodGroup.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            usagePeriod = btn.dataset.period;
+            loadUsage();
         });
     }
 })();

@@ -33,7 +33,14 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 RATE_LIMIT_PER_MINUTE = 20
-MODEL = "gpt-4o"
+MODEL = "gpt-5.2"
+
+# Handlers that return rich per-resource data and benefit from LLM formatting
+TWO_PASS_HANDLERS = {"query_resources"}  # Only when return_type is list or summary
+TWO_PASS_RETURN_TYPES = {"list", "summary"}
+
+# Max conversation history pairs to send (controls input token cost)
+MAX_HISTORY_PAIRS = 10
 
 # Effort estimation constants (hours per resource)
 EFFORT_HOURS = {
@@ -58,7 +65,7 @@ Reasoning comes first. Action comes only after clarity.
 ROLE:
 - Think like a consultant, not a search engine
 - Proactively identify risks and opportunities
-- Always provide context with numbers (percentages, comparisons)
+- Always provide context with numbers (counts, comparisons) when relevant
 - Suggest next actions, don't just report data
 - Explain consequences before making changes
 
@@ -195,6 +202,7 @@ HARD RULES:
 - Scrub Status drives workflow: Include → done, Modify → Investment, Sunset → removal
 - If user's language doesn't map cleanly to a known field, CLARIFY before acting
 - Never invent values not in this taxonomy
+- NEVER guess per-resource metadata (sales stage, audience, department, training type) unless it was explicitly returned in the function results. If the data is not in the results, say you need to query for more detail and offer to do so.
 - If you can't name the field you're changing, don't change anything
 
 =============================================================================
@@ -828,7 +836,19 @@ class ChatService:
         }
     
     def _call_openai(self, message: str, history: List[Dict], context: Dict, conv_id: int) -> Dict:
-        """Call OpenAI with function calling for structured actions."""
+        """Call OpenAI with selective two-pass function calling.
+        
+        Architecture:
+        - Pass 1: LLM decides which function to call (or responds directly)
+        - Pass 2 (selective): For data-rich handlers (list, summary), send raw data
+          back to LLM so it can formulate a natural response from real data.
+          Simple handlers (count, confirmations, strategic advisors) return directly.
+        
+        Cost optimizations:
+        - Prompt caching: stable system prefix separated from dynamic context
+        - History cap: last MAX_HISTORY_PAIRS exchanges only
+        - Selective two-pass: only for handlers that return rich per-resource data
+        """
         # Build context-aware system prompt with gold examples and live data
         live_snapshot = self._get_live_data_snapshot()
         
@@ -850,7 +870,9 @@ PREVIOUS QUERY CONTEXT (for follow-ups like "those", "them", "set these"):
 CRITICAL FOLLOW-UP RULE: When user says "set those/them/these to X", you MUST pass these resource_keys to prepare_scrub_update. Do NOT call with empty resource_keys if keys are available above.
 """
         
-        system_prompt = SYSTEM_PROMPT + "\n" + GOLD_EXAMPLES + f"""
+        # PROMPT CACHING: Stable prefix (cached at 10x cheaper) + dynamic suffix
+        stable_prefix = SYSTEM_PROMPT + "\n" + GOLD_EXAMPLES
+        dynamic_context = f"""
 {query_ctx_block}
 LIVE DATA SNAPSHOT (current state):
 {live_snapshot}
@@ -862,10 +884,19 @@ CURRENT CONTEXT:
 - User: {self.username}
 """
         
-        messages = [{"role": "system", "content": system_prompt}]
-        messages.extend(history)
+        # HISTORY CAP: Limit conversation history to control input token cost
+        trimmed_history = history
+        if len(history) > MAX_HISTORY_PAIRS * 2:
+            trimmed_history = history[-(MAX_HISTORY_PAIRS * 2):]
+        
+        messages = [
+            {"role": "system", "content": stable_prefix},   # Cached after first call
+            {"role": "system", "content": dynamic_context},  # Fresh each call
+        ]
+        messages.extend(trimmed_history)
         messages.append({"role": "user", "content": message})
         
+        # Pass 1: LLM decides what to do
         response = self.client.chat.completions.create(
             model=MODEL,
             messages=messages,
@@ -873,6 +904,9 @@ CURRENT CONTEXT:
             tool_choice="auto",
             temperature=0.3,
         )
+        
+        # Log usage for Pass 1
+        self._log_usage(response, conv_id, 'pass_1')
         
         response_message = response.choices[0].message
         
@@ -882,11 +916,51 @@ CURRENT CONTEXT:
             function_name = tool_call.function.name
             function_args = json.loads(tool_call.function.arguments)
             
-            # Execute the function
-            return self._execute_function(function_name, function_args, context, conv_id)
+            # Execute the function handler
+            result = self._execute_function(function_name, function_args, context, conv_id)
+            
+            # SELECTIVE TWO-PASS: Only for data-rich handlers
+            return_type = function_args.get('return_type', '')
+            needs_two_pass = (
+                function_name in TWO_PASS_HANDLERS and 
+                return_type in TWO_PASS_RETURN_TYPES
+            ) or function_name == 'continue_list'
+            
+            if needs_two_pass and result.get('data'):
+                # Pass 2: Send raw data back to LLM for natural language response
+                messages.append(response_message)  # Assistant's function call
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": json.dumps(result['data'], default=str)
+                })
+                
+                final_response = self.client.chat.completions.create(
+                    model=MODEL,
+                    messages=messages,
+                    temperature=0.3,
+                )
+                
+                # Log usage for Pass 2
+                self._log_usage(final_response, conv_id, 'pass_2')
+                
+                response_text = final_response.choices[0].message.content
+                response_text = self._enforce_formatting(response_text)
+                
+                # Preserve metadata from handler (resource_keys, query context, etc.)
+                final_result = {'response': response_text}
+                if result.get('metadata'):
+                    final_result['metadata'] = result['metadata']
+                if result.get('pending_action'):
+                    final_result['pending_action'] = result['pending_action']
+                return final_result
+            
+            # Single-pass: handler already formatted the response
+            return result
         
-        # Plain text response
-        return {'response': response_message.content or "I'm not sure how to help with that."}
+        # Plain text response (no function call)
+        response_text = response_message.content or "I'm not sure how to help with that."
+        return {'response': self._enforce_formatting(response_text)}
     
     def _execute_function(self, name: str, args: Dict, context: Dict, conv_id: int) -> Dict:
         """Execute a function call from OpenAI."""
@@ -933,6 +1007,53 @@ CURRENT CONTEXT:
             return self._handle_explain_taxonomy(args)
         
         return {'response': "I'm not sure how to do that."}
+    
+    def _enforce_formatting(self, text: str) -> str:
+        """Server-side formatting enforcement.
+        
+        Strips markdown formatting the LLM might add despite prompt instructions.
+        This is guaranteed to work, unlike prompt-only rules.
+        """
+        import re
+        # Remove bold markers: **text** → text
+        text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+        # Remove markdown headers: ## Header → Header
+        text = re.sub(r'^#{1,3}\s+', '', text, flags=re.MULTILINE)
+        # Remove arrow symbols that leak from old prompts
+        text = text.replace(' → ', ' - ')
+        return text
+    
+    def _log_usage(self, response, conv_id: int, call_type: str):
+        """Log OpenAI API usage for cost tracking.
+        
+        Captures prompt_tokens, completion_tokens, and estimated cost
+        from the API response and stores to ai_usage_log table.
+        """
+        try:
+            if not hasattr(response, 'usage') or not response.usage:
+                return
+            
+            usage = response.usage
+            prompt_tokens = usage.prompt_tokens or 0
+            completion_tokens = usage.completion_tokens or 0
+            
+            # GPT-5.2 pricing per million tokens
+            input_rate = 1.75 / 1_000_000
+            output_rate = 14.00 / 1_000_000
+            estimated_cost = (prompt_tokens * input_rate) + (completion_tokens * output_rate)
+            
+            db.log_ai_usage(
+                user_id=self.user_id,
+                username=self.username,
+                conversation_id=conv_id,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                model=MODEL,
+                call_type=call_type,
+                estimated_cost=estimated_cost
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log AI usage: {e}")
     
     def _handle_query(self, args: Dict, conv_id: int) -> Dict:
         """Handle a query_resources function call."""
@@ -1086,20 +1207,27 @@ CURRENT CONTEXT:
             limit = min(limit, 10)
             
             results = db.execute(
-                f"""SELECT resource_key, display_name, bucket, scrub_status, audience 
+                f"""SELECT resource_key, display_name, bucket, scrub_status, audience,
+                            sales_stage, primary_department, training_type 
                     FROM resources WHERE {where_clause} LIMIT ?""",
                 tuple(params) + (limit,), fetch="all"
             )
             
             if not results:
                 type_label = self._get_type_label(filters)
-                return {'response': f"I didn't find any {type_label}."}
+                filter_desc = self._describe_filters(filters)
+                return {'response': f"I didn't find any {type_label}{filter_desc}."}
             
+            # Build display text (fallback for single-pass)
             items = []
             for r in results:
                 name = self._clean_display_name(r['display_name'] or r['resource_key'])
                 status = (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed')
-                items.append(f"- {name} \u2013 {status}")
+                parts = [f"- {name} \u2013 {status}"]
+                if r.get('sales_stage'):
+                    stage_label = SALES_STAGE_LABELS.get(r['sales_stage'], r['sales_stage'])
+                    parts.append(f"[{stage_label}]")
+                items.append(' '.join(parts))
             
             type_label = self._get_type_label(filters)
             response = f"Here are {type_label}.\nShowing {len(results)} of {total_matching}.\n\n" + "\n".join(items)
@@ -1121,8 +1249,29 @@ CURRENT CONTEXT:
                 'params': list(params)
             })
             
+            # Build structured data for two-pass LLM formatting
+            resource_data = []
+            for r in results:
+                resource_data.append({
+                    'name': self._clean_display_name(r['display_name'] or r['resource_key']),
+                    'resource_key': r['resource_key'],
+                    'bucket': r['bucket'] or 'Unassigned',
+                    'status': (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed'),
+                    'audience': r['audience'] or 'Unassigned',
+                    'sales_stage': SALES_STAGE_LABELS.get(r.get('sales_stage', ''), r.get('sales_stage', '')) or 'None',
+                    'department': r.get('primary_department', '') or 'Unassigned',
+                    'training_type': (r.get('training_type', '') or 'Unassigned').replace('_', ' ').title(),
+                })
+            
             return {
                 'response': response,
+                'data': {
+                    'resources': resource_data,
+                    'total_matching': total_matching,
+                    'showing': len(results),
+                    'filters_applied': filters,
+                    'has_more': remaining > 0
+                },
                 'metadata': {'query_results': [dict(r) for r in results]}
             }
         
@@ -1154,7 +1303,21 @@ CURRENT CONTEXT:
                 value = (r[group_field] or 'Unassigned').replace('not_reviewed', 'Not reviewed')
                 lines.append(f"- {value}: {r['cnt']:,}")
             
-            return {'response': '\n'.join(lines)}
+            # Build structured data for two-pass
+            breakdown_data = []
+            for r in results:
+                value = (r[group_field] or 'Unassigned').replace('not_reviewed', 'Not reviewed')
+                breakdown_data.append({'group': value, 'count': r['cnt']})
+            
+            return {
+                'response': '\n'.join(lines),
+                'data': {
+                    'breakdown': breakdown_data,
+                    'group_by': field_label,
+                    'total': total,
+                    'filters_applied': filters
+                }
+            }
         
         return {'response': "Not sure what you're looking for."}
     
@@ -1190,7 +1353,8 @@ CURRENT CONTEXT:
         
         # Query database for next page (NEVER fabricate data)
         results = db.execute(
-            f"""SELECT resource_key, display_name, bucket, scrub_status, audience 
+            f"""SELECT resource_key, display_name, bucket, scrub_status, audience,
+                        sales_stage, primary_department, training_type 
                 FROM resources WHERE {where_clause} 
                 LIMIT ? OFFSET ?""",
             tuple(params) + (limit, new_offset), fetch="all"
@@ -1203,7 +1367,11 @@ CURRENT CONTEXT:
         for r in results:
             name = self._clean_display_name(r['display_name'] or r['resource_key'])
             status = (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed')
-            items.append(f"- {name} \u2013 {status}")
+            parts = [f"- {name} \u2013 {status}"]
+            if r.get('sales_stage'):
+                stage_label = SALES_STAGE_LABELS.get(r['sales_stage'], r['sales_stage'])
+                parts.append(f"[{stage_label}]")
+            items.append(' '.join(parts))
         
         # Show position in full list
         start_num = new_offset + 1
@@ -1223,8 +1391,28 @@ CURRENT CONTEXT:
             'resource_keys': [r['resource_key'] for r in results]
         })
         
+        # Build structured data for two-pass
+        resource_data = []
+        for r in results:
+            resource_data.append({
+                'name': self._clean_display_name(r['display_name'] or r['resource_key']),
+                'resource_key': r['resource_key'],
+                'bucket': r['bucket'] or 'Unassigned',
+                'status': (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed'),
+                'audience': r['audience'] or 'Unassigned',
+                'sales_stage': SALES_STAGE_LABELS.get(r.get('sales_stage', ''), r.get('sales_stage', '')) or 'None',
+                'department': r.get('primary_department', '') or 'Unassigned',
+                'training_type': (r.get('training_type', '') or 'Unassigned').replace('_', ' ').title(),
+            })
+        
         return {
             'response': response,
+            'data': {
+                'resources': resource_data,
+                'showing_range': f"{start_num}-{end_num}",
+                'total': total_count,
+                'has_more': remaining > 0
+            },
             'metadata': {'query_results': [dict(r) for r in results]}
         }
     

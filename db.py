@@ -774,6 +774,27 @@ def init_db() -> None:
                     ADD COLUMN IF NOT EXISTS query_context JSONB
                 """)
                 
+                # AI Usage tracking for cost monitoring
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS ai_usage_log (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER,
+                        username TEXT,
+                        conversation_id INTEGER,
+                        prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                        completion_tokens INTEGER NOT NULL DEFAULT 0,
+                        total_tokens INTEGER NOT NULL DEFAULT 0,
+                        model TEXT NOT NULL DEFAULT 'gpt-5.2',
+                        estimated_cost_usd NUMERIC(10, 6) DEFAULT 0,
+                        call_type TEXT DEFAULT 'chat',
+                        created_at TIMESTAMP DEFAULT NOW()
+                    )
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_ai_usage_created 
+                    ON ai_usage_log(created_at)
+                """)
+                
             conn.commit()
             _logger.info("init_db() completed successfully")
         finally:
@@ -1878,6 +1899,87 @@ def create_user_profile(user_id: int, force_password_change: bool = True) -> Non
         VALUES (?, ?)
         ON CONFLICT(user_id) DO UPDATE SET force_password_change = excluded.force_password_change
     """, (user_id, force_password_change))
+
+# -----------------------------------------------------------------------------
+# AI Usage Tracking
+# -----------------------------------------------------------------------------
+
+def log_ai_usage(user_id: int, username: str, conversation_id: int,
+                 prompt_tokens: int, completion_tokens: int,
+                 model: str = 'gpt-5.2', call_type: str = 'chat',
+                 estimated_cost: float = 0.0) -> None:
+    """Log a single OpenAI API call for usage tracking."""
+    total_tokens = prompt_tokens + completion_tokens
+    execute("""
+        INSERT INTO ai_usage_log 
+        (user_id, username, conversation_id, prompt_tokens, completion_tokens,
+         total_tokens, model, estimated_cost_usd, call_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (user_id, username, conversation_id, prompt_tokens, completion_tokens,
+          total_tokens, model, estimated_cost, call_type))
+
+
+def get_ai_usage_summary(period: str = 'daily', days: int = 30) -> list:
+    """Get aggregated AI usage statistics.
+    
+    Args:
+        period: 'daily', 'weekly', or 'monthly'
+        days: Number of days to look back
+    
+    Returns:
+        List of dicts with period, calls, prompt_tokens, completion_tokens,
+        total_tokens, estimated_cost_usd
+    """
+    if period == 'weekly':
+        date_trunc = "DATE_TRUNC('week', created_at)"
+    elif period == 'monthly':
+        date_trunc = "DATE_TRUNC('month', created_at)"
+    else:
+        date_trunc = "DATE_TRUNC('day', created_at)"
+    
+    results = execute(f"""
+        SELECT 
+            {date_trunc} as period,
+            COUNT(*) as calls,
+            SUM(prompt_tokens) as prompt_tokens,
+            SUM(completion_tokens) as completion_tokens,
+            SUM(total_tokens) as total_tokens,
+            SUM(estimated_cost_usd) as estimated_cost_usd
+        FROM ai_usage_log
+        WHERE created_at >= NOW() - INTERVAL '{days} days'
+        GROUP BY period
+        ORDER BY period DESC
+    """, fetch="all")
+    
+    return [dict(r) for r in results] if results else []
+
+
+def get_ai_usage_totals(days: int = 30) -> dict:
+    """Get total AI usage stats for the given period."""
+    result = execute(f"""
+        SELECT 
+            COUNT(*) as total_calls,
+            COALESCE(SUM(prompt_tokens), 0) as total_prompt_tokens,
+            COALESCE(SUM(completion_tokens), 0) as total_completion_tokens,
+            COALESCE(SUM(total_tokens), 0) as total_tokens,
+            COALESCE(SUM(estimated_cost_usd), 0) as total_cost_usd,
+            COUNT(DISTINCT conversation_id) as total_conversations
+        FROM ai_usage_log
+        WHERE created_at >= NOW() - INTERVAL '{int(days)} days'
+    """, fetch="one")
+    
+    if not result:
+        return {
+            'total_calls': 0, 'total_prompt_tokens': 0,
+            'total_completion_tokens': 0, 'total_tokens': 0,
+            'total_cost_usd': 0, 'total_conversations': 0,
+            'avg_tokens_per_conversation': 0
+        }
+    
+    d = dict(result)
+    convs = d.get('total_conversations', 1) or 1
+    d['avg_tokens_per_conversation'] = round(d.get('total_tokens', 0) / convs)
+    return d
 
 
 # Initialization happens via Django AppConfig.ready() - no import-time side effects

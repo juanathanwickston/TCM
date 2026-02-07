@@ -1877,3 +1877,43 @@ def api_chat_delete(request, conversation_id):
         return JsonResponse({'success': True})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_ai_usage(request):
+    """
+    AI Usage statistics for the Tools tab.
+    Superuser-only. Returns totals and breakdown by period.
+    """
+    from django.http import JsonResponse
+    import db
+    
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'Superuser access required'}, status=403)
+    
+    period = request.GET.get('period', 'daily')
+    if period not in ('daily', 'weekly', 'monthly'):
+        period = 'daily'
+    
+    days_map = {'daily': 30, 'weekly': 90, 'monthly': 365}
+    days = days_map[period]
+    
+    totals = db.get_ai_usage_totals(days)
+    breakdown = db.get_ai_usage_summary(period, days)
+    
+    # Convert Decimal/datetime to JSON-safe types
+    for row in breakdown:
+        if row.get('period'):
+            row['period'] = str(row['period'])
+        if row.get('estimated_cost_usd'):
+            row['estimated_cost_usd'] = float(row['estimated_cost_usd'])
+    
+    for key in ('total_cost_usd',):
+        if key in totals and totals[key] is not None:
+            totals[key] = float(totals[key])
+    
+    return JsonResponse({
+        'totals': totals,
+        'breakdown': breakdown
+    })
