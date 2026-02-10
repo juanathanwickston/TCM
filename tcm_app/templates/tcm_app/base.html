@@ -878,7 +878,7 @@ html.chat-preopen .chat-sidebar.open {
             const numMatch = line.match(/^(\d+)[.):]\s+(.+)/);
 
             // Indented continuation: non-empty line inside a list that is not a new item
-            const isContinuation = (inOl || inUl) && line !== '' && !bulletMatch && !numMatch;
+            const isContinuation = (inOl || inUl) && /^\s/.test(lines[i]) && line !== '' && !bulletMatch && !numMatch;
             
             if (isContinuation) {
                 // Append to previous list item as a continuation line
