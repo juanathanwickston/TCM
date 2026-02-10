@@ -50,32 +50,32 @@
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}"
                             href="{% url 'dashboard' %}">
-                            <i class="bi bi-speedometer2 me-1"></i>Dashboard
+                            Dashboard
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'inventory' %}active{% endif %}"
                             href="{% url 'inventory' %}">
-                            <i class="bi bi-box-seam me-1"></i>Inventory
+                            Inventory
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'scrubbing' %}active{% endif %}"
                             href="{% url 'scrubbing' %}">
-                            <i class="bi bi-check2-square me-1"></i>Scrubbing
+                            Scrubbing
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'investment' %}active{% endif %}"
                             href="{% url 'investment' %}">
-                            <i class="bi bi-graph-up me-1"></i>Investment
+                            Investment
                         </a>
                     </li>
                     {% if user.is_superuser %}
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'tools' %}active{% endif %}"
                             href="{% url 'tools' %}">
-                            <i class="bi bi-gear me-1"></i>Tools
+                            Tools
                         </a>
                     </li>
                     {% endif %}
