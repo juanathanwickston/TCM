@@ -210,10 +210,10 @@ def validate_taxonomy_update(updates: Dict) -> Tuple[bool, str]:
     # Rule 4: Modify requires scrub_reason
     if updates.get('scrub_status') == 'Modify':
         if not updates.get('scrub_reason') and not updates.get('scrub_reasons'):
-            reason_list = "\n".join(f"{i+1}) {v}" for i, v in enumerate(REASON_LABELS.values()))
+            reason_list = "\n".join(f"- {v}" for v in REASON_LABELS.values())
             errors.append(
-                f"To set the status to Modify, please choose a reason:\n\n{reason_list}\n\n"
-                "You can also include an audience change — e.g. \"Modify, reason Outdated, audience Direct Sales.\""
+                f"To set the status to Modify, please include a reason:\n\n{reason_list}\n\n"
+                "You can also include an audience change — e.g. \"set to Modify, reason Outdated, audience Direct Sales.\""
             )
     
     # Rule 5: Validate scrub_reason if provided

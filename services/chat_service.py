@@ -423,6 +423,7 @@ CHAT_FUNCTIONS = [
                     "type": "object",
                     "properties": {
                         "scrub_status": {"type": "string", "enum": ["Include", "Modify", "Sunset"]},
+                        "scrub_reason": {"type": "string", "enum": ["incomplete", "outdated", "wrong_audience", "duplicate", "unclear_intent", "compliance_risk"]},
                         "scrub_owner": {"type": "string"},
                         "scrub_notes": {"type": "string"},
                         "audience": {"type": "string"},
@@ -1540,20 +1541,7 @@ CURRENT CONTEXT:
         # Validate updates using centralized taxonomy validation
         is_valid, error_msg = validate_taxonomy_update(updates)
         if not is_valid:
-            # Provide helpful suggestions based on the field
-            field_match = None
-            for field_name in ['audience', 'scrub_status', 'scrub_reason', 'sales_stage', 'bucket']:
-                if field_name in error_msg.lower():
-                    field_match = field_name
-                    break
-            
-            if field_match:
-                options = get_field_options(field_match)
-                return {
-                    'response': f"⚠️ {error_msg}\n\n**Valid {field_match.replace('_', ' ').title()} options:**\n" +
-                               "\n".join(f"- {opt}" for opt in options)
-                }
-            return {'response': f"⚠️ {error_msg}"}
+            return {'response': error_msg}
         
         # Get resource names for confirmation
         resources = self._get_resource_names(resource_keys)
@@ -2190,6 +2178,7 @@ CURRENT CONTEXT:
                         decision=updates.get('scrub_status', 'not_reviewed'),
                         owner=updates.get('scrub_owner', ''),
                         notes=updates.get('scrub_notes'),
+                        reasons=[updates['scrub_reason']] if updates.get('scrub_reason') else None,
                         audience=updates.get('audience'),
                         reviewed_by=self.username,
                         conn=conn
