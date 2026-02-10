@@ -876,8 +876,14 @@ html.chat-preopen .chat-sidebar.open {
             const line = lines[i].trim();
             const bulletMatch = line.match(/^[-•]\s+(.+)/);
             const numMatch = line.match(/^(\d+)[.):]\s+(.+)/);
+
+            // Indented continuation: non-empty line inside a list that is not a new item
+            const isContinuation = (inOl || inUl) && line !== '' && !bulletMatch && !numMatch;
             
-            if (bulletMatch) {
+            if (isContinuation) {
+                // Append to previous list item as a continuation line
+                html = html.replace(/<\/li>$/, '<br>' + line + '</li>');
+            } else if (bulletMatch) {
                 if (inOl) { html += '</ol>'; inOl = false; }
                 if (!inUl) { html += '<ul>'; inUl = true; }
                 html += '<li>' + bulletMatch[1] + '</li>';

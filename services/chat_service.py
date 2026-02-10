@@ -874,16 +874,14 @@ CURRENT CONTEXT:
                 pass2_payload = {
                     'formatting': (
                         'Present results compactly. For resource lists: '
-                        'start with a 1-line count (e.g. "2 resources in Ask for Appointment:"), '
-                        'then each resource as a single numbered line: '
-                        '"1) Name — Status | Audience | Bucket". '
-                        'Do NOT put status on a separate line. No bullet points for metadata. '
-                        'End with 1-2 sentence recommendation if actionable. '
+                        'start with a 1-line count, then present each pre-formatted resource '
+                        'EXACTLY as given in the data — do NOT reformat, split, or rearrange. '
+                        'Each resource has a numbered title line and an indented metadata line. '
+                        'End with exactly: "What can I help with regarding these resources?" '
                         'Never show resource_key values. '
                         'Do not echo the user\'s question back. '
-                        'Use **bold** for key labels and counts. Do not use markdown headers. '
+                        'Do not use markdown headers. '
                         'Always call them "resources" (never "materials", "items", "courses"). '
-                        'Keep recommendations professional and brief — no editorializing. '
                         'For breakdowns: use simple "- label: count" lines.'
                     ),
                     'data': result['data']
@@ -1184,11 +1182,9 @@ CURRENT CONTEXT:
             for idx, r in enumerate(results):
                 name = self._clean_display_name(r['display_name'] or r['resource_key'])
                 status = (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed')
-                parts = [f"{idx + 1}) {name} \u2014 {status}"]
-                if r.get('sales_stage'):
-                    stage_label = SALES_STAGE_LABELS.get(r['sales_stage'], r['sales_stage'])
-                    parts.append(f"[{stage_label}]")
-                items.append(' '.join(parts))
+                audience = r['audience'] or 'Unassigned'
+                bucket = r['bucket'] or 'Unassigned'
+                items.append(f"{idx + 1}) {name}\n   {status} | {audience} | {bucket}")
             
             type_label = self._get_type_label(filters)
             response = f"Here are {type_label}.\nShowing {len(results)} of {total_matching}.\n\n" + "\n".join(items)
@@ -1211,19 +1207,20 @@ CURRENT CONTEXT:
             })
             
             # Build structured data for two-pass LLM formatting
-            resource_data = []
+            # Pre-format each resource as a two-line string:
+            # Line 1: numbered title, Line 2: indented metadata
+            resource_lines = []
             for idx, r in enumerate(results):
-                resource_data.append({
-                    'name': f"{idx + 1}) {self._clean_display_name(r['display_name'] or r['resource_key'])}",
-                    'bucket': r['bucket'] or 'Unassigned',
-                    'status': (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed'),
-                    'audience': r['audience'] or 'Unassigned',
-                })
+                name = self._clean_display_name(r['display_name'] or r['resource_key'])
+                status = (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed')
+                audience = r['audience'] or 'Unassigned'
+                bucket = r['bucket'] or 'Unassigned'
+                resource_lines.append(f"{idx + 1}) {name}\n   {status} | {audience} | {bucket}")
             
             return {
                 'response': response,
                 'data': {
-                    'resources': resource_data,
+                    'resources': resource_lines,
                     'total_matching': total_matching,
                     'showing': len(results),
                     'filters_applied': filters,
@@ -1321,14 +1318,13 @@ CURRENT CONTEXT:
             return {'response': f"That's all! No more resources to show."}
         
         items = []
-        for r in results:
+        for idx, r in enumerate(results):
             name = self._clean_display_name(r['display_name'] or r['resource_key'])
             status = (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed')
-            parts = [f"- {name} \u2013 {status}"]
-            if r.get('sales_stage'):
-                stage_label = SALES_STAGE_LABELS.get(r['sales_stage'], r['sales_stage'])
-                parts.append(f"[{stage_label}]")
-            items.append(' '.join(parts))
+            audience = r['audience'] or 'Unassigned'
+            bucket = r['bucket'] or 'Unassigned'
+            num = start_num + idx
+            items.append(f"{num}) {name}\n   {status} | {audience} | {bucket}")
         
         # Show position in full list
         start_num = new_offset + 1
@@ -1348,20 +1344,20 @@ CURRENT CONTEXT:
             'resource_keys': [r['resource_key'] for r in results]
         })
         
-        # Build structured data for two-pass
-        resource_data = []
-        for r in results:
-            resource_data.append({
-                'name': self._clean_display_name(r['display_name'] or r['resource_key']),
-                'bucket': r['bucket'] or 'Unassigned',
-                'status': (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed'),
-                'audience': r['audience'] or 'Unassigned',
-            })
+        # Build structured data for two-pass — pre-formatted two-line strings
+        resource_lines = []
+        for idx, r in enumerate(results):
+            name = self._clean_display_name(r['display_name'] or r['resource_key'])
+            status = (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed')
+            audience = r['audience'] or 'Unassigned'
+            bucket = r['bucket'] or 'Unassigned'
+            num = start_num + idx
+            resource_lines.append(f"{num}) {name}\n   {status} | {audience} | {bucket}")
         
         return {
             'response': response,
             'data': {
-                'resources': resource_data,
+                'resources': resource_lines,
                 'showing_range': f"{start_num}-{end_num}",
                 'total': total_count,
                 'has_more': remaining > 0
