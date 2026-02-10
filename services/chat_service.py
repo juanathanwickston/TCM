@@ -1183,7 +1183,7 @@ CURRENT CONTEXT:
                 name = self._clean_display_name(r['display_name'] or r['resource_key'])
                 status = (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed')
                 audience = r['audience'] or 'Unassigned'
-                bucket = r['bucket'] or 'Unassigned'
+                bucket = self._format_enum_label(r['bucket'], 'bucket')
                 items.append(f"{idx + 1}) {name}\n   {status} | {audience} | {bucket}")
             
             type_label = self._get_type_label(filters)
@@ -1214,7 +1214,7 @@ CURRENT CONTEXT:
                 name = self._clean_display_name(r['display_name'] or r['resource_key'])
                 status = (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed')
                 audience = r['audience'] or 'Unassigned'
-                bucket = r['bucket'] or 'Unassigned'
+                bucket = self._format_enum_label(r['bucket'], 'bucket')
                 resource_lines.append(f"{idx + 1}) {name}\n   {status} | {audience} | {bucket}")
             
             return {
@@ -1350,7 +1350,7 @@ CURRENT CONTEXT:
             name = self._clean_display_name(r['display_name'] or r['resource_key'])
             status = (r['scrub_status'] or 'Not reviewed').replace('not_reviewed', 'Not reviewed')
             audience = r['audience'] or 'Unassigned'
-            bucket = r['bucket'] or 'Unassigned'
+            bucket = self._format_enum_label(r['bucket'], 'bucket')
             num = start_num + idx
             resource_lines.append(f"{num}) {name}\n   {status} | {audience} | {bucket}")
         
@@ -1434,8 +1434,12 @@ CURRENT CONTEXT:
         if filters.get('training_type'):
             parts.append(filters['training_type'].replace('_', ' '))
         if not parts:
-            return "resources"
-        return ' '.join(parts) + ' resources'
+            label = "resources"
+        else:
+            label = ' '.join(parts) + ' resources'
+        if filters.get('search_text'):
+            label += f" matching '{filters['search_text']}'"
+        return label
     
     def _describe_filters(self, filters: Dict, verbose: bool = False) -> str:
         """
