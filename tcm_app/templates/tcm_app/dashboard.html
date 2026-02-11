@@ -161,6 +161,13 @@
         color: #6c757d;
     }
 
+    .stacked-bar-labels {
+        display: flex;
+        margin-top: 0.3rem;
+        font-size: 0.7rem;
+        color: #6c757d;
+    }
+
     /* Compact Cards */
     .card-header-sm {
         padding: 0.4rem 0.75rem;
@@ -349,10 +356,10 @@
                         </div>
                         {% endif %}
                     </div>
-                    <div class="stacked-bar-label">
-                        <span><span style="color:#00e0b8;">●</span> Include: {{ include_count|intcomma }}</span>
-                        <span><span style="color:#fd7e14;">●</span> Modify: {{ modify_count|intcomma }}</span>
-                        <span><span style="color:#dc3545;">●</span> Sunset: {{ sunset_count|intcomma }}</span>
+                    <div class="stacked-bar-labels">
+                        {% if include_count > 0 %}<div style="flex:{{ include_count }};text-align:center;"><span style="color:#00e0b8;">●</span> Include: {{ include_count|intcomma }}</div>{% endif %}
+                        {% if modify_count > 0 %}<div style="flex:{{ modify_count }};text-align:center;"><span style="color:#fd7e14;">●</span> Modify: {{ modify_count|intcomma }}</div>{% endif %}
+                        {% if sunset_count > 0 %}<div style="flex:{{ sunset_count }};text-align:center;"><span style="color:#dc3545;">●</span> Sunset: {{ sunset_count|intcomma }}</div>{% endif %}
                     </div>
                 </div>
             </div>
