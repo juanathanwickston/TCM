@@ -377,6 +377,35 @@ def dashboard_view(request):
         })
     
     # -------------------------------------------------------------------------
+    # DEPARTMENT BREAKDOWN (alphabetical, always show including Unassigned)
+    # -------------------------------------------------------------------------
+    dept_agg = defaultdict(int)
+    dept_unassigned = 0
+
+    for c in active:
+        if is_resource(c):
+            dept = (c.get('primary_department') or '').strip()
+            if not dept:
+                dept_unassigned += c.get('resource_count', 0)
+            else:
+                dept_agg[dept] += c.get('resource_count', 0)
+
+    department_breakdown = []
+    for dept_label in sorted(dept_agg.keys()):
+        count = dept_agg[dept_label]
+        department_breakdown.append({
+            'department': dept_label,
+            'count': count,
+            'pct': round((count / total_resources) * 100, 1) if total_resources > 0 else 0.0
+        })
+    # Add Unassigned at end
+    department_breakdown.append({
+        'department': 'Unassigned',
+        'count': dept_unassigned,
+        'pct': round((dept_unassigned / total_resources) * 100, 1) if total_resources > 0 else 0.0
+    })
+
+    # -------------------------------------------------------------------------
     # CONTEXT
     # -------------------------------------------------------------------------
     context = {
@@ -405,6 +434,7 @@ def dashboard_view(request):
         'ss_donut_data': ss_donut_data,
         'ss_total': ss_total,
         'audience_breakdown': audience_breakdown,
+        'department_breakdown': department_breakdown,
     }
     
     return render(request, 'tcm_app/dashboard.html', context)

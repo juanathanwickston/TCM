@@ -367,9 +367,9 @@
     </div>
     {% endif %}
 
-    <!-- ROW 4: Audience Breakdown -->
+    <!-- ROW 4: Audience & Department Breakdown -->
     <div class="row g-2">
-        <div class="col-12">
+        <div class="col-md-6">
             <div class="card">
                 <div class="card-header card-header-sm">
                     <h6>Audience Breakdown</h6>
@@ -389,6 +389,33 @@
                                 <td>{{ a.audience }}</td>
                                 <td class="text-end">{{ a.count|intcomma }}</td>
                                 <td class="text-end">{{ a.pct }}%</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header card-header-sm">
+                    <h6>Department Breakdown</h6>
+                </div>
+                <div class="card-body card-body-sm">
+                    <table class="table table-sm-tight">
+                        <thead>
+                            <tr>
+                                <th>Department</th>
+                                <th class="text-end">Count</th>
+                                <th class="text-end">%</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for d in department_breakdown %}
+                            <tr>
+                                <td>{{ d.department }}</td>
+                                <td class="text-end">{{ d.count|intcomma }}</td>
+                                <td class="text-end">{{ d.pct }}%</td>
                             </tr>
                             {% endfor %}
                         </tbody>
