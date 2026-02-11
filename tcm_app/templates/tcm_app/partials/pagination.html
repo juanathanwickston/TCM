@@ -7,8 +7,8 @@
     <button class="btn btn-outline-secondary btn-sm" disabled>← Prev</button>
     {% endif %}
 
-    <span class="text-muted small">Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }}</span>
-    <span class="text-muted small">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    <span class="text-muted" style="font-size: 0.75rem;">Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }}</span>
+    <span class="text-muted" style="font-size: 0.75rem;">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
     {% if page_obj.has_next %}
     <a href="?page={{ page_obj.next_page_number }}{% for k, v in request.GET.items %}{% if k != 'page' %}&amp;{{ k }}={{ v|urlencode }}{% endif %}{% endfor %}"

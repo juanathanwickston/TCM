@@ -80,14 +80,14 @@
     <!-- Summary Header with Save Button -->
     <div class="d-flex align-items-center justify-content-between mb-2" style="font-size: 0.75rem;">
         <div class="d-flex align-items-center gap-3">
-            <h6 class="mb-0">Total resources ({{ total_resources|intcomma }})</h6>
+            <span style="font-weight: 600;">Total resources ({{ total_resources|intcomma }})</span>
             <span class="badge bg-secondary">
                 {% if current_department %}{{ current_department }}{% endif %}
                 {% if current_training_type %} / {{ training_type_labels|get_item:current_training_type|default:current_training_type }}{% endif %}
                 {% if not current_department and not current_training_type %}All Resources{% endif %}
             </span>
         </div>
-        <button type="button" id="global-save" class="btn btn-sm btn-primary" disabled>Save All Changes</button>
+        <button type="button" id="global-save" class="btn btn-sm btn-primary" style="font-size: 0.75rem;" disabled>Save All Changes</button>
     </div>
 
     {% include 'tcm_app/partials/pagination.html' %}
