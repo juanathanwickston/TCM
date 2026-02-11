@@ -176,7 +176,6 @@ a:hover {
 /* ============================================
    KPI DISPLAY (Dashboard)
    ============================================ */
-.display-5,
 .kpi-value {
     color: var(--payroc-navy);
 }
