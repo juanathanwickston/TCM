@@ -19,6 +19,7 @@
 
     {% block extra_css %}{% endblock %}
     
+    <style>.chat-sidebar{visibility:hidden;}</style>
     <!-- Pre-render: Set chat state BEFORE body renders -->
     <script>
         (function() {
@@ -131,7 +132,7 @@
 
     {% if user.is_authenticated %}
     <!-- Chat Sidebar -->
-    <div id="chatSidebar" class="chat-sidebar" style="visibility:hidden;">
+    <div id="chatSidebar" class="chat-sidebar">
         <div class="chat-resize-handle" id="chatResizeHandle"></div>
         
         <div class="chat-sidebar-header">
