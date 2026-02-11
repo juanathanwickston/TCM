@@ -292,6 +292,11 @@ def dashboard_view(request):
     # Shared 6-color palette for distinct visualization
     DONUT_COLORS = ['#0051C2', '#00e0b8', '#fd7e14', '#6f42c1', '#dc3545', '#e9c46a']
     
+    TT_SHORT_LABELS = {
+        'Instructor Led Virtual': 'Instructor - Virtual',
+        'Instructor Led In Person': 'Instructor - F2F',
+    }
+
     # Build training types donut data with colors and offsets
     tt_total = sum(t['count'] for t in training_types)
     tt_donut_data = []
@@ -299,7 +304,7 @@ def dashboard_view(request):
     for i, t in enumerate(training_types[:6]):  # Max 6 segments
         pct = round((t['count'] / tt_total) * 100, 1) if tt_total > 0 else 0.0
         tt_donut_data.append({
-            'label': t['type'],
+            'label': TT_SHORT_LABELS.get(t['type'], t['type']),
             'count': t['count'],
             'pct': pct,
             'color': DONUT_COLORS[i % len(DONUT_COLORS)],
