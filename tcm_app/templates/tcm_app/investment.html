@@ -4,72 +4,84 @@
 {% block title %}Investment | TCM{% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
-  <div class="d-flex align-items-center justify-content-between mb-3">
-    <div>
-      <h1 class="h3 mb-1">Investment Planning</h1>
-      <div class="text-muted">Build/Buy/Assign decisions for Modify items</div>
-    </div>
-  </div>
+<style>
+    /* Investment - Compact sizing to match inventory/scrubbing/dashboard */
+    .investment-table {
+        font-size: 0.75rem;
+    }
+    .investment-table th,
+    .investment-table td {
+        padding: 0.35rem 0.5rem;
+    }
+    .investment-kpi .card-body {
+        padding: 0.5rem;
+    }
+    .investment-kpi .h4 {
+        font-size: 1rem;
+    }
+    .form-label { font-size: 0.8rem; }
+    .form-select { font-size: 0.8rem; }
+</style>
+
+<div class="container-fluid" style="padding: 0 1rem 0.5rem 1rem;">
 
   <!-- Summary KPIs -->
-  <div class="row g-3 mb-4">
+  <div class="row g-2 mb-2">
     <div class="col-md-4">
-      <div class="card text-center">
+      <div class="card text-center investment-kpi">
         <div class="card-body">
-          <div class="h4 mb-1">{{ total_count }}</div>
-          <div class="text-muted small">Total Queue</div>
+          <div class="h4 mb-0">{{ total_count }}</div>
+          <div class="text-muted" style="font-size: 0.7rem;">Total Queue</div>
         </div>
       </div>
     </div>
     <div class="col-md-4">
-      <div class="card text-center">
+      <div class="card text-center investment-kpi">
         <div class="card-body">
-          <div class="h4 mb-1">{{ decided_count }}</div>
-          <div class="text-muted small">Decided</div>
+          <div class="h4 mb-0">{{ decided_count }}</div>
+          <div class="text-muted" style="font-size: 0.7rem;">Decided</div>
         </div>
       </div>
     </div>
     <div class="col-md-4">
-      <div class="card text-center">
+      <div class="card text-center investment-kpi">
         <div class="card-body">
-          <div class="h4 mb-1">{{ pending_count }}</div>
-          <div class="text-muted small">Pending</div>
+          <div class="h4 mb-0">{{ pending_count }}</div>
+          <div class="text-muted" style="font-size: 0.7rem;">Pending</div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Filters, Search, Pagination, Save Button -->
-  <div class="d-flex align-items-center justify-content-between mb-4">
+  <!-- Filter + Search + Pagination + Save (single row) -->
+  <div class="d-flex align-items-center justify-content-between mb-2" style="font-size: 0.75rem;">
     <form method="get" class="d-flex align-items-center gap-2">
-      <label class="form-label mb-0 text-muted">Decision:</label>
-      <select name="decision_filter" class="form-select form-select-sm" style="width:auto;">
+      <label class="form-label mb-0 text-muted" style="font-size: 0.75rem;">Decision:</label>
+      <select name="decision_filter" class="form-select form-select-sm" style="width:auto; font-size: 0.75rem;">
         {% for value, label in decision_options %}
         <option value="{{ value }}" {% if filter_decision == value %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
-      <input type="text" id="searchBox" class="form-control form-control-sm" placeholder="Search name or path..." style="width:200px;">
+      <input type="text" id="searchBox" class="form-control form-control-sm" placeholder="Search name or path..." style="width:200px; font-size: 0.75rem;">
     </form>
-    <div class="d-flex align-items-center gap-3">
-      <!-- Compact pagination -->
+    <div class="d-flex align-items-center gap-2">
       {% if page_obj.has_other_pages %}
-      <nav class="d-flex align-items-center gap-1">
-        {% if page_obj.has_previous %}
-        <a href="?decision_filter={{ filter_decision }}&page={{ page_obj.previous_page_number }}" class="btn btn-sm btn-outline-secondary pagination-link">←</a>
-        {% else %}
-        <button class="btn btn-sm btn-outline-secondary" disabled>←</button>
-        {% endif %}
-        <span class="small text-muted px-1">{{ page_obj.number }}/{{ page_obj.paginator.num_pages }}</span>
-        {% if page_obj.has_next %}
-        <a href="?decision_filter={{ filter_decision }}&page={{ page_obj.next_page_number }}" class="btn btn-sm btn-outline-secondary pagination-link">→</a>
-        {% else %}
-        <button class="btn btn-sm btn-outline-secondary" disabled>→</button>
-        {% endif %}
-      </nav>
+      {% if page_obj.has_previous %}
+      <a href="?decision_filter={{ filter_decision }}&page={{ page_obj.previous_page_number }}"
+          class="text-muted pagination-link" style="text-decoration: none;">‹</a>
+      {% else %}
+      <span class="text-muted" style="opacity: 0.4;">‹</span>
       {% endif %}
-      <span class="text-muted small" id="itemCount">Showing {{ containers|length }} items</span>
-      <button type="button" id="global-save" class="btn btn-primary" disabled>Save All Changes</button>
+      <span class="text-muted">{{ page_obj.number }}/{{ page_obj.paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+      <a href="?decision_filter={{ filter_decision }}&page={{ page_obj.next_page_number }}"
+          class="text-muted pagination-link" style="text-decoration: none;">›</a>
+      {% else %}
+      <span class="text-muted" style="opacity: 0.4;">›</span>
+      {% endif %}
+      {% endif %}
+      <span class="text-muted" id="itemCount">Showing {{ containers|length }} items</span>
+      <button type="button" id="global-save" class="btn btn-sm btn-primary" style="font-size: 0.75rem;" disabled>Save All Changes</button>
     </div>
   </div>
 
