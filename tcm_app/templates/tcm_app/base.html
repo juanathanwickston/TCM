@@ -35,7 +35,7 @@
 <body>
     {% if user.is_authenticated %}
     <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark py-1">
         <div class="container-fluid">
             <a class="navbar-brand" href="{% url 'dashboard' %}">
                 <i class="bi bi-journal-text me-2"></i>TCM
@@ -125,7 +125,7 @@
     {% endif %}
 
     <!-- Main Content -->
-    <main class="{% if user.is_authenticated %}py-4{% endif %}">
+    <main class="{% if user.is_authenticated %}py-1{% endif %}">
         {% block content %}{% endblock %}
     </main>
 
