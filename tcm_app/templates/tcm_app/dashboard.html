@@ -40,9 +40,13 @@
     }
 
     .donut-chart {
-        width: 180px;
-        height: 180px;
-        flex-shrink: 0;
+        width: 100%;
+        height: auto;
+    }
+
+    .donut-chart-wrapper {
+        flex: 1;
+        min-width: 0;
     }
 
     .donut-ring {
@@ -87,8 +91,8 @@
 
     /* Donut Breakdown Table */
     .donut-breakdown {
-        width: 100%;
-        max-width: 180px;
+        width: 160px;
+        flex-shrink: 0;
         font-size: 0.7rem;
     }
 
@@ -220,7 +224,7 @@
                 </div>
                 <div class="card-body card-body-sm">
                     <div class="donut-container">
-                        <svg class="donut-chart" viewBox="0 0 36 36">
+                        <div class="donut-chart-wrapper"><svg class="donut-chart" viewBox="0 0 36 36">
                             <circle class="donut-ring" cx="18" cy="18" r="15.9155" />
                             {% if total_resources > 0 %}
                             {% if onboarding_pct > 0 %}
@@ -241,7 +245,7 @@
                             {% endif %}
                             <text x="18" y="16" class="donut-text-label">Total</text>
                             <text x="18" y="20" class="donut-text-value">{{ total_resources }}</text>
-                        </svg>
+                        </svg></div>
                         <div class="donut-breakdown">
                             {% for item in donut_breakdown %}
                             <div class="donut-breakdown-row">
@@ -263,7 +267,7 @@
                 </div>
                 <div class="card-body card-body-sm">
                     <div class="donut-container">
-                        <svg class="donut-chart" viewBox="0 0 36 36">
+                        <div class="donut-chart-wrapper"><svg class="donut-chart" viewBox="0 0 36 36">
                             <circle class="donut-ring" cx="18" cy="18" r="15.9155" />
                             {% if tt_total > 0 %}
                             {% for item in tt_donut_data %}
@@ -276,7 +280,7 @@
                             {% endif %}
                             <text x="18" y="16" class="donut-text-label">Total</text>
                             <text x="18" y="20" class="donut-text-value">{{ tt_total }}</text>
-                        </svg>
+                        </svg></div>
                         <div class="donut-breakdown">
                             {% for item in tt_donut_data %}
                             <div class="donut-breakdown-row">
@@ -298,7 +302,7 @@
                 </div>
                 <div class="card-body card-body-sm">
                     <div class="donut-container">
-                        <svg class="donut-chart" viewBox="0 0 36 36">
+                        <div class="donut-chart-wrapper"><svg class="donut-chart" viewBox="0 0 36 36">
                             <circle class="donut-ring" cx="18" cy="18" r="15.9155" />
                             {% if ss_total > 0 %}
                             {% for item in ss_donut_data %}
@@ -311,7 +315,7 @@
                             {% endif %}
                             <text x="18" y="16" class="donut-text-label">Total</text>
                             <text x="18" y="20" class="donut-text-value">{{ ss_total }}</text>
-                        </svg>
+                        </svg></div>
                         <div class="donut-breakdown">
                             {% for item in ss_donut_data %}
                             <div class="donut-breakdown-row">
