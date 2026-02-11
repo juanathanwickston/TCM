@@ -39,7 +39,7 @@ body {
 .navbar-dark .navbar-brand,
 .navbar-dark .nav-link {
     color: rgba(255, 255, 255, 0.9);
-    font-size: 0.85rem;
+    font-size: 0.75rem;
 }
 
 .navbar-dark .nav-link:hover,
