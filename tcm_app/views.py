@@ -377,17 +377,14 @@ def dashboard_view(request):
         })
     
     # -------------------------------------------------------------------------
-    # DEPARTMENT BREAKDOWN (alphabetical, always show including Unassigned)
+    # DEPARTMENT BREAKDOWN (alphabetical)
     # -------------------------------------------------------------------------
     dept_agg = defaultdict(int)
-    dept_unassigned = 0
 
     for c in active:
         if is_resource(c):
             dept = (c.get('primary_department') or '').strip()
-            if not dept:
-                dept_unassigned += c.get('resource_count', 0)
-            else:
+            if dept:
                 dept_agg[dept] += c.get('resource_count', 0)
 
     department_breakdown = []
@@ -398,12 +395,6 @@ def dashboard_view(request):
             'count': count,
             'pct': round((count / total_resources) * 100, 1) if total_resources > 0 else 0.0
         })
-    # Add Unassigned at end
-    department_breakdown.append({
-        'department': 'Unassigned',
-        'count': dept_unassigned,
-        'pct': round((dept_unassigned / total_resources) * 100, 1) if total_resources > 0 else 0.0
-    })
 
     # -------------------------------------------------------------------------
     # CONTEXT
