@@ -293,8 +293,9 @@ def dashboard_view(request):
     DONUT_COLORS = ['#0051C2', '#00e0b8', '#fd7e14', '#6f42c1', '#dc3545', '#e9c46a']
     
     TT_SHORT_LABELS = {
-        'Instructor Led Virtual': 'Instructor - Virtual',
-        'Instructor Led In Person': 'Instructor - F2F',
+        'Instructor Led Virtual': 'Instructor (Zoom)',
+        'Instructor Led In Person': 'Instructor (F2F)',
+        'Video On Demand': 'Video',
     }
 
     # Build training types donut data with colors and offsets
