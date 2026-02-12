@@ -52,7 +52,7 @@
       <span class="text-muted" style="opacity: 0.4;">›</span>
       {% endif %}
       {% endif %}
-      <span class="text-muted" id="itemCount">Showing {{ containers|length }} items</span>
+      <span class="text-muted" id="itemCount"></span>
       <button type="button" id="global-save" class="btn btn-sm btn-primary" style="font-size: 0.75rem;" disabled>Save All Changes</button>
     </div>
   </div>
@@ -301,13 +301,12 @@
   
   // Update item count display
   function updateItemCount() {
-    const visible = document.querySelectorAll('.invest-row:not(.d-none)').length;
     const unsaved = dirtyRows.size;
-    let text = `Showing ${visible} items`;
     if (unsaved > 0) {
-      text += ` • ${unsaved} unsaved`;
+      itemCountEl.textContent = `${unsaved} unsaved`;
+    } else {
+      itemCountEl.textContent = '';
     }
-    itemCountEl.textContent = text;
   }
 
   // Track changes to editable fields

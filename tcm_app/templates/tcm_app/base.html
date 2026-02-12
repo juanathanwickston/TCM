@@ -25,8 +25,7 @@
             var s = localStorage.getItem('tcm_chat_open');
             if (s === 'open') {
                 document.documentElement.classList.add('chat-preopen');
-                var w = localStorage.getItem('tcm_chat_width') || '400';
-                document.documentElement.style.setProperty('--chat-sidebar-width', w + 'px');
+                document.documentElement.style.setProperty('--chat-sidebar-width', '600px');
             }
         })();
     </script>
@@ -132,7 +131,6 @@
     {% if user.is_authenticated %}
     <!-- Chat Sidebar -->
     <div id="chatSidebar" class="chat-sidebar">
-        <div class="chat-resize-handle" id="chatResizeHandle"></div>
         
         <div class="chat-sidebar-header">
             <div class="d-flex align-items-center">
@@ -199,8 +197,8 @@
 
 /* Main content wrapper - shrinks when chat open on desktop */
 body.chat-open main,
-body.chat-open .container-fluid.mt-3 {
-    margin-right: var(--chat-sidebar-width, 350px);
+body.chat-open .container-fluid {
+    margin-right: var(--chat-sidebar-width, 600px);
     transition: margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -209,9 +207,7 @@ body.chat-open .container-fluid.mt-3 {
     position: fixed;
     top: var(--navbar-height);
     right: 0;
-    width: 350px;
-    min-width: 350px;
-    max-width: 600px;
+    width: 600px;
     height: calc(100vh - var(--navbar-height));
     background: #ffffff;
     box-shadow: -4px 0 20px rgba(0, 29, 78, 0.15);
@@ -238,23 +234,7 @@ html.chat-preopen .chat-sidebar.open {
     transition: none;
 }
 
-/* Resize handle */
-.chat-resize-handle {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 6px;
-    height: 100%;
-    cursor: ew-resize;
-    background: transparent;
-    transition: background 0.15s;
-    z-index: 10;
-}
 
-.chat-resize-handle:hover,
-.chat-resize-handle.dragging {
-    background: var(--payroc-cobalt, #0051C2);
-}
 
 /* Header */
 .chat-sidebar-header {
@@ -497,14 +477,10 @@ html.chat-preopen .chat-sidebar.open {
     const sendBtn = document.getElementById('chatSendBtn');
     const messagesContainer = document.getElementById('chatMessages');
     const newChatBtn = document.getElementById('newChatBtn');
-    const resizeHandle = document.getElementById('chatResizeHandle');
     
     if (!toggleBtn || !sidebar) return;
     
-    const WIDTH_KEY = 'tcm_chat_width';
     const STATE_KEY = 'tcm_chat_open';
-    const MIN_WIDTH = 350;
-    const MAX_WIDTH = 600;
     const DESKTOP_BREAKPOINT = 992;
     
     // Check if desktop
@@ -522,16 +498,6 @@ html.chat-preopen .chat-sidebar.open {
         }
     }
     
-    // Load saved width (desktop only)
-    if (window.matchMedia('(pointer: fine)').matches) {
-        const savedWidth = localStorage.getItem(WIDTH_KEY);
-        if (savedWidth) {
-            const w = parseInt(savedWidth, 10);
-            if (w >= MIN_WIDTH && w <= MAX_WIDTH) {
-                sidebar.style.width = w + 'px';
-            }
-        }
-    }
     
     // Restore open state from localStorage (persist across page navigation)
     const savedState = localStorage.getItem(STATE_KEY);
@@ -602,37 +568,6 @@ html.chat-preopen .chat-sidebar.open {
         });
     }
     
-    // Resize handle (desktop + mouse only)
-    let isResizing = false;
-    
-    if (resizeHandle && window.matchMedia('(pointer: fine)').matches) {
-        resizeHandle.addEventListener('mousedown', (e) => {
-            isResizing = true;
-            resizeHandle.classList.add('dragging');
-            document.body.style.cursor = 'ew-resize';
-            document.body.style.userSelect = 'none';
-            e.preventDefault();
-        });
-        
-        document.addEventListener('mousemove', (e) => {
-            if (!isResizing) return;
-            const newWidth = window.innerWidth - e.clientX;
-            if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) {
-                sidebar.style.width = newWidth + 'px';
-                updateContentMargin();
-            }
-        });
-        
-        document.addEventListener('mouseup', () => {
-            if (isResizing) {
-                isResizing = false;
-                resizeHandle.classList.remove('dragging');
-                document.body.style.cursor = '';
-                document.body.style.userSelect = '';
-                localStorage.setItem(WIDTH_KEY, sidebar.offsetWidth);
-            }
-        });
-    }
     
     // Textarea auto-resize
     input.addEventListener('input', function() {
