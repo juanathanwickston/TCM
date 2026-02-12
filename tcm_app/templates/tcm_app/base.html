@@ -202,13 +202,13 @@ body.chat-open .container-fluid {
     transition: margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Sidebar: starts below navbar, persistent on desktop */
+/* Sidebar: full height, persistent on desktop */
 .chat-sidebar {
     position: fixed;
-    top: var(--navbar-height);
+    top: 0;
     right: 0;
     width: 600px;
-    height: calc(100vh - var(--navbar-height));
+    height: 100vh;
     background: #ffffff;
     box-shadow: -4px 0 20px rgba(0, 29, 78, 0.15);
     z-index: 1040;
@@ -502,8 +502,11 @@ html.chat-preopen .chat-sidebar.open {
     // Restore open state from localStorage (persist across page navigation)
     const savedState = localStorage.getItem(STATE_KEY);
     
+    let closeTimeout = null;
+
     // Open sidebar
     function openSidebar() {
+        if (closeTimeout) { clearTimeout(closeTimeout); closeTimeout = null; }
         sidebar.classList.add('open');
         document.body.classList.add('chat-open');
         
@@ -519,10 +522,13 @@ html.chat-preopen .chat-sidebar.open {
     // Close sidebar
     function closeSidebar() {
         sidebar.classList.remove('open');
-        document.body.classList.remove('chat-open');
         overlay.classList.remove('visible');
         updateContentMargin();
         localStorage.setItem(STATE_KEY, 'closed');
+        closeTimeout = setTimeout(() => {
+            document.body.classList.remove('chat-open');
+            closeTimeout = null;
+        }, 300);
     }
     
     // Toggle sidebar
