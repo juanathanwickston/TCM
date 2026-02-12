@@ -1506,6 +1506,161 @@ def clear_all_data_view(request):
 
 
 # =============================================================================
+# SME DIRECTORY VIEWS
+# =============================================================================
+
+@login_required
+def directory_view(request):
+    """Render the SME Directory page."""
+    import db
+    db.init_db()
+    departments = db.get_valid_departments()
+    return render(request, 'tcm_app/directory.html', {
+        'departments': departments,
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def list_smes_view(request):
+    """
+    List all SMEs as JSON.
+    Optional query param: ?department=X to filter.
+    """
+    import db
+    from django.http import JsonResponse
+    
+    department = request.GET.get('department', '').strip() or None
+    smes = db.get_all_smes(department=department)
+    
+    # Serialize timestamps to ISO strings
+    sme_list = []
+    for sme in smes:
+        sme_list.append({
+            'sme_id': sme['sme_id'],
+            'name': sme['name'],
+            'role': sme.get('role') or '',
+            'email': sme.get('email') or '',
+            'notes': sme.get('notes') or '',
+            'departments': sme.get('departments', []),
+            'created_at': str(sme['created_at']) if sme.get('created_at') else None,
+        })
+    
+    return JsonResponse({'smes': sme_list})
+
+
+@login_required
+@require_http_methods(["POST"])
+def create_sme_view(request):
+    """Create a new SME contact. Returns JSON."""
+    import json
+    import db
+    from django.http import JsonResponse
+    
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    
+    name = data.get('name', '').strip()
+    if not name:
+        return JsonResponse({'error': 'Name is required'}, status=400)
+    
+    departments = data.get('departments', [])
+    if not departments:
+        return JsonResponse({'error': 'At least one department is required'}, status=400)
+    
+    # Validate each department entry
+    for dept in departments:
+        if not dept.get('department'):
+            return JsonResponse({'error': 'Each assignment must have a department'}, status=400)
+    
+    try:
+        sme_id = db.create_sme(
+            name=name,
+            role=data.get('role', '').strip() or None,
+            email=data.get('email', '').strip() or None,
+            notes=data.get('notes', '').strip() or None,
+            departments=departments,
+        )
+        return JsonResponse({'success': True, 'sme_id': sme_id})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(["POST"])
+def update_sme_view(request, sme_id):
+    """Update an existing SME contact. Returns JSON."""
+    import json
+    import db
+    from django.http import JsonResponse
+    
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    
+    name = data.get('name', '').strip()
+    if not name:
+        return JsonResponse({'error': 'Name is required'}, status=400)
+    
+    departments = data.get('departments', [])
+    if not departments:
+        return JsonResponse({'error': 'At least one department is required'}, status=400)
+    
+    for dept in departments:
+        if not dept.get('department'):
+            return JsonResponse({'error': 'Each assignment must have a department'}, status=400)
+    
+    try:
+        updated = db.update_sme(
+            sme_id=sme_id,
+            name=name,
+            role=data.get('role', '').strip() or None,
+            email=data.get('email', '').strip() or None,
+            notes=data.get('notes', '').strip() or None,
+            departments=departments,
+        )
+        if not updated:
+            return JsonResponse({'error': 'SME not found'}, status=404)
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(["POST"])
+def delete_sme_view(request, sme_id):
+    """Delete an SME contact. Returns JSON."""
+    import db
+    from django.http import JsonResponse
+    
+    deleted = db.delete_sme(sme_id)
+    if not deleted:
+        return JsonResponse({'error': 'SME not found'}, status=404)
+    return JsonResponse({'success': True})
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_sub_departments(request):
+    """
+    Return sub-departments for a given department.
+    Query param: ?department=X
+    """
+    import db
+    from django.http import JsonResponse
+    
+    department = request.GET.get('department', '').strip()
+    if not department:
+        return JsonResponse({'sub_departments': []})
+    
+    sub_depts = db.get_sub_departments(department)
+    return JsonResponse({'sub_departments': sub_depts})
+
+
+# =============================================================================
 # USER MANAGEMENT VIEWS (Superuser Only)
 # =============================================================================
 

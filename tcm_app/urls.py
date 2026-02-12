@@ -22,6 +22,14 @@ urlpatterns = [
     path('investment/save-item/', views.save_investment_single_view, name='save_investment_single'),
     path('inventory/batch/', views.save_audience_batch_view, name='save_audience_batch'),
     
+    # Directory
+    path('directory/', views.directory_view, name='directory'),
+    path('directory/list/', views.list_smes_view, name='list_smes'),
+    path('directory/create/', views.create_sme_view, name='create_sme'),
+    path('directory/update/<int:sme_id>/', views.update_sme_view, name='update_sme'),
+    path('directory/delete/<int:sme_id>/', views.delete_sme_view, name='delete_sme'),
+    path('api/sub-departments/', views.api_sub_departments, name='api_sub_departments'),
+    
     # Tools
     path('tools/', views.tools_view, name='tools'),
     path('tools/import/zip/', views.import_zip_view, name='import_zip'),

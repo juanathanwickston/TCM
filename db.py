@@ -795,6 +795,40 @@ def init_db() -> None:
                     ON ai_usage_log(created_at)
                 """)
                 
+                # =========================================================
+                # SME Directory Tables
+                # =========================================================
+                
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS sme_contacts (
+                        sme_id SERIAL PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        role TEXT DEFAULT NULL,
+                        email TEXT DEFAULT NULL,
+                        notes TEXT DEFAULT NULL,
+                        is_active BOOLEAN DEFAULT TRUE,
+                        created_at TIMESTAMP DEFAULT NOW(),
+                        updated_at TIMESTAMP DEFAULT NOW()
+                    )
+                """)
+                
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS sme_departments (
+                        id SERIAL PRIMARY KEY,
+                        sme_id INTEGER REFERENCES sme_contacts(sme_id) ON DELETE CASCADE,
+                        department TEXT NOT NULL,
+                        sub_department TEXT NOT NULL DEFAULT 'All'
+                    )
+                """)
+                cursor.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_sme_dept_unique
+                    ON sme_departments(sme_id, department, sub_department)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_sme_dept_lookup
+                    ON sme_departments(department)
+                """)
+                
             conn.commit()
             _logger.info("init_db() completed successfully")
         finally:
@@ -1980,6 +2014,164 @@ def get_ai_usage_totals(days: int = 30) -> dict:
     convs = d.get('total_conversations', 1) or 1
     d['avg_tokens_per_conversation'] = round(d.get('total_tokens', 0) / convs)
     return d
+
+
+# =============================================================================
+# SME Directory CRUD
+# =============================================================================
+
+def get_all_smes(department: str = None) -> List[Dict[str, Any]]:
+    """
+    Get all active SMEs with their department assignments.
+    Optional filter by department.
+    Returns list of dicts, each with a 'departments' sub-list.
+    """
+    if department:
+        sme_ids_rows = execute("""
+            SELECT DISTINCT sme_id FROM sme_departments WHERE department = ?
+        """, (department,), fetch="all")
+        if not sme_ids_rows:
+            return []
+        sme_ids = [r['sme_id'] for r in sme_ids_rows]
+        placeholders = ",".join("?" * len(sme_ids))
+        smes = execute(f"""
+            SELECT * FROM sme_contacts 
+            WHERE is_active = TRUE AND sme_id IN ({placeholders})
+            ORDER BY name
+        """, tuple(sme_ids), fetch="all")
+    else:
+        smes = execute("""
+            SELECT * FROM sme_contacts WHERE is_active = TRUE ORDER BY name
+        """, fetch="all")
+    
+    if not smes:
+        return []
+    
+    result = []
+    for sme in smes:
+        sme_dict = dict(sme)
+        dept_rows = execute("""
+            SELECT department, sub_department FROM sme_departments 
+            WHERE sme_id = ? ORDER BY department, sub_department
+        """, (sme_dict['sme_id'],), fetch="all")
+        sme_dict['departments'] = [dict(d) for d in dept_rows] if dept_rows else []
+        result.append(sme_dict)
+    
+    return result
+
+
+def get_sme_by_id(sme_id: int) -> Optional[Dict[str, Any]]:
+    """Get a single SME with department assignments."""
+    sme = execute("SELECT * FROM sme_contacts WHERE sme_id = ?", (sme_id,), fetch="one")
+    if not sme:
+        return None
+    sme_dict = dict(sme)
+    dept_rows = execute("""
+        SELECT department, sub_department FROM sme_departments 
+        WHERE sme_id = ? ORDER BY department, sub_department
+    """, (sme_id,), fetch="all")
+    sme_dict['departments'] = [dict(d) for d in dept_rows] if dept_rows else []
+    return sme_dict
+
+
+def create_sme(name: str, role: str = None, email: str = None, 
+               notes: str = None, departments: list = None) -> int:
+    """
+    Create a new SME contact with department assignments.
+    
+    Args:
+        name: Required. Full name.
+        role: Optional. Title/role.
+        email: Optional. Contact email.
+        notes: Optional. Specialties/notes.
+        departments: List of {department, sub_department} dicts.
+    
+    Returns:
+        New sme_id.
+    """
+    if not name or not name.strip():
+        raise ValueError("Name is required")
+    if not departments or len(departments) == 0:
+        raise ValueError("At least one department assignment is required")
+    
+    result = execute("""
+        INSERT INTO sme_contacts (name, role, email, notes)
+        VALUES (?, ?, ?, ?)
+        RETURNING sme_id
+    """, (name.strip(), role, email, notes), fetch="one")
+    
+    sme_id = result['sme_id']
+    
+    for dept in departments:
+        execute("""
+            INSERT INTO sme_departments (sme_id, department, sub_department)
+            VALUES (?, ?, ?)
+        """, (sme_id, dept['department'], dept.get('sub_department', 'All')))
+    
+    return sme_id
+
+
+def update_sme(sme_id: int, name: str, role: str = None, email: str = None,
+               notes: str = None, departments: list = None) -> bool:
+    """
+    Update an SME contact and replace department assignments.
+    
+    Returns True if found and updated, False if not found.
+    """
+    if not name or not name.strip():
+        raise ValueError("Name is required")
+    if not departments or len(departments) == 0:
+        raise ValueError("At least one department assignment is required")
+    
+    existing = execute("SELECT sme_id FROM sme_contacts WHERE sme_id = ?", (sme_id,), fetch="one")
+    if not existing:
+        return False
+    
+    execute("""
+        UPDATE sme_contacts SET name = ?, role = ?, email = ?, notes = ?, updated_at = NOW()
+        WHERE sme_id = ?
+    """, (name.strip(), role, email, notes, sme_id))
+    
+    # Replace department assignments (delete + re-insert)
+    execute("DELETE FROM sme_departments WHERE sme_id = ?", (sme_id,))
+    for dept in departments:
+        execute("""
+            INSERT INTO sme_departments (sme_id, department, sub_department)
+            VALUES (?, ?, ?)
+        """, (sme_id, dept['department'], dept.get('sub_department', 'All')))
+    
+    return True
+
+
+def delete_sme(sme_id: int) -> bool:
+    """
+    Delete an SME contact. Cascade deletes department assignments.
+    Returns True if found and deleted, False if not found.
+    """
+    existing = execute("SELECT sme_id FROM sme_contacts WHERE sme_id = ?", (sme_id,), fetch="one")
+    if not existing:
+        return False
+    execute("DELETE FROM sme_contacts WHERE sme_id = ?", (sme_id,))
+    return True
+
+
+def get_sub_departments(department: str) -> List[str]:
+    """
+    Get distinct sub-departments for a given department from active resources.
+    Used for cascading dropdown in SME Directory form.
+    """
+    if not department:
+        return []
+    rows = execute("""
+        SELECT DISTINCT sub_department FROM resources 
+        WHERE primary_department = ? 
+          AND is_archived = 0 
+          AND is_placeholder = 0 
+          AND sub_department IS NOT NULL
+          AND sub_department != ''
+        ORDER BY sub_department
+    """, (department,), fetch="all")
+    return [row['sub_department'] for row in rows] if rows else []
 
 
 # Initialization happens via Django AppConfig.ready() - no import-time side effects

@@ -70,6 +70,12 @@
                             Investment
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'directory' %}active{% endif %}"
+                            href="{% url 'directory' %}">
+                            Directory
+                        </a>
+                    </li>
                     {% if user.is_superuser %}
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'tools' %}active{% endif %}"

@@ -1,0 +1,498 @@
+{% extends 'tcm_app/base.html' %}
+
+{% block title %}Directory | TCM{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">Directory</h1>
+            <p class="text-muted mb-0">SME Contact Directory</p>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <select class="form-select form-select-sm" id="deptFilter" style="width: 220px;">
+                <option value="">All Departments</option>
+                {% for dept in departments %}
+                <option value="{{ dept }}">{{ dept }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-person-badge me-2"></i>SME Contacts</h5>
+            <button class="btn btn-primary btn-sm" id="addSmeBtn">
+                <i class="bi bi-plus-lg me-1"></i>Add SME
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover" id="smeTable">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Role</th>
+                            <th>Email</th>
+                            <th>Departments</th>
+                            <th>Notes / Specialties</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="smeTableBody">
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">
+                                <div class="spinner-border spinner-border-sm me-2"></div>
+                                Loading SMEs...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit SME Modal -->
+<div class="modal fade" id="smeModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="smeModalTitle">Add SME</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editSmeId">
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="smeName" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Role</label>
+                        <input type="text" class="form-control" id="smeRole" placeholder="e.g. Senior Trainer">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-control" id="smeEmail">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Notes / Specialties</label>
+                    <textarea class="form-control" id="smeNotes" rows="2"
+                        placeholder="e.g. Expert in Aloha POS configuration and troubleshooting"></textarea>
+                </div>
+
+                <div class="border-top pt-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label mb-0 fw-semibold">Department Assignments <span class="text-danger">*</span></label>
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="addDeptRowBtn">
+                            <i class="bi bi-plus-lg me-1"></i>Add Department
+                        </button>
+                    </div>
+                    <div id="deptRowsContainer">
+                        <!-- Department rows added dynamically -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveSmeBtn">
+                    <span id="saveSmeSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>
+                    <span id="saveSmeText">Save</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteSmeModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Delete SME</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete <strong id="deleteSmeName"></strong>?</p>
+                <p class="text-danger small mb-0">This action cannot be undone.</p>
+                <input type="hidden" id="deleteSmeId">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteSmeBtn">
+                    <span id="deleteSmeSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>
+                    Delete
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="dirToast" class="toast align-items-center" role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="dirToastMessage"></div>
+            <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    // Elements
+    const smeTableBody = document.getElementById('smeTableBody');
+    const addSmeBtn = document.getElementById('addSmeBtn');
+    const deptFilter = document.getElementById('deptFilter');
+    const deptRowsContainer = document.getElementById('deptRowsContainer');
+
+    // Modals
+    const smeModal = new bootstrap.Modal(document.getElementById('smeModal'));
+    const deleteSmeModal = new bootstrap.Modal(document.getElementById('deleteSmeModal'));
+    const toast = new bootstrap.Toast(document.getElementById('dirToast'));
+
+    // Department list from server
+    const allDepartments = [
+        {% for dept in departments %}'{{ dept|escapejs }}'{% if not forloop.last %}, {% endif %}{% endfor %}
+    ];
+
+    // Toast helper
+    function showToast(message, isError = false) {
+        const toastEl = document.getElementById('dirToast');
+        const toastMessage = document.getElementById('dirToastMessage');
+        toastEl.classList.remove('text-bg-success', 'text-bg-danger');
+        toastEl.classList.add(isError ? 'text-bg-danger' : 'text-bg-success');
+        toastMessage.textContent = message;
+        toast.show();
+    }
+
+    // Escape HTML
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Format department display
+    function formatDepts(departments) {
+        if (!departments || departments.length === 0) return '<span class="text-muted">—</span>';
+        return departments.map(d => {
+            const dept = escapeHtml(d.department);
+            const sub = d.sub_department && d.sub_department !== 'All'
+                ? ' → ' + escapeHtml(d.sub_department)
+                : '';
+            return `<span class="badge bg-light text-dark border me-1 mb-1">${dept}${sub}</span>`;
+        }).join('');
+    }
+
+    // Truncate notes
+    function truncateNotes(text, maxLen = 60) {
+        if (!text) return '<span class="text-muted">—</span>';
+        const escaped = escapeHtml(text);
+        if (escaped.length <= maxLen) return escaped;
+        return `<span title="${escaped}">${escaped.substring(0, maxLen)}…</span>`;
+    }
+
+    // ── Load SMEs ──
+    async function loadSmes() {
+        const dept = deptFilter.value;
+        const url = dept
+            ? `{% url "list_smes" %}?department=${encodeURIComponent(dept)}`
+            : '{% url "list_smes" %}';
+
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (data.error) {
+                smeTableBody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">${escapeHtml(data.error)}</td></tr>`;
+                return;
+            }
+
+            if (data.smes.length === 0) {
+                smeTableBody.innerHTML = '<tr><td colspan="6" class="text-muted text-center py-4">No SMEs found. Click "Add SME" to create one.</td></tr>';
+                return;
+            }
+
+            smeTableBody.innerHTML = data.smes.map(s => `
+                <tr data-sme-id="${s.sme_id}">
+                    <td><strong>${escapeHtml(s.name)}</strong></td>
+                    <td>${escapeHtml(s.role) || '<span class="text-muted">—</span>'}</td>
+                    <td>${s.email ? `<a href="mailto:${escapeHtml(s.email)}">${escapeHtml(s.email)}</a>` : '<span class="text-muted">—</span>'}</td>
+                    <td>${formatDepts(s.departments)}</td>
+                    <td>${truncateNotes(s.notes)}</td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-outline-primary edit-sme-btn" title="Edit">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger delete-sme-btn" title="Delete">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        } catch (err) {
+            smeTableBody.innerHTML = '<tr><td colspan="6" class="text-danger text-center">Error loading SMEs</td></tr>';
+        }
+    }
+
+    // Load on page load
+    loadSmes();
+
+    // Filter change
+    deptFilter.addEventListener('change', loadSmes);
+
+    // ── Department Row Management ──
+
+    function createDeptRow(deptValue = '', subDeptValue = '') {
+        const row = document.createElement('div');
+        row.className = 'dept-assignment-row d-flex gap-2 mb-2 align-items-start';
+        row.innerHTML = `
+            <select class="form-select form-select-sm dept-select" style="flex: 1;">
+                <option value="">Select Department...</option>
+                ${allDepartments.map(d => `<option value="${escapeHtml(d)}" ${d === deptValue ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('')}
+            </select>
+            <select class="form-select form-select-sm subdept-select" style="flex: 1;">
+                <option value="All">All</option>
+            </select>
+            <button type="button" class="btn btn-outline-danger btn-sm remove-dept-btn" title="Remove">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        `;
+
+        // Load sub-departments if department is pre-set
+        const deptSelect = row.querySelector('.dept-select');
+        const subDeptSelect = row.querySelector('.subdept-select');
+
+        if (deptValue) {
+            loadSubDepartments(subDeptSelect, deptValue, subDeptValue);
+        }
+
+        // Department change → reload sub-departments
+        deptSelect.addEventListener('change', function() {
+            loadSubDepartments(subDeptSelect, this.value, 'All');
+        });
+
+        // Remove button
+        row.querySelector('.remove-dept-btn').addEventListener('click', function() {
+            // Don't remove if it's the last row
+            if (deptRowsContainer.querySelectorAll('.dept-assignment-row').length <= 1) {
+                showToast('At least one department is required', true);
+                return;
+            }
+            row.remove();
+        });
+
+        deptRowsContainer.appendChild(row);
+        return row;
+    }
+
+    async function loadSubDepartments(selectEl, department, selectedValue = 'All') {
+        selectEl.innerHTML = '<option value="All">All</option>';
+        if (!department) return;
+
+        try {
+            const resp = await fetch(`{% url "api_sub_departments" %}?department=${encodeURIComponent(department)}`);
+            const data = await resp.json();
+            for (const sub of data.sub_departments) {
+                const opt = document.createElement('option');
+                opt.value = sub;
+                opt.textContent = sub;
+                if (sub === selectedValue) opt.selected = true;
+                selectEl.appendChild(opt);
+            }
+            // If selected value is "All", make sure it's selected
+            if (selectedValue === 'All') {
+                selectEl.querySelector('option[value="All"]').selected = true;
+            }
+        } catch (err) {
+            // Silently fail — dropdown stays with just "All"
+        }
+    }
+
+    // Add Department button
+    document.getElementById('addDeptRowBtn').addEventListener('click', function() {
+        createDeptRow();
+    });
+
+    // Collect department data from form
+    function collectDepartments() {
+        const rows = deptRowsContainer.querySelectorAll('.dept-assignment-row');
+        const depts = [];
+        for (const row of rows) {
+            const dept = row.querySelector('.dept-select').value;
+            const subDept = row.querySelector('.subdept-select').value;
+            if (dept) {
+                depts.push({ department: dept, sub_department: subDept || 'All' });
+            }
+        }
+        return depts;
+    }
+
+    // ── Add SME ──
+    addSmeBtn.addEventListener('click', function() {
+        document.getElementById('smeModalTitle').textContent = 'Add SME';
+        document.getElementById('editSmeId').value = '';
+        document.getElementById('smeName').value = '';
+        document.getElementById('smeRole').value = '';
+        document.getElementById('smeEmail').value = '';
+        document.getElementById('smeNotes').value = '';
+        deptRowsContainer.innerHTML = '';
+        createDeptRow();
+        smeModal.show();
+    });
+
+    // ── Edit SME (delegated) ──
+    smeTableBody.addEventListener('click', function(e) {
+        const btn = e.target.closest('.edit-sme-btn');
+        if (!btn) return;
+
+        const row = btn.closest('tr');
+        const smeId = row.dataset.smeId;
+
+        // Fetch fresh data
+        fetch('{% url "list_smes" %}')
+            .then(r => r.json())
+            .then(data => {
+                const sme = data.smes.find(s => s.sme_id == smeId);
+                if (!sme) return;
+
+                document.getElementById('smeModalTitle').textContent = 'Edit SME';
+                document.getElementById('editSmeId').value = sme.sme_id;
+                document.getElementById('smeName').value = sme.name;
+                document.getElementById('smeRole').value = sme.role || '';
+                document.getElementById('smeEmail').value = sme.email || '';
+                document.getElementById('smeNotes').value = sme.notes || '';
+
+                deptRowsContainer.innerHTML = '';
+                if (sme.departments && sme.departments.length > 0) {
+                    for (const d of sme.departments) {
+                        createDeptRow(d.department, d.sub_department);
+                    }
+                } else {
+                    createDeptRow();
+                }
+
+                smeModal.show();
+            });
+    });
+
+    // ── Save SME ──
+    document.getElementById('saveSmeBtn').addEventListener('click', async function() {
+        const smeId = document.getElementById('editSmeId').value;
+        const isEdit = !!smeId;
+
+        const name = document.getElementById('smeName').value.trim();
+        if (!name) {
+            showToast('Name is required', true);
+            return;
+        }
+
+        const departments = collectDepartments();
+        if (departments.length === 0) {
+            showToast('At least one department is required', true);
+            return;
+        }
+
+        const spinner = document.getElementById('saveSmeSpinner');
+        const textEl = document.getElementById('saveSmeText');
+        spinner.classList.remove('d-none');
+        textEl.textContent = 'Saving...';
+        this.disabled = true;
+
+        const payload = {
+            name: name,
+            role: document.getElementById('smeRole').value.trim(),
+            email: document.getElementById('smeEmail').value.trim(),
+            notes: document.getElementById('smeNotes').value.trim(),
+            departments: departments,
+        };
+
+        try {
+            const url = isEdit ? `/directory/update/${smeId}/` : '{% url "create_sme" %}';
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                smeModal.hide();
+                loadSmes();
+                showToast(isEdit ? 'SME updated' : 'SME created');
+            } else {
+                showToast(data.error || 'Save failed', true);
+            }
+        } catch (err) {
+            showToast('Network error', true);
+        } finally {
+            spinner.classList.add('d-none');
+            textEl.textContent = 'Save';
+            this.disabled = false;
+        }
+    });
+
+    // ── Delete SME (delegated) ──
+    smeTableBody.addEventListener('click', function(e) {
+        const btn = e.target.closest('.delete-sme-btn');
+        if (!btn) return;
+
+        const row = btn.closest('tr');
+        const smeId = row.dataset.smeId;
+        const smeName = row.querySelector('strong').textContent;
+
+        document.getElementById('deleteSmeId').value = smeId;
+        document.getElementById('deleteSmeName').textContent = smeName;
+        deleteSmeModal.show();
+    });
+
+    // ── Delete confirm ──
+    document.getElementById('confirmDeleteSmeBtn').addEventListener('click', async function() {
+        const smeId = document.getElementById('deleteSmeId').value;
+
+        const spinner = document.getElementById('deleteSmeSpinner');
+        spinner.classList.remove('d-none');
+        this.disabled = true;
+
+        try {
+            const response = await fetch(`/directory/delete/${smeId}/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({})
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                deleteSmeModal.hide();
+                loadSmes();
+                showToast('SME deleted');
+            } else {
+                showToast(data.error || 'Delete failed', true);
+            }
+        } catch (err) {
+            showToast('Network error', true);
+        } finally {
+            spinner.classList.add('d-none');
+            this.disabled = false;
+        }
+    });
+})();
+</script>
+{% endblock %}
