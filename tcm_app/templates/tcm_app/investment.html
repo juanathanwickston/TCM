@@ -4,37 +4,18 @@
 {% block title %}Investment | TCM{% endblock %}
 
 {% block content %}
-<style>
-    /* Investment - Compact sizing to match inventory/scrubbing/dashboard */
-    .investment-table {
-        font-size: 0.75rem;
-    }
-    .investment-table th,
-    .investment-table td {
-        padding: 0.35rem 0.5rem;
-    }
-    .investment-kpi .card-body {
-        padding: 0.5rem;
-    }
-    .investment-kpi .h4 {
-        font-size: 1rem;
-    }
-    .form-label { font-size: 0.8rem; }
-    .form-select { font-size: 0.8rem; }
-</style>
-
-<div class="container-fluid" style="padding: 0 1rem 0.5rem 1rem;">
+<div class="container-fluid tcm-page">
 
   <!-- Filter + Search + Pagination + Save (single row) -->
-  <div class="d-flex align-items-center justify-content-between mb-2" style="font-size: 0.75rem;">
+  <div class="tcm-toolbar">
     <form method="get" class="d-flex align-items-center gap-2">
-      <label class="form-label mb-0 text-muted" style="font-size: 0.75rem;">Decision:</label>
-      <select name="decision_filter" class="form-select form-select-sm" style="width:auto; font-size: 0.75rem;">
+      <label class="form-label mb-0 text-muted">Decision:</label>
+      <select name="decision_filter" class="form-select form-select-sm" style="width:auto;">
         {% for value, label in decision_options %}
         <option value="{{ value }}" {% if filter_decision == value %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
-      <input type="text" id="searchBox" class="form-control form-control-sm" placeholder="Search name or path..." style="width:200px; font-size: 0.75rem;">
+      <input type="text" id="searchBox" class="form-control form-control-sm" placeholder="Search name or path..." style="width:200px;">
     </form>
     <div class="d-flex align-items-center gap-2">
       {% if page_obj.has_other_pages %}
@@ -53,33 +34,33 @@
       {% endif %}
       {% endif %}
       <span class="text-muted" id="itemCount"></span>
-      <button type="button" id="global-save" class="btn btn-sm btn-primary" style="font-size: 0.75rem;" disabled>Save All Changes</button>
+      <button type="button" id="global-save" class="btn btn-sm btn-primary" disabled>Save All Changes</button>
     </div>
   </div>
 
   <!-- Summary KPIs -->
   <div class="row g-2 mb-2">
     <div class="col-md-4">
-      <div class="card text-center investment-kpi">
+      <div class="card text-center tcm-kpi-sm">
         <div class="card-body">
           <div class="h4 mb-0">{{ total_count }}</div>
-          <div class="text-muted" style="font-size: 0.7rem;">Total Queue</div>
+          <div class="text-muted">Total Queue</div>
         </div>
       </div>
     </div>
     <div class="col-md-4">
-      <div class="card text-center investment-kpi">
+      <div class="card text-center tcm-kpi-sm">
         <div class="card-body">
           <div class="h4 mb-0">{{ decided_count }}</div>
-          <div class="text-muted" style="font-size: 0.7rem;">Decided</div>
+          <div class="text-muted">Decided</div>
         </div>
       </div>
     </div>
     <div class="col-md-4">
-      <div class="card text-center investment-kpi">
+      <div class="card text-center tcm-kpi-sm">
         <div class="card-body">
           <div class="h4 mb-0">{{ pending_count }}</div>
-          <div class="text-muted" style="font-size: 0.7rem;">Pending</div>
+          <div class="text-muted">Pending</div>
         </div>
       </div>
     </div>
@@ -93,7 +74,7 @@
     <!-- Container Table -->
     <div class="card">
       <div class="table-responsive">
-        <table class="table table-hover mb-0 align-middle investment-table tcm-fixed-table">
+        <table class="table table-hover tcm-data-table align-middle tcm-fixed-table">
           <colgroup>
             <col style="width: 28%"> <!-- Name -->
             <col style="width: 12%"> <!-- Decision -->

@@ -4,195 +4,12 @@
 {% block title %}Dashboard | TCM{% endblock %}
 
 {% block content %}
-<style>
-    /* Dashboard - Original Layout, Tighter Spacing */
-
-    /* Compact KPI Cards */
-    .kpi-card {
-        text-align: center;
-        padding: 0.6rem 0.5rem;
-    }
-
-    .kpi-value {
-        font-size: 2rem;
-        font-weight: 700;
-        line-height: 1;
-        margin-bottom: 0.15rem;
-    }
-
-
-    .kpi-label {
-        color: #6c757d;
-        font-size: 0.8rem;
-        margin: 0;
-    }
-
-    /* SVG Donut Chart */
-    .donut-container {
-        display: flex;
-        flex-direction: row-reverse;
-        justify-content: center;
-        align-items: flex-start;
-        padding: 0.5rem;
-        gap: 1rem;
-    }
-
-    .donut-chart {
-        width: 100%;
-        height: auto;
-    }
-
-    .donut-chart-wrapper {
-        flex: 1;
-        min-width: 0;
-        max-width: 150px;
-        display: flex;
-        justify-content: center;
-    }
-
-    .donut-ring {
-        fill: none;
-        stroke: #e9ecef;
-        stroke-width: 3;
-    }
-
-    .donut-segment-onboarding {
-        fill: none;
-        stroke: #0051C2;
-        /* Payroc Cobalt */
-        stroke-width: 3;
-    }
-
-    .donut-segment-upskilling {
-        fill: none;
-        stroke: #00e0b8;
-        /* Payroc Mint */
-        stroke-width: 3;
-    }
-
-    .donut-segment-other {
-        fill: none;
-        stroke: #001D4E;
-        /* Payroc Navy */
-        stroke-width: 3;
-    }
-
-    .donut-text-label {
-        font-size: 0.2rem;
-        fill: #6c757d;
-        text-anchor: middle;
-    }
-
-    .donut-text-value {
-        font-size: 0.45rem;
-        font-weight: 700;
-        text-anchor: middle;
-        dominant-baseline: middle;
-    }
-
-    /* Donut Breakdown Table */
-    .donut-breakdown {
-        flex-shrink: 0;
-        font-size: 0.6rem;
-    }
-
-    .donut-breakdown-row {
-        display: flex;
-        justify-content: space-between;
-        gap: 0.5rem;
-        padding: 0.15rem 0;
-        border-bottom: 1px solid #f0f0f0;
-    }
-
-    .donut-breakdown-row:last-child {
-        border-bottom: none;
-    }
-
-    .donut-breakdown-label {
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-    }
-
-    .donut-breakdown-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-    }
-
-    .stacked-bar {
-        display: flex;
-        height: 32px;
-        border-radius: 5px;
-        overflow: hidden;
-        background: #e9ecef;
-    }
-
-    .stacked-bar-segment {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-weight: 600;
-        font-size: 0.75rem;
-    }
-
-    .stacked-bar-segment.include {
-        background: #00e0b8;
-        /* Payroc Mint */
-        color: #001D4E;
-    }
-
-    .stacked-bar-segment.modify {
-        background: #fd7e14;
-        /* Keep orange for warning */
-    }
-
-    .stacked-bar-segment.sunset {
-        background: #dc3545;
-        /* Keep red for danger */
-    }
-
-    .stacked-bar-labels {
-        display: flex;
-        margin-top: 0.3rem;
-        font-size: 0.7rem;
-        color: #6c757d;
-    }
-
-    /* Compact Cards */
-    .card-header-sm {
-        padding: 0.4rem 0.75rem;
-    }
-
-    .card-header-sm h6 {
-        font-size: 0.8rem;
-        margin: 0;
-        text-align: center;
-    }
-
-    .card-body-sm {
-        padding: 0.4rem 0.75rem;
-    }
-
-    /* Compact Tables */
-    .table-sm-tight {
-        font-size: 0.75rem;
-        margin-bottom: 0;
-    }
-
-    .table-sm-tight th,
-    .table-sm-tight td {
-        padding: 0.2rem 0.35rem;
-    }
-</style>
-
-<div class="container-fluid" style="padding: 0 1rem 0.5rem 1rem;">
+<div class="container-fluid tcm-page">
     <!-- ROW 1: KPI Strip -->
     <div class="row g-2 mb-2">
         <div class="col-md-6">
             <div class="card">
-                <div class="card-body kpi-card">
+                <div class="card-body tcm-kpi-card">
                     <div class="kpi-value">{{ total_resources|intcomma }}</div>
                     <p class="kpi-label">Total Resources</p>
                 </div>
@@ -200,7 +17,7 @@
         </div>
         <div class="col-md-6">
             <div class="card">
-                <div class="card-body kpi-card">
+                <div class="card-body tcm-kpi-card">
                     <div class="kpi-value">{{ items_remaining|intcomma }}</div>
                     <p class="kpi-label">Items Remaining</p>
                 </div>

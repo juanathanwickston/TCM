@@ -6,30 +6,18 @@
 {% block content %}
 <!-- INVENTORY TEMPLATE FINGERPRINT: 2026-02-02-BATCH-SAVE -->
 <style>
-    /* Inventory - Compact sizing to match dashboard */
-    .inventory-table {
-        font-size: 0.75rem;
-    }
-    .inventory-table th,
-    .inventory-table td {
-        vertical-align: middle;
-        padding: 0.35rem 0.5rem;
-    }
-    .inventory-table td.col-name { text-align: left; }
-    .inventory-table td.col-type { text-align: center; }
-    .inventory-table td.col-audience { vertical-align: middle; }
-    .inventory-table td.col-contents { text-align: center; white-space: nowrap; }
-    .inventory-table td.col-path { text-align: left; }
-    .inventory-table .badge { min-width: 50px; font-size: 0.7rem; }
-    .inventory-table .form-select-sm { padding-top: 0.2rem; padding-bottom: 0.2rem; font-size: 0.8rem; }
-    .form-label { font-size: 0.8rem; }
-    .form-select { font-size: 0.8rem; }
+    /* Inventory column alignment — layout-specific, not global */
+    .tcm-data-table td.col-name { text-align: left; }
+    .tcm-data-table td.col-type { text-align: center; }
+    .tcm-data-table td.col-audience { vertical-align: middle; }
+    .tcm-data-table td.col-contents { text-align: center; white-space: nowrap; }
+    .tcm-data-table td.col-path { text-align: left; }
 </style>
 
-<div class="container-fluid" style="padding: 0 1rem 0.5rem 1rem;">
+<div class="container-fluid tcm-page">
 
     <!-- Summary + Pagination + Save (single row) -->
-    <div class="d-flex align-items-center justify-content-between mb-2" style="font-size: 0.75rem;">
+    <div class="tcm-toolbar">
         <div class="d-flex align-items-center gap-2">
             <span>Total resources ({{ total_resources|intcomma }})</span>
             <span class="badge bg-secondary">
@@ -54,7 +42,7 @@
             <span class="text-muted" style="opacity: 0.4;">›</span>
             {% endif %}
             {% endif %}
-            <button type="button" id="global-save" class="btn btn-sm btn-primary" style="font-size: 0.75rem;" disabled>Save All Changes</button>
+            <button type="button" id="global-save" class="btn btn-sm btn-primary" disabled>Save All Changes</button>
         </div>
     </div>
 
@@ -120,7 +108,7 @@
         <div class="card">
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table mb-0 inventory-table">
+                    <table class="table table-hover tcm-data-table">
                         <thead class="table-light">
                             <tr>
                                 <th style="min-width: 280px;">Name</th>

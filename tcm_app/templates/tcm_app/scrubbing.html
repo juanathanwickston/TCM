@@ -2,27 +2,14 @@
 {% load static %}
 
 {% block content %}
-<style>
-    /* Scrubbing - Compact sizing to match inventory/dashboard */
-    .scrubbing-table {
-        font-size: 0.75rem;
-    }
-    .scrubbing-table th,
-    .scrubbing-table td {
-        padding: 0.35rem 0.5rem;
-    }
-    .form-label { font-size: 0.8rem; }
-    .form-select { font-size: 0.8rem; }
-</style>
-
-<div class="container-fluid" style="padding: 0 1rem 0.5rem 1rem;">
+<div class="container-fluid tcm-page">
 
     <!-- Filter + Pagination + Save (single row) -->
-    <div class="d-flex align-items-center justify-content-between mb-2" style="font-size: 0.75rem;">
+    <div class="tcm-toolbar">
         <div class="d-flex align-items-center gap-2">
             <form method="get" class="d-flex align-items-center gap-2">
-                <label class="form-label mb-0 text-muted" style="font-size: 0.75rem;">Filter:</label>
-                <select name="queue_filter" class="form-select form-select-sm" style="width:auto; font-size: 0.75rem;">
+                <label class="form-label mb-0 text-muted">Filter:</label>
+                <select name="queue_filter" class="form-select form-select-sm" style="width:auto;">
                     <option value="Unreviewed" {% if current_queue_filter == 'Unreviewed' %}selected{% endif %}>Unreviewed ({{ queue_counts.Unreviewed }})</option>
                     <option value="Include" {% if current_queue_filter == 'Include' %}selected{% endif %}>Include ({{ queue_counts.Include }})</option>
                     <option value="Modify" {% if current_queue_filter == 'Modify' %}selected{% endif %}>Modify ({{ queue_counts.Modify }})</option>
@@ -48,7 +35,7 @@
             <span class="text-muted" style="opacity: 0.4;">›</span>
             {% endif %}
             {% endif %}
-            <button type="button" id="global-save" class="btn btn-sm btn-primary" style="font-size: 0.75rem;" disabled>Save All Changes</button>
+            <button type="button" id="global-save" class="btn btn-sm btn-primary" disabled>Save All Changes</button>
         </div>
     </div>
 
@@ -59,7 +46,7 @@
 
     <div class="card">
       <div class="table-responsive">
-        <table class="table mb-0 align-middle scrubbing-table">
+        <table class="table table-hover tcm-data-table align-middle">
           <thead>
             <tr>
               <th>Name</th>
