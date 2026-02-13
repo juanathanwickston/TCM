@@ -12,7 +12,7 @@
         integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
 
     <style>
-        /* Payroc: Navy #001D4E, Cobalt #0051C2, Mint #00e0b8 */
+        /* Payroc: Navy #001D4E, Cobalt #0051C2, Sky #F4F7FE, Mint #00e0b8 */
 
         @font-face {
             font-family: 'Geist';
@@ -37,7 +37,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            background: #060a14;
+            background: #F4F7FE;
             overflow: hidden;
             font-family: 'Geist', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
@@ -54,12 +54,10 @@
         .login-card {
             position: relative;
             z-index: 1;
-            background: rgba(255, 255, 255, 0.04);
+            background: #ffffff;
             border-radius: 12px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 4px 24px rgba(0, 29, 78, 0.1), 0 1px 3px rgba(0, 29, 78, 0.06);
+            border: 1px solid rgba(0, 29, 78, 0.06);
             padding: 2.5rem;
             width: 100%;
             max-width: 380px;
@@ -81,20 +79,18 @@
             width: 140px;
             height: auto;
             margin-bottom: 0.75rem;
-            filter: brightness(0) invert(1);
-            opacity: 0.9;
         }
 
         .login-subtitle {
             font-size: 0.8rem;
             font-weight: 400;
-            color: rgba(255, 255, 255, 0.5);
+            color: #6b7280;
             letter-spacing: 0.5px;
             margin-bottom: 0.15rem;
         }
 
         .login-tagline {
-            color: rgba(255, 255, 255, 0.3);
+            color: #9ca3af;
             font-size: 0.7rem;
             margin: 0;
             font-style: italic;
@@ -106,34 +102,21 @@
             to { opacity: 1; }
         }
 
-        hr.divider {
-            border-color: rgba(255, 255, 255, 0.08);
-        }
-
         .form-label {
             font-weight: 500;
             font-size: 0.8rem;
-            color: rgba(255, 255, 255, 0.7);
+            color: #001D4E;
         }
 
         .form-control {
             font-size: 0.85rem;
-            border: 1px solid rgba(255, 255, 255, 0.12);
+            border: 1px solid #d1d5db;
             padding: 0.6rem 0.75rem;
-            background: rgba(255, 255, 255, 0.06);
-            color: #ffffff;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-
-        .form-control::placeholder {
-            color: rgba(255, 255, 255, 0.25);
         }
 
         .form-control:focus {
             border-color: #0051C2;
-            box-shadow: 0 0 0 3px rgba(0, 81, 194, 0.2);
-            background: rgba(255, 255, 255, 0.08);
-            color: #ffffff;
+            box-shadow: 0 0 0 3px rgba(0, 81, 194, 0.1);
         }
 
         .btn-primary {
@@ -156,7 +139,7 @@
 
         .login-footer-text {
             font-size: 0.7rem;
-            color: rgba(255, 255, 255, 0.3);
+            color: #9ca3af;
             text-align: center;
             margin-top: 1.25rem;
             margin-bottom: 0;
@@ -171,25 +154,17 @@
         }
 
         .page-footer a {
-            opacity: 0.3;
+            opacity: 0.4;
             transition: opacity 0.2s;
         }
 
         .page-footer a:hover {
-            opacity: 0.6;
+            opacity: 0.7;
         }
 
         .page-footer img {
             height: 20px;
             width: auto;
-            filter: brightness(0) invert(1);
-        }
-
-        /* Alert styling for dark bg */
-        .alert-danger {
-            background: rgba(220, 53, 69, 0.15);
-            border-color: rgba(220, 53, 69, 0.3);
-            color: #f8a4ad;
         }
     </style>
 </head>
@@ -205,7 +180,7 @@
             <div class="login-tagline">Built for the people who build people.</div>
         </div>
 
-        <hr class="my-3 divider">
+        <hr class="my-3" style="border-color: #e5e7eb;">
 
         {% if messages %}
         {% for message in messages %}
@@ -255,19 +230,20 @@
         var w, h;
 
         // ── Configuration ──
+        // On a light background, stars are Payroc brand colors (navy/cobalt/mint) at low opacity
         var STAR_LAYERS = [
-            { count: 120, sizeMin: 0.3, sizeMax: 0.8,  alphaMin: 0.15, alphaMax: 0.35, speed: 0.02 },  // distant
-            { count:  60, sizeMin: 0.6, sizeMax: 1.2,  alphaMin: 0.25, alphaMax: 0.50, speed: 0.06 },  // mid
-            { count:  25, sizeMin: 1.0, sizeMax: 1.8,  alphaMin: 0.35, alphaMax: 0.65, speed: 0.12 },  // near
+            { count: 100, sizeMin: 0.4, sizeMax: 1.0,  alphaMin: 0.06, alphaMax: 0.14, speed: 0.02 },  // distant
+            { count:  50, sizeMin: 0.8, sizeMax: 1.5,  alphaMin: 0.10, alphaMax: 0.22, speed: 0.06 },  // mid
+            { count:  20, sizeMin: 1.2, sizeMax: 2.0,  alphaMin: 0.14, alphaMax: 0.30, speed: 0.12 },  // near
         ];
 
-        // Payroc-tinted star colors — subtle, not saturated
+        // Payroc brand star colors — navy, cobalt, deep cobalt, muted mint
         var STAR_COLORS = [
-            { r: 180, g: 200, b: 255 },   // cool white-blue
-            { r: 200, g: 210, b: 240 },   // soft white
-            { r: 160, g: 190, b: 255 },   // light cobalt tint
-            { r: 180, g: 230, b: 220 },   // faint mint tint
-            { r: 220, g: 220, b: 240 },   // warm white
+            { r: 0,  g: 29,  b: 78  },   // navy
+            { r: 0,  g: 81,  b: 194 },   // cobalt
+            { r: 0,  g: 51,  b: 145 },   // deep cobalt
+            { r: 0,  g: 178, b: 146 },   // muted mint
+            { r: 30, g: 60,  b: 120 },   // dusty navy
         ];
 
         var stars = [];
@@ -294,7 +270,7 @@
                 // Twinkle: each star on its own cycle (4-12 seconds)
                 twinkleSpeed: (0.0008 + Math.random() * 0.002),
                 twinklePhase: Math.random() * Math.PI * 2,
-                twinkleDepth: 0.15 + Math.random() * 0.25,  // how much alpha varies
+                twinkleDepth: 0.15 + Math.random() * 0.25,
             };
         }
 
@@ -311,32 +287,30 @@
         }
 
         // ── North Star ──
-        // Fixed position (upper-right quadrant), slightly brighter, subtle glow
+        // Fixed position (upper-right area), slightly bolder, subtle glow
         function initNorthStar() {
             northStar = {
                 x: w * (0.75 + Math.random() * 0.1),
                 y: h * (0.12 + Math.random() * 0.08),
-                r: 1.6,
-                baseAlpha: 0.7,
-                glowR: 6,
+                r: 2.0,
+                baseAlpha: 0.4,
+                glowR: 8,
                 glowAlpha: 0.06,
                 pulsePhase: 0,
                 pulseSpeed: 0.003,
                 hovered: false,
+                color: { r: 0, g: 81, b: 194 },  // cobalt
             };
         }
 
         // ── Shooting Star ──
         function scheduleShootingStar() {
-            // 45-90 seconds from now
             nextShootingStarTime = Date.now() + (45000 + Math.random() * 45000);
         }
 
         function spawnShootingStar() {
-            // Random start position, biased toward top half
             var startX = Math.random() * w;
             var startY = Math.random() * h * 0.4;
-            // Random angle (mostly horizontal, slight downward)
             var angle = (Math.random() * 0.4 + 0.1) * (Math.random() < 0.5 ? 1 : -1);
             var speed = 4 + Math.random() * 3;
             var dx = Math.cos(angle) * speed;
@@ -345,17 +319,18 @@
             shootingStar = {
                 x: startX, y: startY,
                 dx: dx, dy: dy,
-                alpha: 1.0,
+                alpha: 0.6,
                 length: 60 + Math.random() * 40,
-                decay: 0.015 + Math.random() * 0.005,
+                decay: 0.012 + Math.random() * 0.004,
                 trail: [],
+                color: { r: 0, g: 81, b: 194 },  // cobalt streak
             };
         }
 
-        // ── Tooltip for North Star ──
+        // ── North Star tooltip ──
         var tooltip = document.createElement('div');
         tooltip.textContent = 'Your source of truth.';
-        tooltip.style.cssText = 'position:fixed;padding:4px 10px;background:rgba(0,0,0,0.7);color:rgba(255,255,255,0.7);font-size:11px;border-radius:4px;pointer-events:none;z-index:10;opacity:0;transition:opacity 0.3s;font-family:Geist,sans-serif;letter-spacing:0.3px;';
+        tooltip.style.cssText = 'position:fixed;padding:4px 10px;background:rgba(0,29,78,0.85);color:rgba(255,255,255,0.9);font-size:11px;border-radius:4px;pointer-events:none;z-index:10;opacity:0;transition:opacity 0.3s;font-family:Geist,sans-serif;letter-spacing:0.3px;';
         document.body.appendChild(tooltip);
 
         canvas.style.pointerEvents = 'auto';
@@ -388,13 +363,6 @@
         function animate() {
             ctx.clearRect(0, 0, w, h);
 
-            // Draw background gradient (very subtle deep navy)
-            var grad = ctx.createRadialGradient(w * 0.5, h * 0.4, 0, w * 0.5, h * 0.5, Math.max(w, h) * 0.8);
-            grad.addColorStop(0, 'rgba(0, 20, 50, 0.15)');
-            grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-            ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, w, h);
-
             // Stars
             for (var i = 0; i < stars.length; i++) {
                 var s = stars[i];
@@ -418,17 +386,17 @@
 
                 // Subtle glow
                 var glowAlpha = northStar.glowAlpha * nsPulse;
-                if (northStar.hovered) glowAlpha *= 2;
+                if (northStar.hovered) glowAlpha *= 2.5;
                 ctx.beginPath();
                 ctx.arc(northStar.x, northStar.y, northStar.glowR, 0, Math.PI * 2);
                 var nsGrad = ctx.createRadialGradient(northStar.x, northStar.y, 0, northStar.x, northStar.y, northStar.glowR);
-                nsGrad.addColorStop(0, 'rgba(180, 210, 255, ' + glowAlpha + ')');
-                nsGrad.addColorStop(1, 'rgba(180, 210, 255, 0)');
+                nsGrad.addColorStop(0, 'rgba(0, 81, 194, ' + glowAlpha + ')');
+                nsGrad.addColorStop(1, 'rgba(0, 81, 194, 0)');
                 ctx.fillStyle = nsGrad;
                 ctx.fill();
 
                 // Core dot
-                drawStar(northStar.x, northStar.y, northStar.hovered ? 2.0 : northStar.r, { r: 200, g: 220, b: 255 }, nsAlpha);
+                drawStar(northStar.x, northStar.y, northStar.hovered ? 2.5 : northStar.r, northStar.color, nsAlpha);
             }
 
             // Shooting Star
@@ -451,16 +419,16 @@
 
                 for (var t = 0; t < ss.trail.length; t++) {
                     var tp = ss.trail[t];
-                    var ta = tp.alpha * (1 - t / maxTrailLen) * 0.6;
+                    var ta = tp.alpha * (1 - t / maxTrailLen) * 0.5;
                     var tr = 1.2 * (1 - t / maxTrailLen);
                     if (ta > 0.01) {
-                        drawStar(tp.x, tp.y, tr, { r: 220, g: 230, b: 255 }, ta);
+                        drawStar(tp.x, tp.y, tr, ss.color, ta);
                     }
                 }
 
                 // Draw head
                 if (ss.alpha > 0.01) {
-                    drawStar(ss.x, ss.y, 1.5, { r: 240, g: 245, b: 255 }, ss.alpha);
+                    drawStar(ss.x, ss.y, 1.5, ss.color, ss.alpha);
                 }
 
                 // Remove when faded or off screen
@@ -481,7 +449,7 @@
 
         window.addEventListener('resize', function() {
             resize();
-            initNorthStar(); // reposition north star
+            initNorthStar();
         });
 
         animate();
