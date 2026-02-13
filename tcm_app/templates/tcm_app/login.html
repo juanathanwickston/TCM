@@ -16,7 +16,6 @@
     <style>
         /* Payroc Branding: Navy #001D4E, Cobalt #0051C2, Mint #00e0b8 */
 
-        /* ── Animated gradient background ── */
         body {
             margin: 0;
             min-height: 100vh;
@@ -37,68 +36,13 @@
             100% { background-position: 0% 50%; }
         }
 
-        /* ── Floating particles ── */
-        .particles {
+        /* ── Canvas ── */
+        #particleCanvas {
             position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
             pointer-events: none;
             z-index: 0;
-        }
-
-        .particle {
-            position: absolute;
-            border-radius: 50%;
-            animation: float linear infinite;
-        }
-
-        .particle:nth-child(1) {
-            width: 180px; height: 180px;
-            background: radial-gradient(circle, rgba(0, 224, 184, 0.08) 0%, transparent 70%);
-            top: 15%; left: 10%;
-            animation-duration: 20s;
-        }
-        .particle:nth-child(2) {
-            width: 120px; height: 120px;
-            background: radial-gradient(circle, rgba(0, 81, 194, 0.1) 0%, transparent 70%);
-            top: 60%; right: 15%;
-            animation-duration: 25s;
-            animation-delay: -5s;
-        }
-        .particle:nth-child(3) {
-            width: 90px; height: 90px;
-            background: radial-gradient(circle, rgba(0, 224, 184, 0.06) 0%, transparent 70%);
-            bottom: 20%; left: 25%;
-            animation-duration: 18s;
-            animation-delay: -8s;
-        }
-        .particle:nth-child(4) {
-            width: 200px; height: 200px;
-            background: radial-gradient(circle, rgba(0, 81, 194, 0.06) 0%, transparent 70%);
-            top: 10%; right: 30%;
-            animation-duration: 22s;
-            animation-delay: -3s;
-        }
-        .particle:nth-child(5) {
-            width: 60px; height: 60px;
-            background: radial-gradient(circle, rgba(0, 224, 184, 0.1) 0%, transparent 70%);
-            top: 45%; left: 60%;
-            animation-duration: 16s;
-            animation-delay: -10s;
-        }
-        .particle:nth-child(6) {
-            width: 140px; height: 140px;
-            background: radial-gradient(circle, rgba(0, 81, 194, 0.07) 0%, transparent 70%);
-            bottom: 10%; right: 10%;
-            animation-duration: 24s;
-            animation-delay: -7s;
-        }
-
-        @keyframes float {
-            0%   { transform: translate(0, 0) scale(1); }
-            25%  { transform: translate(30px, -40px) scale(1.05); }
-            50%  { transform: translate(-20px, 20px) scale(0.95); }
-            75%  { transform: translate(15px, -15px) scale(1.02); }
-            100% { transform: translate(0, 0) scale(1); }
         }
 
         /* ── Login card ── */
@@ -119,7 +63,6 @@
             to   { opacity: 1; transform: translateY(0); }
         }
 
-        /* ── Header ── */
         .login-header {
             text-align: center;
             margin-bottom: 1.5rem;
@@ -151,7 +94,6 @@
             margin: 0;
         }
 
-        /* ── Form ── */
         .form-label {
             font-weight: 500;
             font-size: 0.8rem;
@@ -195,7 +137,6 @@
             margin-bottom: 0;
         }
 
-        /* ── Page footer ── */
         .page-footer {
             position: fixed;
             bottom: 1.25rem;
@@ -211,15 +152,8 @@
 </head>
 
 <body>
-    <!-- Floating particles -->
-    <div class="particles">
-        <div class="particle"></div>
-        <div class="particle"></div>
-        <div class="particle"></div>
-        <div class="particle"></div>
-        <div class="particle"></div>
-        <div class="particle"></div>
-    </div>
+    <!-- Particle canvas -->
+    <canvas id="particleCanvas"></canvas>
 
     <!-- Login card -->
     <div class="login-card">
@@ -270,6 +204,175 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
         crossorigin="anonymous"></script>
+
+    <script>
+    (function() {
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // ── Config ──
+        const PARTICLE_COUNT = 55;
+        const CONNECT_DIST   = 140;   // max distance to draw lines between particles
+        const MOUSE_RADIUS   = 180;   // magnetic attraction radius
+        const MOUSE_STRENGTH = 0.02;  // how strongly particles pull toward cursor
+        const RETURN_SPEED   = 0.008; // how fast particles drift back when cursor leaves
+
+        // Payroc palette with varying opacity
+        const COLORS = [
+            'rgba(0, 224, 184, ',   // mint
+            'rgba(0, 81, 194, ',    // cobalt
+            'rgba(255, 255, 255, ', // white
+        ];
+
+        let mouse = { x: -1000, y: -1000 };
+        let particles = [];
+        let w, h;
+
+        function resize() {
+            w = canvas.width  = window.innerWidth;
+            h = canvas.height = window.innerHeight;
+        }
+
+        class Particle {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x  = Math.random() * w;
+                this.y  = Math.random() * h;
+                this.ox = this.x;  // origin x (home position)
+                this.oy = this.y;
+                this.vx = (Math.random() - 0.5) * 0.4;
+                this.vy = (Math.random() - 0.5) * 0.4;
+                this.r  = Math.random() * 2 + 1;
+                this.colorIdx = Math.floor(Math.random() * COLORS.length);
+                this.alpha = Math.random() * 0.5 + 0.3;
+            }
+
+            update() {
+                // Distance to mouse
+                const dx = mouse.x - this.x;
+                const dy = mouse.y - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < MOUSE_RADIUS) {
+                    // Magnetic pull toward cursor
+                    const force = (1 - dist / MOUSE_RADIUS) * MOUSE_STRENGTH;
+                    this.vx += dx * force;
+                    this.vy += dy * force;
+                } else {
+                    // Gently drift back toward origin
+                    this.vx += (this.ox - this.x) * RETURN_SPEED;
+                    this.vy += (this.oy - this.y) * RETURN_SPEED;
+                }
+
+                // Damping
+                this.vx *= 0.96;
+                this.vy *= 0.96;
+
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Slow origin drift for ambient movement
+                this.ox += (Math.random() - 0.5) * 0.15;
+                this.oy += (Math.random() - 0.5) * 0.15;
+
+                // Wrap origins if they drift off screen
+                if (this.ox < -20) this.ox = w + 20;
+                if (this.ox > w + 20) this.ox = -20;
+                if (this.oy < -20) this.oy = h + 20;
+                if (this.oy > h + 20) this.oy = -20;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+                ctx.fillStyle = COLORS[this.colorIdx] + this.alpha + ')';
+                ctx.fill();
+            }
+        }
+
+        function drawConnections() {
+            for (let i = 0; i < particles.length; i++) {
+                const a = particles[i];
+
+                // Lines between particles
+                for (let j = i + 1; j < particles.length; j++) {
+                    const b = particles[j];
+                    const dx = a.x - b.x;
+                    const dy = a.y - b.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < CONNECT_DIST) {
+                        const opacity = (1 - dist / CONNECT_DIST) * 0.15;
+                        ctx.beginPath();
+                        ctx.moveTo(a.x, a.y);
+                        ctx.lineTo(b.x, b.y);
+                        ctx.strokeStyle = 'rgba(0, 224, 184, ' + opacity + ')';
+                        ctx.lineWidth = 0.6;
+                        ctx.stroke();
+                    }
+                }
+
+                // Lines from particle to mouse
+                const mdx = a.x - mouse.x;
+                const mdy = a.y - mouse.y;
+                const mDist = Math.sqrt(mdx * mdx + mdy * mdy);
+
+                if (mDist < MOUSE_RADIUS) {
+                    const opacity = (1 - mDist / MOUSE_RADIUS) * 0.25;
+                    ctx.beginPath();
+                    ctx.moveTo(a.x, a.y);
+                    ctx.lineTo(mouse.x, mouse.y);
+                    ctx.strokeStyle = 'rgba(255, 255, 255, ' + opacity + ')';
+                    ctx.lineWidth = 0.8;
+                    ctx.stroke();
+                }
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, w, h);
+
+            for (const p of particles) {
+                p.update();
+                p.draw();
+            }
+
+            drawConnections();
+            requestAnimationFrame(animate);
+        }
+
+        // ── Init ──
+        resize();
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+            particles.push(new Particle());
+        }
+
+        // Allow pointer events to pass through to the form
+        document.addEventListener('mousemove', function(e) {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+
+        document.addEventListener('mouseleave', function() {
+            mouse.x = -1000;
+            mouse.y = -1000;
+        });
+
+        window.addEventListener('resize', function() {
+            resize();
+            // Reset origins on resize
+            for (const p of particles) {
+                p.ox = Math.random() * w;
+                p.oy = Math.random() * h;
+            }
+        });
+
+        animate();
+    })();
+    </script>
 </body>
 
 </html>
