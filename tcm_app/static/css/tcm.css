@@ -1,18 +1,49 @@
 /*
- * TCM Django - Payroc Branding
+ * TCM Django - Payroc Design System
  * Navy #001D4E | Cobalt #0051C2 | Sky Blue #F4F7FE | Mint #00e0b8
  */
 
 /* ============================================
-   PAYROC COLOR PALETTE (CSS Custom Properties)
+   TYPOGRAPHY — Geist (local woff2)
+   ============================================ */
+@font-face {
+    font-family: 'Geist';
+    src: url('../fonts/Geist-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Geist';
+    src: url('../fonts/Geist-SemiBold.woff2') format('woff2');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* ============================================
+   DESIGN TOKENS (CSS Custom Properties)
    ============================================ */
 :root {
+    /* Brand palette */
     --payroc-navy: #001D4E;
     --payroc-cobalt: #0051C2;
     --payroc-sky: #F4F7FE;
     --payroc-mint: #00e0b8;
     --payroc-mint-dark: #00c4a0;
-    
+
+    /* Sizing tokens — single source of truth */
+    --tcm-font-xs: 0.7rem;
+    --tcm-font-sm: 0.75rem;
+    --tcm-font-md: 0.8rem;
+    --tcm-font-base: 0.85rem;
+    --tcm-cell-pad-y: 0.35rem;
+    --tcm-cell-pad-x: 0.5rem;
+    --tcm-page-pad: 0 1rem 0.5rem 1rem;
+    --tcm-radius: 6px;
+    --tcm-transition: 0.15s ease;
+
     /* Bootstrap overrides */
     --bs-primary: #0051C2;
     --bs-primary-rgb: 0, 81, 194;
@@ -27,6 +58,19 @@
    ============================================ */
 body {
     background-color: var(--payroc-sky);
+    font-family: 'Geist', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ============================================
+   CONTENT FADE-IN
+   ============================================ */
+main {
+    animation: tcmFadeIn 0.15s ease-out;
+}
+
+@keyframes tcmFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
 }
 
 /* ============================================
@@ -39,9 +83,10 @@ body {
 .navbar-dark .navbar-brand,
 .navbar-dark .nav-link {
     color: rgba(255, 255, 255, 0.9);
-    font-size: 0.75rem;
+    font-size: var(--tcm-font-sm);
     padding-top: 0.15rem;
     padding-bottom: 0.15rem;
+    transition: color var(--tcm-transition);
 }
 
 .navbar-dark .nav-link:hover,
@@ -56,6 +101,18 @@ body {
 /* ============================================
    BUTTONS - Cobalt Primary, Mint Success
    ============================================ */
+.btn {
+    transition: background-color var(--tcm-transition),
+                border-color var(--tcm-transition),
+                transform 0.1s ease,
+                box-shadow var(--tcm-transition);
+    border-radius: var(--tcm-radius);
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
 .btn-primary {
     background-color: var(--payroc-cobalt);
     border-color: var(--payroc-cobalt);
@@ -96,6 +153,7 @@ body {
    ============================================ */
 a {
     color: var(--payroc-cobalt);
+    transition: color var(--tcm-transition);
 }
 
 a:hover {
@@ -108,6 +166,8 @@ a:hover {
 .card {
     box-shadow: 0 1px 3px rgba(0, 29, 78, 0.08);
     border: 1px solid rgba(0, 29, 78, 0.08);
+    border-radius: var(--tcm-radius);
+    transition: box-shadow var(--tcm-transition);
 }
 
 .card-header {
@@ -116,13 +176,17 @@ a:hover {
 }
 
 /* ============================================
-   TABLES
+   TABLES — Global Defaults
    ============================================ */
 .table thead th {
     background-color: rgba(0, 29, 78, 0.03);
     border-bottom-color: rgba(0, 29, 78, 0.1);
     color: var(--payroc-navy);
     font-weight: 600;
+}
+
+.table-hover tbody tr {
+    transition: background-color var(--tcm-transition);
 }
 
 .table-hover tbody tr:hover {
@@ -159,6 +223,12 @@ a:hover {
 /* ============================================
    FORM CONTROLS
    ============================================ */
+.form-control,
+.form-select {
+    border-radius: var(--tcm-radius);
+    transition: border-color var(--tcm-transition), box-shadow var(--tcm-transition);
+}
+
 .form-control:focus,
 .form-select:focus {
     border-color: var(--payroc-cobalt);
@@ -188,6 +258,112 @@ a:hover {
 }
 
 /* ============================================
+   TCM PAGE LAYOUT
+   Replaces inline style="padding: ..." on every page
+   ============================================ */
+.tcm-page {
+    padding: var(--tcm-page-pad);
+}
+
+/* ============================================
+   TCM TOOLBAR
+   Replaces inline style="font-size: 0.75rem" on toolbars
+   ============================================ */
+.tcm-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    font-size: var(--tcm-font-sm);
+}
+
+.tcm-toolbar .form-label {
+    font-size: var(--tcm-font-sm);
+    margin-bottom: 0;
+}
+
+.tcm-toolbar .form-select,
+.tcm-toolbar .form-control {
+    font-size: var(--tcm-font-sm);
+}
+
+.tcm-toolbar .btn {
+    font-size: var(--tcm-font-sm);
+}
+
+/* ============================================
+   TCM DATA TABLE
+   Consolidates .inventory-table, .scrubbing-table,
+   .investment-table, .directory-table into one class
+   ============================================ */
+.tcm-data-table {
+    font-size: var(--tcm-font-sm);
+    margin-bottom: 0;
+}
+
+.tcm-data-table th,
+.tcm-data-table td {
+    padding: var(--tcm-cell-pad-y) var(--tcm-cell-pad-x);
+    vertical-align: middle;
+}
+
+.tcm-data-table .form-select,
+.tcm-data-table .form-control {
+    font-size: var(--tcm-font-md);
+}
+
+.tcm-data-table .form-select-sm {
+    padding-top: 0.2rem;
+    padding-bottom: 0.2rem;
+    font-size: var(--tcm-font-md);
+}
+
+.tcm-data-table .badge {
+    min-width: 50px;
+    font-size: var(--tcm-font-xs);
+}
+
+/* Sticky table headers */
+.tcm-data-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background-color: #f0f2f8;
+    border-bottom: 2px solid rgba(0, 29, 78, 0.1);
+}
+
+/* Zebra striping — barely visible, guides the eye */
+.tcm-data-table tbody tr:nth-child(even) {
+    background-color: rgba(0, 29, 78, 0.015);
+}
+
+.tcm-data-table tbody tr:hover {
+    background-color: rgba(0, 81, 194, 0.05);
+}
+
+/* Row save flash animation */
+.tcm-row-saved {
+    animation: tcmRowFlash 0.6s ease-out;
+}
+
+@keyframes tcmRowFlash {
+    0%   { background-color: rgba(0, 224, 184, 0.2); }
+    100% { background-color: transparent; }
+}
+
+/* ============================================
+   TCM FORM LABELS & SELECTS (global)
+   Replaces per-page .form-label/.form-select overrides
+   ============================================ */
+.form-label {
+    font-size: var(--tcm-font-md);
+}
+
+.form-select {
+    font-size: var(--tcm-font-md);
+}
+
+/* ============================================
    TCM FIXED-LAYOUT TABLES (scoped, not global)
    Applied only to inventory/scrubbing/investment
    ============================================ */
@@ -210,4 +386,138 @@ a:hover {
     max-width: 100%;
     box-sizing: border-box;
 }
+
+/* ============================================
+   TCM KPI CARDS
+   Consolidates dashboard + investment KPI styling
+   ============================================ */
+.tcm-kpi-card {
+    text-align: center;
+    padding: 0.6rem 0.5rem;
+}
+
+.tcm-kpi-card .kpi-value {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 0.15rem;
+}
+
+.tcm-kpi-card .kpi-label {
+    color: #6c757d;
+    font-size: var(--tcm-font-md);
+    margin: 0;
+}
+
+/* Investment-size KPIs (smaller) */
+.tcm-kpi-sm {
+    text-align: center;
+    padding: 0.5rem;
+}
+
+.tcm-kpi-sm .h4 {
+    font-size: 1rem;
+}
+
+.tcm-kpi-sm .text-muted {
+    font-size: var(--tcm-font-xs);
+}
+
+/* ============================================
+   DASHBOARD COMPONENTS
+   ============================================ */
+
+/* Donut Chart */
+.donut-container {
+    display: flex;
+    flex-direction: row-reverse;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 0.5rem;
+    gap: 1rem;
+}
+
+.donut-chart {
+    width: 100%;
+    height: auto;
+}
+
+.donut-chart-wrapper {
+    flex: 1;
+    min-width: 0;
+    max-width: 150px;
+    display: flex;
+    justify-content: center;
+}
+
+.donut-ring          { fill: none; stroke: #e9ecef; stroke-width: 3; }
+.donut-segment-onboarding { fill: none; stroke: var(--payroc-cobalt); stroke-width: 3; }
+.donut-segment-upskilling { fill: none; stroke: var(--payroc-mint); stroke-width: 3; }
+.donut-segment-other      { fill: none; stroke: var(--payroc-navy); stroke-width: 3; }
+.donut-text-label    { font-size: 0.2rem; fill: #6c757d; text-anchor: middle; }
+.donut-text-value    { font-size: 0.45rem; font-weight: 700; text-anchor: middle; dominant-baseline: middle; }
+
+/* Donut Breakdown Table */
+.donut-breakdown {
+    flex-shrink: 0;
+    font-size: 0.6rem;
+}
+
+.donut-breakdown-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.15rem 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.donut-breakdown-row:last-child { border-bottom: none; }
+.donut-breakdown-label { display: flex; align-items: center; gap: 0.4rem; }
+.donut-breakdown-dot   { width: 8px; height: 8px; border-radius: 50%; }
+
+/* Stacked Bar */
+.stacked-bar {
+    display: flex;
+    height: 32px;
+    border-radius: 5px;
+    overflow: hidden;
+    background: #e9ecef;
+}
+
+.stacked-bar-segment {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: var(--tcm-font-sm);
+    transition: flex var(--tcm-transition);
+}
+
+.stacked-bar-segment.include { background: var(--payroc-mint); color: var(--payroc-navy); }
+.stacked-bar-segment.modify  { background: #fd7e14; }
+.stacked-bar-segment.sunset  { background: #dc3545; }
+
+.stacked-bar-labels {
+    display: flex;
+    margin-top: 0.3rem;
+    font-size: var(--tcm-font-xs);
+    color: #6c757d;
+}
+
+/* Compact Card Headers/Bodies */
+.card-header-sm     { padding: 0.4rem 0.75rem; }
+.card-header-sm h6  { font-size: var(--tcm-font-md); margin: 0; text-align: center; }
+.card-body-sm       { padding: 0.4rem 0.75rem; }
+
+/* Compact Tables (dashboard breakdowns) */
+.table-sm-tight           { font-size: var(--tcm-font-sm); margin-bottom: 0; }
+.table-sm-tight th,
+.table-sm-tight td        { padding: 0.2rem 0.35rem; }
+
+/* ============================================
+   POPOVER (Directory)
+   ============================================ */
+.popover      { font-size: var(--tcm-font-sm); }
+.popover-body { text-align: left; padding: 0.5rem 0.75rem; }
 
