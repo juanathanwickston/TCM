@@ -2179,4 +2179,129 @@ def get_sub_departments(department: str) -> List[str]:
     return DEPARTMENT_SUB_DEPARTMENTS.get(prefix, [])
 
 
+def query_sme_directory(department: str = None, sub_department: str = None,
+                        name: str = None, return_type: str = "list") -> Dict[str, Any]:
+    """
+    Chatbot-facing SME query with three return modes.
+    
+    return_type:
+      - "list":     Matching SMEs with name, role, email, departments
+      - "coverage": Per-department SME counts + uncovered departments
+      - "summary":  Aggregate stats (total SMEs, depts covered, gaps)
+    """
+    if return_type == "coverage":
+        # All departments from resources
+        all_depts = get_active_resource_departments()
+        # Departments that have at least one SME
+        covered_rows = execute("""
+            SELECT DISTINCT sd.department, COUNT(DISTINCT sd.sme_id) as sme_count
+            FROM sme_departments sd
+            JOIN sme_contacts sc ON sc.sme_id = sd.sme_id AND sc.is_active = TRUE
+            GROUP BY sd.department
+        """, fetch="all")
+        covered = {r['department']: r['sme_count'] for r in covered_rows} if covered_rows else {}
+        coverage = []
+        for dept in all_depts:
+            coverage.append({
+                "department": dept,
+                "sme_count": covered.get(dept, 0),
+                "covered": dept in covered
+            })
+        uncovered = [c['department'] for c in coverage if not c['covered']]
+        return {
+            "type": "coverage",
+            "total_departments": len(all_depts),
+            "covered_count": len(all_depts) - len(uncovered),
+            "uncovered_count": len(uncovered),
+            "uncovered_departments": uncovered,
+            "details": coverage
+        }
+
+    if return_type == "summary":
+        total_smes = execute(
+            "SELECT COUNT(*) as cnt FROM sme_contacts WHERE is_active = TRUE",
+            fetch="one"
+        )
+        dept_count = execute(
+            """SELECT COUNT(DISTINCT department) as cnt 
+               FROM sme_departments sd 
+               JOIN sme_contacts sc ON sc.sme_id = sd.sme_id AND sc.is_active = TRUE""",
+            fetch="one"
+        )
+        all_depts = get_active_resource_departments()
+        covered_depts = execute(
+            """SELECT DISTINCT department FROM sme_departments sd
+               JOIN sme_contacts sc ON sc.sme_id = sd.sme_id AND sc.is_active = TRUE""",
+            fetch="all"
+        )
+        covered_set = {r['department'] for r in covered_depts} if covered_depts else set()
+        uncovered = [d for d in all_depts if d not in covered_set]
+        return {
+            "type": "summary",
+            "total_smes": total_smes['cnt'] if total_smes else 0,
+            "departments_with_smes": dept_count['cnt'] if dept_count else 0,
+            "total_resource_departments": len(all_depts),
+            "uncovered_departments": uncovered
+        }
+
+    # Default: list mode
+    # Build WHERE clauses
+    conditions = ["sc.is_active = TRUE"]
+    params = []
+
+    if department:
+        conditions.append("sd.department = ?")
+        params.append(department)
+    if sub_department:
+        conditions.append("sd.sub_department = ?")
+        params.append(sub_department)
+    if name:
+        conditions.append("sc.name ILIKE ?")
+        params.append(f"%{name}%")
+
+    # If filtering by dept/sub_dept/name, join through sme_departments
+    if department or sub_department:
+        query = f"""
+            SELECT DISTINCT sc.sme_id, sc.name, sc.role, sc.email
+            FROM sme_contacts sc
+            JOIN sme_departments sd ON sd.sme_id = sc.sme_id
+            WHERE {' AND '.join(conditions)}
+            ORDER BY sc.name
+        """
+    elif name:
+        query = f"""
+            SELECT sc.sme_id, sc.name, sc.role, sc.email
+            FROM sme_contacts sc
+            LEFT JOIN sme_departments sd ON sd.sme_id = sc.sme_id
+            WHERE {' AND '.join(conditions)}
+            ORDER BY sc.name
+        """
+    else:
+        query = """
+            SELECT sme_id, name, role, email
+            FROM sme_contacts
+            WHERE is_active = TRUE
+            ORDER BY name
+        """
+        params = []
+
+    rows = execute(query, tuple(params) if params else None, fetch="all")
+    if not rows:
+        return {"type": "list", "smes": [], "count": 0}
+
+    # Attach departments to each SME
+    result = []
+    for row in rows:
+        sme = dict(row)
+        dept_rows = execute("""
+            SELECT department, sub_department FROM sme_departments
+            WHERE sme_id = ? ORDER BY department, sub_department
+        """, (sme['sme_id'],), fetch="all")
+        sme['departments'] = [dict(d) for d in dept_rows] if dept_rows else []
+        del sme['sme_id']  # Don't expose internal ID to LLM
+        result.append(sme)
+
+    return {"type": "list", "smes": result, "count": len(result)}
+
+
 # Initialization happens via Django AppConfig.ready() - no import-time side effects

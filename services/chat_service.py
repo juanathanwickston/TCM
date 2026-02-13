@@ -36,8 +36,8 @@ RATE_LIMIT_PER_MINUTE = 20
 MODEL = "gpt-5.2"
 
 # Handlers that return rich per-resource data and benefit from LLM formatting
-TWO_PASS_HANDLERS = {"query_resources"}  # Only when return_type is list or summary
-TWO_PASS_RETURN_TYPES = {"list", "summary"}
+TWO_PASS_HANDLERS = {"query_resources", "query_sme_directory"}  # Only when return_type is list or summary
+TWO_PASS_RETURN_TYPES = {"list", "summary", "coverage"}
 
 # Max conversation history pairs to send (controls input token cost)
 MAX_HISTORY_PAIRS = 10
@@ -201,6 +201,19 @@ Note: Users may say "job aids" or "video on demand" - normalize to database keys
 DEPARTMENTS (dynamic from SharePoint folder structure):
 Departments are derived from the L0 folder level in SharePoint. Query the database for current values.
 Common departments include: Direct, Indirect, Integration, FI, Partner Management, Operations, Compliance, POS.
+
+SME DIRECTORY:
+- I can look up Subject Matter Experts (SMEs) by department, sub-department, or name
+- I can check coverage gaps (departments without assigned SMEs)
+- I can provide contact info (email, role) for any SME
+- When asked "who covers X" or "who is the SME for X", use query_sme_directory
+- When asked about gaps, use return_type="coverage"
+
+SME FOLLOW-UPS (always end SME responses with ONE relevant next step):
+- After listing SMEs: "Want to see what resources they manage?"
+- After showing coverage: "Want me to list the SMEs for a specific department?"
+- After showing gaps: "Want to assign someone to cover [uncovered dept]?"
+- After showing a person's coverage: "Need their contact info?"
 
 HARD RULES:
 - Bucket ≠ Audience ≠ Sales Stage — NEVER conflate them
@@ -586,6 +599,36 @@ CHAT_FUNCTIONS = [
             },
             "required": ["field"]
         }
+    },
+    # =========================================================================
+    # SME DIRECTORY TOOLS
+    # =========================================================================
+    {
+        "name": "query_sme_directory",
+        "description": "Look up SME contacts by department, sub-department, or name. Use for questions about who covers what, contact info, coverage gaps, and SME assignments.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "department": {
+                    "type": "string",
+                    "description": "Filter by department (e.g. 'POS - Sales', 'L&D')"
+                },
+                "sub_department": {
+                    "type": "string",
+                    "description": "Filter by sub-department (e.g. 'Aloha', 'Counterpoint')"
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Search by SME name (partial match)"
+                },
+                "return_type": {
+                    "type": "string",
+                    "enum": ["list", "coverage", "summary"],
+                    "description": "list = matching SMEs with contact info, coverage = department coverage analysis, summary = aggregate overview stats"
+                }
+            },
+            "required": ["return_type"]
+        }
     }
 ]
 
@@ -965,6 +1008,10 @@ CURRENT CONTEXT:
         
         elif name == "explain_taxonomy":
             return self._handle_explain_taxonomy(args)
+        
+        # SME Directory
+        elif name == "query_sme_directory":
+            return self._handle_sme_query(args)
         
         return {'response': "I'm not sure how to do that."}
     
@@ -1393,6 +1440,16 @@ CURRENT CONTEXT:
         response += f"\n\nRule: {info['rule']}"
         
         return {'response': response}
+    
+    def _handle_sme_query(self, args: Dict) -> Dict:
+        """Handle SME Directory queries — delegates to db.query_sme_directory."""
+        result = db.query_sme_directory(
+            department=args.get('department'),
+            sub_department=args.get('sub_department'),
+            name=args.get('name'),
+            return_type=args.get('return_type', 'list')
+        )
+        return {"data": result}
     
     # Known file extensions to strip from display names
     _STRIP_EXTENSIONS = {'.pdf', '.mp4', '.docx', '.doc', '.xlsx', '.xls', '.png', 
