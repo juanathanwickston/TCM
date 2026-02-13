@@ -106,7 +106,7 @@
             <tr>
               <th>Name</th>
               <th>Decision</th>
-              <th>Owner</th>
+              <th>SME</th>
               <th>Effort</th>
               <th>Cost</th>
               <th>Notes</th>
@@ -139,8 +139,13 @@
                 </select>
               </td>
               <td>
-                <input type="text" name="owner_{{ c.resource_key }}" class="form-control form-control-sm dirty-track"
-                  value="{{ c.invest_owner|default_if_none:'' }}" placeholder="Owner" style="width:100%;">
+                <select name="owner_{{ c.resource_key }}" class="form-select form-select-sm dirty-track sme-dropdown" style="width:auto;">
+                  <option value="">-</option>
+                  {% for sme in sme_list %}
+                  <option value="{{ sme.name }}" {% if c.invest_owner == sme.name %}selected{% endif %}>{{ sme.name }}</option>
+                  {% endfor %}
+                  <option value="__add_sme__" class="text-primary">+ Add SME</option>
+                </select>
               </td>
               <td>
                 <select name="effort_{{ c.resource_key }}" class="form-select form-select-sm dirty-track" style="width:auto;">
@@ -199,8 +204,14 @@
             </select>
           </div>
           <div class="col-md-6">
-            <label class="form-label">Owner</label>
-            <input type="text" id="modalOwner" class="form-control" placeholder="Owner name">
+            <label class="form-label">SME</label>
+            <select id="modalOwner" class="form-select">
+              <option value="">-</option>
+              {% for sme in sme_list %}
+              <option value="{{ sme.name }}">{{ sme.name }}</option>
+              {% endfor %}
+              <option value="__add_sme__" class="text-primary">+ Add SME</option>
+            </select>
           </div>
         </div>
         
@@ -248,6 +259,57 @@
   </div>
 </div>
 
+<!-- Add SME Modal (mirrors Directory page) -->
+<div class="modal fade" id="addSmeModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add SME</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="newSmeName" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Role</label>
+                        <input type="text" class="form-control" id="newSmeRole" placeholder="e.g. Senior Trainer">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-control" id="newSmeEmail">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Notes / Specialties</label>
+                    <textarea class="form-control" id="newSmeNotes" rows="2"
+                        placeholder="e.g. Expert in Aloha POS configuration and troubleshooting"></textarea>
+                </div>
+                <div class="border-top pt-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label mb-0 fw-semibold">Department Assignments <span class="text-danger">*</span></label>
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="addSmeDeptRowBtn">
+                            <i class="bi bi-plus-lg me-1"></i>Add Department
+                        </button>
+                    </div>
+                    <div id="smeDeptRowsContainer">
+                        <!-- Department rows added dynamically -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveNewSmeBtn">
+                    <span id="saveNewSmeSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>
+                    <span id="saveNewSmeText">Save</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Toast Container -->
 <div class="toast-container position-fixed bottom-0 end-0 p-3">
   <div id="errorToast" class="toast align-items-center text-bg-danger border-0" role="alert">
@@ -262,6 +324,191 @@
 {% block extra_js %}
 <script>
 (function() {
+  // ── SME Dropdown & Add SME Modal ──
+  const allDepartments = [
+    {% for dept in departments %}'{{ dept|escapejs }}'{% if not forloop.last %}, {% endif %}{% endfor %}
+  ];
+
+  const addSmeModalEl = document.getElementById('addSmeModal');
+  const addSmeModal = new bootstrap.Modal(addSmeModalEl);
+  const smeDeptRowsContainer = document.getElementById('smeDeptRowsContainer');
+  let pendingSmeDropdown = null; // track which dropdown triggered "+ Add SME"
+
+  function escapeHtml(text) {
+    const d = document.createElement('div');
+    d.textContent = text;
+    return d.innerHTML;
+  }
+
+  // Create a department assignment row in the Add SME modal
+  function createSmeDeptRow(deptValue = '', subDeptValue = '') {
+    const row = document.createElement('div');
+    row.className = 'dept-assignment-row d-flex gap-2 mb-2 align-items-start';
+    row.innerHTML = `
+      <select class="form-select form-select-sm dept-select" style="flex: 1;">
+        <option value="">Select Department...</option>
+        ${allDepartments.map(d => `<option value="${escapeHtml(d)}" ${d === deptValue ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('')}
+      </select>
+      <select class="form-select form-select-sm subdept-select" style="flex: 1;">
+        <option value="All">All</option>
+      </select>
+      <button type="button" class="btn btn-outline-danger btn-sm remove-dept-btn" title="Remove">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    `;
+    const deptSelect = row.querySelector('.dept-select');
+    const subDeptSelect = row.querySelector('.subdept-select');
+    if (deptValue) loadSmeSubDepartments(subDeptSelect, deptValue, subDeptValue);
+    deptSelect.addEventListener('change', function() {
+      loadSmeSubDepartments(subDeptSelect, this.value, 'All');
+    });
+    row.querySelector('.remove-dept-btn').addEventListener('click', function() {
+      if (smeDeptRowsContainer.querySelectorAll('.dept-assignment-row').length <= 1) {
+        toastMessage.textContent = 'At least one department is required';
+        errorToast.show();
+        return;
+      }
+      row.remove();
+    });
+    smeDeptRowsContainer.appendChild(row);
+  }
+
+  async function loadSmeSubDepartments(selectEl, department, selectedValue = 'All') {
+    selectEl.innerHTML = '<option value="All">All</option>';
+    if (!department) return;
+    try {
+      const resp = await fetch(`{% url "api_sub_departments" %}?department=${encodeURIComponent(department)}`);
+      const data = await resp.json();
+      for (const sub of data.sub_departments) {
+        const opt = document.createElement('option');
+        opt.value = sub;
+        opt.textContent = sub;
+        if (sub === selectedValue) opt.selected = true;
+        selectEl.appendChild(opt);
+      }
+    } catch (err) { /* silently fail */ }
+  }
+
+  function collectSmeDepartments() {
+    const rows = smeDeptRowsContainer.querySelectorAll('.dept-assignment-row');
+    const depts = [];
+    for (const row of rows) {
+      const dept = row.querySelector('.dept-select').value;
+      const subDept = row.querySelector('.subdept-select').value;
+      if (dept) depts.push({ department: dept, sub_department: subDept || 'All' });
+    }
+    return depts;
+  }
+
+  // Add Department row button
+  document.getElementById('addSmeDeptRowBtn').addEventListener('click', function() {
+    createSmeDeptRow();
+  });
+
+  // Handle "+ Add SME" selection on any SME dropdown
+  document.addEventListener('change', function(e) {
+    const sel = e.target;
+    if (!sel.classList.contains('sme-dropdown') && sel.id !== 'modalOwner') return;
+    if (sel.value === '__add_sme__') {
+      pendingSmeDropdown = sel;
+      sel.value = ''; // reset so it doesn't show "+ Add SME" as selected
+      // Reset and open Add SME modal
+      document.getElementById('newSmeName').value = '';
+      document.getElementById('newSmeRole').value = '';
+      document.getElementById('newSmeEmail').value = '';
+      document.getElementById('newSmeNotes').value = '';
+      smeDeptRowsContainer.innerHTML = '';
+      createSmeDeptRow();
+      addSmeModal.show();
+    }
+  });
+
+  // Save new SME
+  document.getElementById('saveNewSmeBtn').addEventListener('click', async function() {
+    const name = document.getElementById('newSmeName').value.trim();
+    if (!name) {
+      toastMessage.textContent = 'Name is required';
+      errorToast.show();
+      return;
+    }
+    const departments = collectSmeDepartments();
+    if (departments.length === 0) {
+      toastMessage.textContent = 'At least one department is required';
+      errorToast.show();
+      return;
+    }
+    const spinner = document.getElementById('saveNewSmeSpinner');
+    const textEl = document.getElementById('saveNewSmeText');
+    spinner.classList.remove('d-none');
+    textEl.textContent = 'Saving...';
+    this.disabled = true;
+
+    try {
+      const response = await fetch('{% url "create_sme" %}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+        body: JSON.stringify({
+          name: name,
+          role: document.getElementById('newSmeRole').value.trim(),
+          email: document.getElementById('newSmeEmail').value.trim(),
+          notes: document.getElementById('newSmeNotes').value.trim(),
+          departments: departments,
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        addSmeModal.hide();
+        // Add the new SME to ALL dropdowns on the page
+        refreshSmeDropdowns(name);
+        // Auto-select the new SME in the dropdown that triggered this
+        if (pendingSmeDropdown) {
+          pendingSmeDropdown.value = name;
+          pendingSmeDropdown.dispatchEvent(new Event('change'));
+          pendingSmeDropdown = null;
+        }
+      } else {
+        toastMessage.textContent = data.error || 'Save failed';
+        errorToast.show();
+      }
+    } catch (err) {
+      toastMessage.textContent = 'Network error';
+      errorToast.show();
+    } finally {
+      spinner.classList.add('d-none');
+      textEl.textContent = 'Save';
+      this.disabled = false;
+    }
+  });
+
+  // Refresh all SME dropdowns by fetching fresh list
+  async function refreshSmeDropdowns(selectName) {
+    try {
+      const resp = await fetch('{% url "list_smes" %}');
+      const data = await resp.json();
+      const smes = data.smes || [];
+
+      document.querySelectorAll('.sme-dropdown, #modalOwner').forEach(function(sel) {
+        const currentVal = sel.value;
+        // Clear all but first (-) and last (+ Add SME)
+        while (sel.options.length > 1) sel.remove(1);
+        // Insert SME options before the last option
+        for (const sme of smes) {
+          const opt = document.createElement('option');
+          opt.value = sme.name;
+          opt.textContent = sme.name;
+          sel.insertBefore(opt, null);
+        }
+        // Re-add the "+ Add SME" option at the end
+        const addOpt = document.createElement('option');
+        addOpt.value = '__add_sme__';
+        addOpt.textContent = '+ Add SME';
+        addOpt.className = 'text-primary';
+        sel.appendChild(addOpt);
+        // Restore selection
+        sel.value = (selectName && (currentVal === '' || currentVal === '__add_sme__')) ? selectName : currentVal;
+      });
+    } catch (err) { /* silently fail */ }
+  }
   /**
    * INVESTMENT PAGE - Batch Save + Modal Pattern
    */

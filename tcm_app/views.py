@@ -987,6 +987,7 @@ def investment_view(request):
     - No new validation gates
     """
     from db import get_active_containers
+    import db
     from services.scrub_rules import normalize_status
     from models.enums import InvestDecision, InvestEffort, InvestCost
     
@@ -1051,6 +1052,9 @@ def investment_view(request):
         'filter_decision': filter_decision,
         # Decision dropdown options: All, Pending (filter concept, not stored), then enum values
         'decision_options': [('All', 'All'), ('Pending', 'Pending')] + [(c, invest_labels.get(c, c)) for c in invest_choices],
+        # SME directory for owner dropdown
+        'sme_list': db.get_all_smes(),
+        'departments': db.get_active_resource_departments(),
     }
     
     return render(request, 'tcm_app/investment.html', context)
