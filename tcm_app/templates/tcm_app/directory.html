@@ -15,6 +15,9 @@
     }
     .form-label { font-size: 0.8rem; }
     .form-select { font-size: 0.8rem; }
+    /* Popover compact styling */
+    .popover { font-size: 0.75rem; }
+    .popover-body { text-align: left; padding: 0.5rem 0.75rem; }
 </style>
 
 <div class="container-fluid" style="padding: 0 1rem 0.5rem 1rem;">
@@ -189,7 +192,7 @@
         div.textContent = text;
         return div.innerHTML;
     }
-    // Format department display — count with Bootstrap tooltip
+    // Format department display — count with Bootstrap popover
     function formatDepts(departments) {
         if (!departments || departments.length === 0) return '<span class="text-muted">—</span>';
         // Deduplicate
@@ -200,15 +203,22 @@
             seen.add(key);
             return true;
         });
-        // Build tooltip HTML
-        const tooltipHtml = unique.map(d => {
-            let line = escapeHtml(d.department);
-            if (d.sub_department && d.sub_department !== 'All') line += ' · ' + escapeHtml(d.sub_department);
+        // Group by department: { "POS - Sales": ["Aloha", "onePOS"], "POS - End User": [] }
+        const grouped = {};
+        unique.forEach(d => {
+            if (!grouped[d.department]) grouped[d.department] = [];
+            if (d.sub_department && d.sub_department !== 'All') grouped[d.department].push(d.sub_department);
+        });
+        // Build popover HTML
+        const lines = Object.entries(grouped).map(([dept, subs]) => {
+            let line = escapeHtml(dept);
+            if (subs.length > 0) line += ': ' + subs.map(s => escapeHtml(s)).join(', ');
             return line;
-        }).join('<br>');
+        });
+        const popoverHtml = lines.join('<br>');
         const count = unique.length;
         const label = count === 1 ? '1 department' : count + ' departments';
-        return `<span class="dept-tip" data-bs-toggle="tooltip" data-bs-html="true" data-bs-title="${tooltipHtml}" style="cursor:help; border-bottom:1px dotted #999;">${label}</span>`;
+        return `<span class="dept-pop" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="bottom" data-bs-html="true" data-bs-content="${popoverHtml}" style="cursor:help;">${label}</span>`;
     }
 
     // Truncate notes
@@ -259,9 +269,9 @@
         } catch (err) {
             smeTableBody.innerHTML = '<tr><td colspan="5" class="text-danger text-center">Error loading SMEs</td></tr>';
         }
-        // Initialize Bootstrap tooltips on new DOM
-        smeTableBody.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
-            new bootstrap.Tooltip(el, { delay: { show: 0, hide: 100 } });
+        // Initialize Bootstrap popovers on new DOM
+        smeTableBody.querySelectorAll('[data-bs-toggle="popover"]').forEach(el => {
+            new bootstrap.Popover(el, { delay: { show: 0, hide: 100 } });
         });
     }
 
