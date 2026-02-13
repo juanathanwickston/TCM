@@ -2155,44 +2155,28 @@ def delete_sme(sme_id: int) -> bool:
     return True
 
 
+# Static sub-department definitions per department family.
+# Department family = prefix before ' - ' (e.g., "POS - Sales" → "POS").
+# All departments in a family share the same sub-department pool.
+DEPARTMENT_SUB_DEPARTMENTS = {
+    'POS': ['Aloha', 'Counterpoint', 'General', 'onePOS'],
+    'HR':  ['General'],
+    'L&D': ['General'],
+}
+
+
 def get_sub_departments(department: str) -> List[str]:
     """
-    Get distinct sub-departments for a department family.
-    Used for cascading dropdown in SME Directory form.
+    Get sub-departments for a department family.
+    Uses static config — independent of resource sync status.
     
-    Uses department family prefix matching:
-    - "POS - Sales" → prefix "POS" → matches all "POS - *" departments
-    - "HR" → no separator → exact match only
-    
-    Shows ALL sub-departments regardless of resource sync status.
+    "POS - Sales" → prefix "POS" → ['Aloha', 'Counterpoint', 'General', 'onePOS']
+    "HR" → prefix "HR" → ['General']
     """
     if not department:
         return []
-    
-    # Extract family prefix: "POS - Sales" → "POS"
-    if ' - ' in department:
-        prefix = department.split(' - ')[0].strip()
-        rows = execute("""
-            SELECT DISTINCT sub_department FROM resources 
-            WHERE (primary_department LIKE ? OR primary_department = ?)
-              AND sub_department IS NOT NULL
-              AND sub_department != ''
-            ORDER BY sub_department
-        """, (prefix + ' - %', prefix), fetch="all")
-    else:
-        rows = execute("""
-            SELECT DISTINCT sub_department FROM resources 
-            WHERE primary_department = ?
-              AND sub_department IS NOT NULL
-              AND sub_department != ''
-            ORDER BY sub_department
-        """, (department,), fetch="all")
-    
-    if not rows:
-        return []
-    # Strip leading underscore from folder naming convention (e.g., _General → General)
-    return [row['sub_department'].lstrip('_') if row['sub_department'].startswith('_') 
-            else row['sub_department'] for row in rows]
+    prefix = department.split(' - ')[0].strip() if ' - ' in department else department
+    return DEPARTMENT_SUB_DEPARTMENTS.get(prefix, [])
 
 
 # Initialization happens via Django AppConfig.ready() - no import-time side effects
