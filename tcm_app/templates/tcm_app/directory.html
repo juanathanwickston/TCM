@@ -189,11 +189,26 @@
         div.textContent = text;
         return div.innerHTML;
     }
-
-    // Format department display — plain comma-separated text
+    // Format department display — count with hover tooltip
     function formatDepts(departments) {
         if (!departments || departments.length === 0) return '<span class="text-muted">—</span>';
-        return departments.map(d => escapeHtml(d.department)).join(', ');
+        // Deduplicate
+        const seen = new Set();
+        const unique = departments.filter(d => {
+            const key = d.department + '|' + (d.sub_department || 'All');
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+        // Build tooltip lines
+        const lines = unique.map(d => {
+            let line = d.department;
+            if (d.sub_department && d.sub_department !== 'All') line += ' · ' + d.sub_department;
+            return line;
+        });
+        const count = unique.length;
+        const label = count === 1 ? '1 department' : count + ' departments';
+        return `<span style="cursor:help; text-decoration:underline dotted;" title="${escapeHtml(lines.join('\n'))}">${label}</span>`;
     }
 
     // Truncate notes
