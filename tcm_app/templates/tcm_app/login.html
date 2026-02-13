@@ -68,29 +68,29 @@
             margin-bottom: 1.5rem;
         }
 
-        .login-icon {
-            width: 44px;
-            height: 44px;
-            background: linear-gradient(135deg, #001D4E, #0051C2);
-            border-radius: 10px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 0.75rem;
-            color: white;
-            font-size: 1.2rem;
-        }
-
-        .login-header h1 {
-            font-size: 1.25rem;
-            font-weight: 600;
-            color: #001D4E;
+        .login-monogram {
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: 6px;
+            background: linear-gradient(135deg, #001D4E 0%, #0051C2 60%, #00e0b8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             margin-bottom: 0.25rem;
+            line-height: 1.2;
         }
 
-        .login-header p {
-            color: #6b7280;
+        .login-header .login-subtitle {
             font-size: 0.8rem;
+            font-weight: 400;
+            color: #6b7280;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.15rem;
+        }
+
+        .login-header .login-tagline {
+            color: #9ca3af;
+            font-size: 0.7rem;
             margin: 0;
         }
 
@@ -158,11 +158,9 @@
     <!-- Login card -->
     <div class="login-card">
         <div class="login-header">
-            <div class="login-icon">
-                <i class="bi bi-mortarboard-fill"></i>
-            </div>
-            <h1>Training Catalogue Manager</h1>
-            <p>Sign in to continue</p>
+            <div class="login-monogram">TCM</div>
+            <div class="login-subtitle">Training Catalogue Manager</div>
+            <div class="login-tagline">Sign in to continue</div>
         </div>
 
         <hr class="my-3" style="border-color: #e5e7eb;">
