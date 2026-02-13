@@ -1513,7 +1513,7 @@ def clear_all_data_view(request):
 def directory_view(request):
     """Render the SME Directory page."""
     import db
-    departments = db.get_valid_departments()
+    departments = db.get_active_resource_departments()
     return render(request, 'tcm_app/directory.html', {
         'departments': departments,
     })
