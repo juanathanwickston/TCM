@@ -21,73 +21,27 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            background: #001D4E;
+            background: #f8f9fc;
             overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
 
-        /* ── Gradient orbs ── */
-        .orb-container {
+        #particleCanvas {
             position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
             pointer-events: none;
             z-index: 0;
-            overflow: hidden;
-        }
-
-        .orb {
-            position: absolute;
-            border-radius: 50%;
-            filter: blur(80px);
-            transition: transform 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
-        }
-
-        .orb-1 {
-            width: 500px; height: 500px;
-            background: radial-gradient(circle, rgba(0, 81, 194, 0.5) 0%, transparent 70%);
-            top: -10%; left: -5%;
-            animation: drift1 20s ease-in-out infinite;
-        }
-
-        .orb-2 {
-            width: 450px; height: 450px;
-            background: radial-gradient(circle, rgba(0, 224, 184, 0.3) 0%, transparent 70%);
-            bottom: -15%; right: -5%;
-            animation: drift2 25s ease-in-out infinite;
-        }
-
-        .orb-3 {
-            width: 350px; height: 350px;
-            background: radial-gradient(circle, rgba(0, 81, 194, 0.35) 0%, transparent 70%);
-            top: 50%; right: 25%;
-            animation: drift3 18s ease-in-out infinite;
-        }
-
-        @keyframes drift1 {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            33%      { transform: translate(60px, 40px) scale(1.05); }
-            66%      { transform: translate(-30px, 20px) scale(0.95); }
-        }
-
-        @keyframes drift2 {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            33%      { transform: translate(-50px, -30px) scale(1.08); }
-            66%      { transform: translate(40px, -20px) scale(0.92); }
-        }
-
-        @keyframes drift3 {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            33%      { transform: translate(30px, -50px) scale(1.1); }
-            66%      { transform: translate(-40px, 30px) scale(0.9); }
         }
 
         /* ── Login card ── */
         .login-card {
             position: relative;
             z-index: 1;
-            background: rgba(255, 255, 255, 0.97);
+            background: #ffffff;
             border-radius: 12px;
-            box-shadow: 0 12px 48px rgba(0, 29, 78, 0.35);
+            box-shadow: 0 4px 24px rgba(0, 29, 78, 0.1), 0 1px 3px rgba(0, 29, 78, 0.06);
+            border: 1px solid rgba(0, 29, 78, 0.06);
             padding: 2.5rem;
             width: 100%;
             max-width: 380px;
@@ -179,7 +133,7 @@
             left: 0; right: 0;
             text-align: center;
             z-index: 1;
-            color: rgba(255, 255, 255, 0.4);
+            color: rgba(0, 29, 78, 0.3);
             font-size: 0.7rem;
             letter-spacing: 0.5px;
         }
@@ -187,12 +141,7 @@
 </head>
 
 <body>
-    <!-- Gradient orbs -->
-    <div class="orb-container" id="orbContainer">
-        <div class="orb orb-1" id="orb1"></div>
-        <div class="orb orb-2" id="orb2"></div>
-        <div class="orb orb-3" id="orb3"></div>
-    </div>
+    <canvas id="particleCanvas"></canvas>
 
     <!-- Login card -->
     <div class="login-card">
@@ -234,7 +183,6 @@
         </p>
     </div>
 
-    <!-- Page footer -->
     <div class="page-footer">Powered by Payroc</div>
 
     <!-- Bootstrap 5 JS (CDN) -->
@@ -243,39 +191,109 @@
         crossorigin="anonymous"></script>
 
     <script>
-    // Orbs lean gently toward the cursor
     (function() {
-        const orbs = document.querySelectorAll('.orb');
-        const strength = [0.03, 0.025, 0.035]; // different sensitivity per orb
-        let mouseX = window.innerWidth / 2;
-        let mouseY = window.innerHeight / 2;
-        let targetX = mouseX, targetY = mouseY;
-        let currentX = mouseX, currentY = mouseY;
+        var canvas = document.getElementById('particleCanvas');
+        var ctx = canvas.getContext('2d');
 
-        document.addEventListener('mousemove', function(e) {
-            targetX = e.clientX;
-            targetY = e.clientY;
-        });
+        var PARTICLE_COUNT = 120;
+        var MOUSE_RADIUS   = 180;
+        var MOUSE_STRENGTH = 0.02;
+        var RETURN_SPEED   = 0.008;
+
+        // Payroc dark palette on light background
+        var COLORS = [
+            {r: 0, g: 29, b: 78},    // navy
+            {r: 0, g: 81, b: 194},   // cobalt
+            {r: 0, g: 51, b: 145},   // deep cobalt
+        ];
+
+        var mouse = {x: -1000, y: -1000};
+        var particles = [];
+        var w, h;
+
+        function resize() {
+            w = canvas.width  = window.innerWidth;
+            h = canvas.height = window.innerHeight;
+        }
+
+        function Particle() {
+            this.x  = Math.random() * w;
+            this.y  = Math.random() * h;
+            this.ox = this.x;
+            this.oy = this.y;
+            this.vx = (Math.random() - 0.5) * 0.3;
+            this.vy = (Math.random() - 0.5) * 0.3;
+            this.r  = Math.random() * 2.5 + 0.8;
+            this.color = COLORS[Math.floor(Math.random() * COLORS.length)];
+            this.alpha = Math.random() * 0.25 + 0.08;
+        }
+
+        Particle.prototype.update = function() {
+            var dx = mouse.x - this.x;
+            var dy = mouse.y - this.y;
+            var dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist < MOUSE_RADIUS) {
+                var force = (1 - dist / MOUSE_RADIUS) * MOUSE_STRENGTH;
+                this.vx += dx * force;
+                this.vy += dy * force;
+            } else {
+                this.vx += (this.ox - this.x) * RETURN_SPEED;
+                this.vy += (this.oy - this.y) * RETURN_SPEED;
+            }
+
+            this.vx *= 0.96;
+            this.vy *= 0.96;
+            this.x += this.vx;
+            this.y += this.vy;
+
+            // Slow ambient drift
+            this.ox += (Math.random() - 0.5) * 0.12;
+            this.oy += (Math.random() - 0.5) * 0.12;
+            if (this.ox < -20) this.ox = w + 20;
+            if (this.ox > w + 20) this.ox = -20;
+            if (this.oy < -20) this.oy = h + 20;
+            if (this.oy > h + 20) this.oy = -20;
+        };
+
+        Particle.prototype.draw = function() {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(' + this.color.r + ',' + this.color.g + ',' + this.color.b + ',' + this.alpha + ')';
+            ctx.fill();
+        };
 
         function animate() {
-            // Smooth lerp toward mouse
-            currentX += (targetX - currentX) * 0.04;
-            currentY += (targetY - currentY) * 0.04;
-
-            const centerX = window.innerWidth / 2;
-            const centerY = window.innerHeight / 2;
-            const offsetX = currentX - centerX;
-            const offsetY = currentY - centerY;
-
-            orbs.forEach(function(orb, i) {
-                const s = strength[i];
-                const tx = offsetX * s;
-                const ty = offsetY * s;
-                orb.style.transform = 'translate(' + tx + 'px, ' + ty + 'px)';
-            });
-
+            ctx.clearRect(0, 0, w, h);
+            for (var i = 0; i < particles.length; i++) {
+                particles[i].update();
+                particles[i].draw();
+            }
             requestAnimationFrame(animate);
         }
+
+        resize();
+        for (var i = 0; i < PARTICLE_COUNT; i++) {
+            particles.push(new Particle());
+        }
+
+        document.addEventListener('mousemove', function(e) {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+
+        document.addEventListener('mouseleave', function() {
+            mouse.x = -1000;
+            mouse.y = -1000;
+        });
+
+        window.addEventListener('resize', function() {
+            resize();
+            for (var i = 0; i < particles.length; i++) {
+                particles[i].ox = Math.random() * w;
+                particles[i].oy = Math.random() * h;
+            }
+        });
 
         animate();
     })();
