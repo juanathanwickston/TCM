@@ -3,7 +3,21 @@
 {% block title %}Directory | TCM{% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
+<style>
+    /* Directory - Compact sizing to match Inventory */
+    .directory-table {
+        font-size: 0.75rem;
+    }
+    .directory-table th,
+    .directory-table td {
+        vertical-align: middle;
+        padding: 0.35rem 0.5rem;
+    }
+    .form-label { font-size: 0.8rem; }
+    .form-select { font-size: 0.8rem; }
+</style>
+
+<div class="container-fluid" style="padding: 0 1rem 0.5rem 1rem;">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h1 class="h3 mb-0">Directory</h1>
@@ -26,22 +40,21 @@
                 <i class="bi bi-plus-lg me-1"></i>Add SME
             </button>
         </div>
-        <div class="card-body">
+        <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover" id="smeTable">
-                    <thead>
+                <table class="table table-hover mb-0 directory-table" id="smeTable">
+                    <thead class="table-light">
                         <tr>
                             <th>Name</th>
                             <th>Role</th>
                             <th>Email</th>
                             <th>Departments</th>
-                            <th>Notes / Specialties</th>
                             <th class="text-end">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="smeTableBody">
                         <tr>
-                            <td colspan="6" class="text-center text-muted py-4">
+                            <td colspan="5" class="text-center text-muted py-4">
                                 <div class="spinner-border spinner-border-sm me-2"></div>
                                 Loading SMEs...
                             </td>
@@ -181,16 +194,10 @@
         return div.innerHTML;
     }
 
-    // Format department display
+    // Format department display — plain comma-separated text
     function formatDepts(departments) {
         if (!departments || departments.length === 0) return '<span class="text-muted">—</span>';
-        return departments.map(d => {
-            const dept = escapeHtml(d.department);
-            const sub = d.sub_department && d.sub_department !== 'All'
-                ? ' → ' + escapeHtml(d.sub_department)
-                : '';
-            return `<span class="badge bg-light text-dark border me-1 mb-1">${dept}${sub}</span>`;
-        }).join('');
+        return departments.map(d => escapeHtml(d.department)).join(', ');
     }
 
     // Truncate notes
@@ -213,22 +220,21 @@
             const data = await response.json();
 
             if (data.error) {
-                smeTableBody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">${escapeHtml(data.error)}</td></tr>`;
+                smeTableBody.innerHTML = `<tr><td colspan="5" class="text-danger text-center">${escapeHtml(data.error)}</td></tr>`;
                 return;
             }
 
             if (data.smes.length === 0) {
-                smeTableBody.innerHTML = '<tr><td colspan="6" class="text-muted text-center py-4">No SMEs found. Click "Add SME" to create one.</td></tr>';
+                smeTableBody.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-4">No SMEs found. Click "Add SME" to create one.</td></tr>';
                 return;
             }
 
             smeTableBody.innerHTML = data.smes.map(s => `
                 <tr data-sme-id="${s.sme_id}">
-                    <td><strong>${escapeHtml(s.name)}</strong></td>
+                    <td>${escapeHtml(s.name)}</td>
                     <td>${escapeHtml(s.role) || '<span class="text-muted">—</span>'}</td>
                     <td>${s.email ? `<a href="mailto:${escapeHtml(s.email)}">${escapeHtml(s.email)}</a>` : '<span class="text-muted">—</span>'}</td>
                     <td>${formatDepts(s.departments)}</td>
-                    <td>${truncateNotes(s.notes)}</td>
                     <td class="text-end">
                         <button class="btn btn-sm btn-outline-primary edit-sme-btn" title="Edit">
                             <i class="bi bi-pencil"></i>
@@ -240,7 +246,7 @@
                 </tr>
             `).join('');
         } catch (err) {
-            smeTableBody.innerHTML = '<tr><td colspan="6" class="text-danger text-center">Error loading SMEs</td></tr>';
+            smeTableBody.innerHTML = '<tr><td colspan="5" class="text-danger text-center">Error loading SMEs</td></tr>';
         }
     }
 
