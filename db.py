@@ -2157,19 +2157,37 @@ def delete_sme(sme_id: int) -> bool:
 
 def get_sub_departments(department: str) -> List[str]:
     """
-    Get distinct sub-departments for a given department.
+    Get distinct sub-departments for a department family.
     Used for cascading dropdown in SME Directory form.
+    
+    Uses department family prefix matching:
+    - "POS - Sales" → prefix "POS" → matches all "POS - *" departments
+    - "HR" → no separator → exact match only
+    
     Shows ALL sub-departments regardless of resource sync status.
     """
     if not department:
         return []
-    rows = execute("""
-        SELECT DISTINCT sub_department FROM resources 
-        WHERE primary_department = ? 
-          AND sub_department IS NOT NULL
-          AND sub_department != ''
-        ORDER BY sub_department
-    """, (department,), fetch="all")
+    
+    # Extract family prefix: "POS - Sales" → "POS"
+    if ' - ' in department:
+        prefix = department.split(' - ')[0].strip()
+        rows = execute("""
+            SELECT DISTINCT sub_department FROM resources 
+            WHERE (primary_department LIKE ? OR primary_department = ?)
+              AND sub_department IS NOT NULL
+              AND sub_department != ''
+            ORDER BY sub_department
+        """, (prefix + ' - %', prefix), fetch="all")
+    else:
+        rows = execute("""
+            SELECT DISTINCT sub_department FROM resources 
+            WHERE primary_department = ?
+              AND sub_department IS NOT NULL
+              AND sub_department != ''
+            ORDER BY sub_department
+        """, (department,), fetch="all")
+    
     if not rows:
         return []
     # Strip leading underscore from folder naming convention (e.g., _General → General)
