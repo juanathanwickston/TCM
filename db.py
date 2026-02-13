@@ -2157,21 +2157,24 @@ def delete_sme(sme_id: int) -> bool:
 
 def get_sub_departments(department: str) -> List[str]:
     """
-    Get distinct sub-departments for a given department from active resources.
+    Get distinct sub-departments for a given department.
     Used for cascading dropdown in SME Directory form.
+    Shows ALL sub-departments regardless of resource sync status.
     """
     if not department:
         return []
     rows = execute("""
         SELECT DISTINCT sub_department FROM resources 
         WHERE primary_department = ? 
-          AND is_archived = 0 
-          AND is_placeholder = 0 
           AND sub_department IS NOT NULL
           AND sub_department != ''
         ORDER BY sub_department
     """, (department,), fetch="all")
-    return [row['sub_department'] for row in rows] if rows else []
+    if not rows:
+        return []
+    # Strip leading underscore from folder naming convention (e.g., _General → General)
+    return [row['sub_department'].lstrip('_') if row['sub_department'].startswith('_') 
+            else row['sub_department'] for row in rows]
 
 
 # Initialization happens via Django AppConfig.ready() - no import-time side effects
