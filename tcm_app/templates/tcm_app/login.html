@@ -37,12 +37,12 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            background: #f8f9fc;
+            background: #060a14;
             overflow: hidden;
             font-family: 'Geist', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
 
-        #particleCanvas {
+        #starCanvas {
             position: fixed;
             top: 0; left: 0;
             width: 100%; height: 100%;
@@ -54,19 +54,22 @@
         .login-card {
             position: relative;
             z-index: 1;
-            background: #ffffff;
+            background: rgba(255, 255, 255, 0.04);
             border-radius: 12px;
-            box-shadow: 0 4px 24px rgba(0, 29, 78, 0.1), 0 1px 3px rgba(0, 29, 78, 0.06);
-            border: 1px solid rgba(0, 29, 78, 0.06);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             padding: 2.5rem;
             width: 100%;
             max-width: 380px;
-            animation: slideUp 0.6s ease-out;
+            opacity: 0;
+            transform: translateY(4px);
+            animation: cardAppear 0.8s ease-out 0.3s forwards;
         }
 
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(24px); }
-            to   { opacity: 1; transform: translateY(0); }
+        @keyframes cardAppear {
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .login-header {
@@ -78,37 +81,59 @@
             width: 140px;
             height: auto;
             margin-bottom: 0.75rem;
+            filter: brightness(0) invert(1);
+            opacity: 0.9;
         }
 
         .login-subtitle {
             font-size: 0.8rem;
             font-weight: 400;
-            color: #6b7280;
+            color: rgba(255, 255, 255, 0.5);
             letter-spacing: 0.5px;
             margin-bottom: 0.15rem;
         }
 
         .login-tagline {
-            color: #9ca3af;
+            color: rgba(255, 255, 255, 0.3);
             font-size: 0.7rem;
             margin: 0;
+            font-style: italic;
+            opacity: 0;
+            animation: taglineFade 0.6s ease-out 1.1s forwards;
+        }
+
+        @keyframes taglineFade {
+            to { opacity: 1; }
+        }
+
+        hr.divider {
+            border-color: rgba(255, 255, 255, 0.08);
         }
 
         .form-label {
             font-weight: 500;
             font-size: 0.8rem;
-            color: #001D4E;
+            color: rgba(255, 255, 255, 0.7);
         }
 
         .form-control {
             font-size: 0.85rem;
-            border: 1px solid #d1d5db;
+            border: 1px solid rgba(255, 255, 255, 0.12);
             padding: 0.6rem 0.75rem;
+            background: rgba(255, 255, 255, 0.06);
+            color: #ffffff;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .form-control::placeholder {
+            color: rgba(255, 255, 255, 0.25);
         }
 
         .form-control:focus {
             border-color: #0051C2;
-            box-shadow: 0 0 0 3px rgba(0, 81, 194, 0.1);
+            box-shadow: 0 0 0 3px rgba(0, 81, 194, 0.2);
+            background: rgba(255, 255, 255, 0.08);
+            color: #ffffff;
         }
 
         .btn-primary {
@@ -131,7 +156,7 @@
 
         .login-footer-text {
             font-size: 0.7rem;
-            color: #9ca3af;
+            color: rgba(255, 255, 255, 0.3);
             text-align: center;
             margin-top: 1.25rem;
             margin-bottom: 0;
@@ -146,33 +171,41 @@
         }
 
         .page-footer a {
-            opacity: 0.4;
+            opacity: 0.3;
             transition: opacity 0.2s;
         }
 
         .page-footer a:hover {
-            opacity: 0.7;
+            opacity: 0.6;
         }
 
         .page-footer img {
             height: 20px;
             width: auto;
+            filter: brightness(0) invert(1);
+        }
+
+        /* Alert styling for dark bg */
+        .alert-danger {
+            background: rgba(220, 53, 69, 0.15);
+            border-color: rgba(220, 53, 69, 0.3);
+            color: #f8a4ad;
         }
     </style>
 </head>
 
 <body>
-    <canvas id="particleCanvas"></canvas>
+    <canvas id="starCanvas"></canvas>
 
     <!-- Login card -->
     <div class="login-card">
         <div class="login-header">
             <img src="{% static 'img/payroc-logo.svg' %}" alt="Payroc" class="login-logo">
             <div class="login-subtitle">Training Catalogue Manager</div>
-            <div class="login-tagline">Sign in to continue</div>
+            <div class="login-tagline">Built for the people who build people.</div>
         </div>
 
-        <hr class="my-3" style="border-color: #e5e7eb;">
+        <hr class="my-3 divider">
 
         {% if messages %}
         {% for message in messages %}
@@ -217,120 +250,239 @@
 
     <script>
     (function() {
-        var canvas = document.getElementById('particleCanvas');
+        var canvas = document.getElementById('starCanvas');
         var ctx = canvas.getContext('2d');
+        var w, h;
 
-        var PARTICLE_COUNT = 150;
-        var GRAVITY        = 800;    // gravitational constant
-        var MAX_FORCE      = 0.5;    // cap so particles don't slingshot
-        var DAMPING        = 0.998;  // very light drag — feels like space
-        var MIN_DIST       = 40;     // softening distance to avoid singularity
-
-        // Payroc dark palette
-        var COLORS = [
-            {r: 0, g: 29, b: 78},    // navy
-            {r: 0, g: 81, b: 194},   // cobalt
-            {r: 0, g: 51, b: 145},   // deep cobalt
-            {r: 0, g: 178, b: 146},  // muted mint
+        // ── Configuration ──
+        var STAR_LAYERS = [
+            { count: 120, sizeMin: 0.3, sizeMax: 0.8,  alphaMin: 0.15, alphaMax: 0.35, speed: 0.02 },  // distant
+            { count:  60, sizeMin: 0.6, sizeMax: 1.2,  alphaMin: 0.25, alphaMax: 0.50, speed: 0.06 },  // mid
+            { count:  25, sizeMin: 1.0, sizeMax: 1.8,  alphaMin: 0.35, alphaMax: 0.65, speed: 0.12 },  // near
         ];
 
-        var mouse = {x: -1000, y: -1000, active: false};
-        var particles = [];
-        var w, h;
+        // Payroc-tinted star colors — subtle, not saturated
+        var STAR_COLORS = [
+            { r: 180, g: 200, b: 255 },   // cool white-blue
+            { r: 200, g: 210, b: 240 },   // soft white
+            { r: 160, g: 190, b: 255 },   // light cobalt tint
+            { r: 180, g: 230, b: 220 },   // faint mint tint
+            { r: 220, g: 220, b: 240 },   // warm white
+        ];
+
+        var stars = [];
+        var northStar = null;
+        var shootingStar = null;
+        var nextShootingStarTime = 0;
 
         function resize() {
             w = canvas.width  = window.innerWidth;
             h = canvas.height = window.innerHeight;
         }
 
-        function Particle() {
-            this.x  = Math.random() * w;
-            this.y  = Math.random() * h;
-            // Very slow initial drift — floating through space
-            var angle = Math.random() * Math.PI * 2;
-            var speed = Math.random() * 0.3 + 0.05;
-            this.vx = Math.cos(angle) * speed;
-            this.vy = Math.sin(angle) * speed;
-            // Varied sizes: tiny stars to larger moons
-            this.r  = Math.random() * 3.5 + 0.5;
-            this.color = COLORS[Math.floor(Math.random() * COLORS.length)];
-            this.alpha = Math.random() * 0.35 + 0.1;
-            // Twinkle
-            this.twinkleSpeed = Math.random() * 0.01 + 0.003;
-            this.twinklePhase = Math.random() * Math.PI * 2;
+        // ── Stars ──
+        function createStar(layer) {
+            var color = STAR_COLORS[Math.floor(Math.random() * STAR_COLORS.length)];
+            return {
+                x: Math.random() * w,
+                y: Math.random() * h,
+                r: layer.sizeMin + Math.random() * (layer.sizeMax - layer.sizeMin),
+                alpha: layer.alphaMin + Math.random() * (layer.alphaMax - layer.alphaMin),
+                baseAlpha: 0,
+                color: color,
+                speed: layer.speed * (0.8 + Math.random() * 0.4),
+                // Twinkle: each star on its own cycle (4-12 seconds)
+                twinkleSpeed: (0.0008 + Math.random() * 0.002),
+                twinklePhase: Math.random() * Math.PI * 2,
+                twinkleDepth: 0.15 + Math.random() * 0.25,  // how much alpha varies
+            };
         }
 
-        Particle.prototype.update = function() {
-            // Gravitational pull toward cursor
-            if (mouse.active) {
-                var dx = mouse.x - this.x;
-                var dy = mouse.y - this.y;
-                var distSq = dx * dx + dy * dy;
-                var dist = Math.sqrt(distSq);
-
-                // Inverse-square gravity, softened at close range
-                if (dist > 1) {
-                    var softenedDist = Math.max(dist, MIN_DIST);
-                    var force = GRAVITY / (softenedDist * softenedDist);
-                    force = Math.min(force, MAX_FORCE);
-                    var fx = (dx / dist) * force;
-                    var fy = (dy / dist) * force;
-                    this.vx += fx;
-                    this.vy += fy;
+        function initStars() {
+            stars = [];
+            for (var l = 0; l < STAR_LAYERS.length; l++) {
+                var layer = STAR_LAYERS[l];
+                for (var i = 0; i < layer.count; i++) {
+                    var s = createStar(layer);
+                    s.baseAlpha = s.alpha;
+                    stars.push(s);
                 }
             }
+        }
 
-            // Very light damping — particles glide
-            this.vx *= DAMPING;
-            this.vy *= DAMPING;
+        // ── North Star ──
+        // Fixed position (upper-right quadrant), slightly brighter, subtle glow
+        function initNorthStar() {
+            northStar = {
+                x: w * (0.75 + Math.random() * 0.1),
+                y: h * (0.12 + Math.random() * 0.08),
+                r: 1.6,
+                baseAlpha: 0.7,
+                glowR: 6,
+                glowAlpha: 0.06,
+                pulsePhase: 0,
+                pulseSpeed: 0.003,
+                hovered: false,
+            };
+        }
 
-            this.x += this.vx;
-            this.y += this.vy;
+        // ── Shooting Star ──
+        function scheduleShootingStar() {
+            // 45-90 seconds from now
+            nextShootingStarTime = Date.now() + (45000 + Math.random() * 45000);
+        }
 
-            // Wrap around screen edges — infinite space feel
-            if (this.x < -10) this.x = w + 10;
-            if (this.x > w + 10) this.x = -10;
-            if (this.y < -10) this.y = h + 10;
-            if (this.y > h + 10) this.y = -10;
+        function spawnShootingStar() {
+            // Random start position, biased toward top half
+            var startX = Math.random() * w;
+            var startY = Math.random() * h * 0.4;
+            // Random angle (mostly horizontal, slight downward)
+            var angle = (Math.random() * 0.4 + 0.1) * (Math.random() < 0.5 ? 1 : -1);
+            var speed = 4 + Math.random() * 3;
+            var dx = Math.cos(angle) * speed;
+            var dy = Math.abs(Math.sin(angle)) * speed * 0.4 + speed * 0.2;
 
-            // Gentle twinkle
-            this.twinklePhase += this.twinkleSpeed;
-        };
+            shootingStar = {
+                x: startX, y: startY,
+                dx: dx, dy: dy,
+                alpha: 1.0,
+                length: 60 + Math.random() * 40,
+                decay: 0.015 + Math.random() * 0.005,
+                trail: [],
+            };
+        }
 
-        Particle.prototype.draw = function() {
-            var twinkle = 0.7 + 0.3 * Math.sin(this.twinklePhase);
-            var a = this.alpha * twinkle;
+        // ── Tooltip for North Star ──
+        var tooltip = document.createElement('div');
+        tooltip.textContent = 'Your source of truth.';
+        tooltip.style.cssText = 'position:fixed;padding:4px 10px;background:rgba(0,0,0,0.7);color:rgba(255,255,255,0.7);font-size:11px;border-radius:4px;pointer-events:none;z-index:10;opacity:0;transition:opacity 0.3s;font-family:Geist,sans-serif;letter-spacing:0.3px;';
+        document.body.appendChild(tooltip);
+
+        canvas.style.pointerEvents = 'auto';
+        canvas.style.cursor = 'default';
+
+        canvas.addEventListener('mousemove', function(e) {
+            if (!northStar) return;
+            var dx = e.clientX - northStar.x;
+            var dy = e.clientY - northStar.y;
+            var dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 20) {
+                northStar.hovered = true;
+                tooltip.style.opacity = '1';
+                tooltip.style.left = (northStar.x + 12) + 'px';
+                tooltip.style.top = (northStar.y - 8) + 'px';
+            } else {
+                northStar.hovered = false;
+                tooltip.style.opacity = '0';
+            }
+        });
+
+        // ── Render ──
+        function drawStar(x, y, r, color, alpha) {
             ctx.beginPath();
-            ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(' + this.color.r + ',' + this.color.g + ',' + this.color.b + ',' + a + ')';
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',' + alpha + ')';
             ctx.fill();
-        };
+        }
 
         function animate() {
             ctx.clearRect(0, 0, w, h);
-            for (var i = 0; i < particles.length; i++) {
-                particles[i].update();
-                particles[i].draw();
+
+            // Draw background gradient (very subtle deep navy)
+            var grad = ctx.createRadialGradient(w * 0.5, h * 0.4, 0, w * 0.5, h * 0.5, Math.max(w, h) * 0.8);
+            grad.addColorStop(0, 'rgba(0, 20, 50, 0.15)');
+            grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, w, h);
+
+            // Stars
+            for (var i = 0; i < stars.length; i++) {
+                var s = stars[i];
+                // Slow drift (leftward, simulating sky rotation)
+                s.x -= s.speed;
+                if (s.x < -5) s.x = w + 5;
+
+                // Twinkle
+                s.twinklePhase += s.twinkleSpeed;
+                var twinkle = 1 - s.twinkleDepth + s.twinkleDepth * (0.5 + 0.5 * Math.sin(s.twinklePhase));
+                var alpha = s.baseAlpha * twinkle;
+
+                drawStar(s.x, s.y, s.r, s.color, alpha);
             }
+
+            // North Star
+            if (northStar) {
+                northStar.pulsePhase += northStar.pulseSpeed;
+                var nsPulse = 0.85 + 0.15 * Math.sin(northStar.pulsePhase);
+                var nsAlpha = northStar.baseAlpha * nsPulse;
+
+                // Subtle glow
+                var glowAlpha = northStar.glowAlpha * nsPulse;
+                if (northStar.hovered) glowAlpha *= 2;
+                ctx.beginPath();
+                ctx.arc(northStar.x, northStar.y, northStar.glowR, 0, Math.PI * 2);
+                var nsGrad = ctx.createRadialGradient(northStar.x, northStar.y, 0, northStar.x, northStar.y, northStar.glowR);
+                nsGrad.addColorStop(0, 'rgba(180, 210, 255, ' + glowAlpha + ')');
+                nsGrad.addColorStop(1, 'rgba(180, 210, 255, 0)');
+                ctx.fillStyle = nsGrad;
+                ctx.fill();
+
+                // Core dot
+                drawStar(northStar.x, northStar.y, northStar.hovered ? 2.0 : northStar.r, { r: 200, g: 220, b: 255 }, nsAlpha);
+            }
+
+            // Shooting Star
+            var now = Date.now();
+            if (!shootingStar && now >= nextShootingStarTime) {
+                spawnShootingStar();
+            }
+
+            if (shootingStar) {
+                var ss = shootingStar;
+                ss.trail.unshift({ x: ss.x, y: ss.y, alpha: ss.alpha });
+
+                ss.x += ss.dx;
+                ss.y += ss.dy;
+                ss.alpha -= ss.decay;
+
+                // Draw trail
+                var maxTrailLen = 20;
+                if (ss.trail.length > maxTrailLen) ss.trail.length = maxTrailLen;
+
+                for (var t = 0; t < ss.trail.length; t++) {
+                    var tp = ss.trail[t];
+                    var ta = tp.alpha * (1 - t / maxTrailLen) * 0.6;
+                    var tr = 1.2 * (1 - t / maxTrailLen);
+                    if (ta > 0.01) {
+                        drawStar(tp.x, tp.y, tr, { r: 220, g: 230, b: 255 }, ta);
+                    }
+                }
+
+                // Draw head
+                if (ss.alpha > 0.01) {
+                    drawStar(ss.x, ss.y, 1.5, { r: 240, g: 245, b: 255 }, ss.alpha);
+                }
+
+                // Remove when faded or off screen
+                if (ss.alpha <= 0 || ss.x < -100 || ss.x > w + 100 || ss.y > h + 100) {
+                    shootingStar = null;
+                    scheduleShootingStar();
+                }
+            }
+
             requestAnimationFrame(animate);
         }
 
+        // ── Init ──
         resize();
-        for (var i = 0; i < PARTICLE_COUNT; i++) {
-            particles.push(new Particle());
-        }
+        initStars();
+        initNorthStar();
+        scheduleShootingStar();
 
-        document.addEventListener('mousemove', function(e) {
-            mouse.x = e.clientX;
-            mouse.y = e.clientY;
-            mouse.active = true;
+        window.addEventListener('resize', function() {
+            resize();
+            initNorthStar(); // reposition north star
         });
-
-        document.addEventListener('mouseleave', function() {
-            mouse.active = false;
-        });
-
-        window.addEventListener('resize', resize);
 
         animate();
     })();
