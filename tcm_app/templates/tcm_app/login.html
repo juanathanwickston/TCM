@@ -43,6 +43,7 @@
             width: 100%; height: 100%;
             pointer-events: none;
             z-index: 0;
+            filter: blur(1px);
         }
 
         /* ── Login card ── */
@@ -209,7 +210,7 @@
         const ctx = canvas.getContext('2d');
 
         // ── Config ──
-        const PARTICLE_COUNT = 55;
+        const PARTICLE_COUNT = 200;
         const CONNECT_DIST   = 140;   // max distance to draw lines between particles
         const MOUSE_RADIUS   = 180;   // magnetic attraction radius
         const MOUSE_STRENGTH = 0.02;  // how strongly particles pull toward cursor
