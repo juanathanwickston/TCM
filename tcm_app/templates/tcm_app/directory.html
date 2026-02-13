@@ -189,7 +189,7 @@
         div.textContent = text;
         return div.innerHTML;
     }
-    // Format department display — count with hover tooltip
+    // Format department display — count with Bootstrap tooltip
     function formatDepts(departments) {
         if (!departments || departments.length === 0) return '<span class="text-muted">—</span>';
         // Deduplicate
@@ -200,15 +200,15 @@
             seen.add(key);
             return true;
         });
-        // Build tooltip lines
-        const lines = unique.map(d => {
-            let line = d.department;
-            if (d.sub_department && d.sub_department !== 'All') line += ' · ' + d.sub_department;
+        // Build tooltip HTML
+        const tooltipHtml = unique.map(d => {
+            let line = escapeHtml(d.department);
+            if (d.sub_department && d.sub_department !== 'All') line += ' · ' + escapeHtml(d.sub_department);
             return line;
-        });
+        }).join('<br>');
         const count = unique.length;
         const label = count === 1 ? '1 department' : count + ' departments';
-        return `<span style="cursor:help; text-decoration:underline dotted;" title="${escapeHtml(lines.join('\n'))}">${label}</span>`;
+        return `<span class="dept-tip" data-bs-toggle="tooltip" data-bs-html="true" data-bs-title="${tooltipHtml}" style="cursor:help; border-bottom:1px dotted #999;">${label}</span>`;
     }
 
     // Truncate notes
@@ -259,6 +259,10 @@
         } catch (err) {
             smeTableBody.innerHTML = '<tr><td colspan="5" class="text-danger text-center">Error loading SMEs</td></tr>';
         }
+        // Initialize Bootstrap tooltips on new DOM
+        smeTableBody.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+            new bootstrap.Tooltip(el, { delay: { show: 0, hide: 100 } });
+        });
     }
 
     // Load on page load
