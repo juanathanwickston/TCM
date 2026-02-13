@@ -333,6 +333,7 @@
   const addSmeModal = new bootstrap.Modal(addSmeModalEl);
   const smeDeptRowsContainer = document.getElementById('smeDeptRowsContainer');
   let pendingSmeDropdown = null; // track which dropdown triggered "+ Add SME"
+  let pendingSmeOriginalValue = ''; // original value to restore on cancel
 
   function escapeHtml(text) {
     const d = document.createElement('div');
@@ -411,7 +412,8 @@
     if (!sel.classList.contains('sme-dropdown') && sel.id !== 'modalOwner') return;
     if (sel.value === '__add_sme__') {
       pendingSmeDropdown = sel;
-      sel.value = ''; // reset so it doesn't show "+ Add SME" as selected
+      pendingSmeOriginalValue = sel.dataset ? (sel.closest('tr')?.dataset.originalOwner || '') : '';
+      sel.value = pendingSmeOriginalValue; // restore immediately so no dirty mark
       // Reset and open Add SME modal
       document.getElementById('newSmeName').value = '';
       document.getElementById('newSmeRole').value = '';
@@ -420,6 +422,16 @@
       smeDeptRowsContainer.innerHTML = '';
       createSmeDeptRow();
       addSmeModal.show();
+    }
+  });
+
+  // On Add SME modal cancel/dismiss — restore the original value
+  addSmeModalEl.addEventListener('hidden.bs.modal', function() {
+    if (pendingSmeDropdown) {
+      pendingSmeDropdown.value = pendingSmeOriginalValue;
+      pendingSmeDropdown.dispatchEvent(new Event('change'));
+      pendingSmeDropdown = null;
+      pendingSmeOriginalValue = '';
     }
   });
 
@@ -458,14 +470,13 @@
       const data = await response.json();
       if (data.success) {
         addSmeModal.hide();
-        // Add the new SME to ALL dropdowns on the page
-        refreshSmeDropdowns(name);
-        // Auto-select the new SME in the dropdown that triggered this
-        if (pendingSmeDropdown) {
-          pendingSmeDropdown.value = name;
-          pendingSmeDropdown.dispatchEvent(new Event('change'));
-          pendingSmeDropdown = null;
-        }
+        // Add the new SME to ALL dropdowns but do NOT auto-select.
+        // Creating an SME is a directory operation, not an investment change.
+        // Clear pendingSmeDropdown so the hidden.bs.modal handler
+        // restores the original value (no dirty mark).
+        pendingSmeDropdown = null;
+        pendingSmeOriginalValue = '';
+        refreshSmeDropdowns();
       } else {
         toastMessage.textContent = data.error || 'Save failed';
         errorToast.show();
@@ -481,7 +492,7 @@
   });
 
   // Refresh all SME dropdowns by fetching fresh list
-  async function refreshSmeDropdowns(selectName) {
+  async function refreshSmeDropdowns() {
     try {
       const resp = await fetch('{% url "list_smes" %}');
       const data = await resp.json();
@@ -489,14 +500,14 @@
 
       document.querySelectorAll('.sme-dropdown, #modalOwner').forEach(function(sel) {
         const currentVal = sel.value;
-        // Clear all but first (-) and last (+ Add SME)
+        // Clear all options
         while (sel.options.length > 1) sel.remove(1);
-        // Insert SME options before the last option
+        // Re-insert SME options
         for (const sme of smes) {
           const opt = document.createElement('option');
           opt.value = sme.name;
           opt.textContent = sme.name;
-          sel.insertBefore(opt, null);
+          sel.appendChild(opt);
         }
         // Re-add the "+ Add SME" option at the end
         const addOpt = document.createElement('option');
@@ -504,8 +515,8 @@
         addOpt.textContent = '+ Add SME';
         addOpt.className = 'text-primary';
         sel.appendChild(addOpt);
-        // Restore selection
-        sel.value = (selectName && (currentVal === '' || currentVal === '__add_sme__')) ? selectName : currentVal;
+        // Restore previous selection
+        sel.value = currentVal;
       });
     } catch (err) { /* silently fail */ }
   }
