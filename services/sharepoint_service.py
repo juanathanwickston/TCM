@@ -397,7 +397,8 @@ def sync_from_sharepoint() -> Dict[str, Any]:
         archive_stale_resources,
         record_sync_run,
         upsert_resource,
-        clear_cache
+        clear_cache,
+        cleanup_stale_departments
     )
     
     # Phase 1: Timestamp
@@ -459,6 +460,10 @@ def sync_from_sharepoint() -> Dict[str, Any]:
     archived_count = archive_stale_resources(sync_started_at)
     _logger.info(f"Archived stale resources: {archived_count}")
     
+    # Phase 5b: Clean up stale departments
+    stale_dept_count = cleanup_stale_departments(sync_started_at)
+    _logger.info(f"Stale departments cleaned up: {stale_dept_count}")
+    
     # Phase 6: Metrics
     active_after = get_active_resource_count()
     added_count = stats['new_containers']
@@ -509,7 +514,7 @@ def _traverse_folder(
     Validates every item before processing.
     """
     from services.container_service import parse_path, is_leaf_container, parse_links_content
-    from db import upsert_resource, make_resource_key
+    from db import upsert_resource, make_resource_key, upsert_department
     
     # Build URL for children
     if item_id == "root":
@@ -558,6 +563,10 @@ def _traverse_folder(
                 # DIAGNOSTIC: Log folder entry with depth
                 folder_depth = len(item_relative.split('/')) if item_relative else 0
                 _logger.info(f"[SYNC] FOLDER: {item_relative} (depth {folder_depth})")
+                
+                # Register L0 folders as departments (depth 1 = top-level department)
+                if folder_depth == 1:
+                    upsert_department(item['name'], sync_started_at)
                 
                 # Recurse into all folders (traversal continues, no folder records created)
                 _traverse_folder(

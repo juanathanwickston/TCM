@@ -1512,19 +1512,25 @@ def get_active_containers_filtered(
 @cached(30)
 def get_active_departments() -> List[str]:
     """
-    Get distinct departments from active, non-placeholder containers.
+    Get distinct departments from active, non-placeholder containers
+    AND from the departments table (folder-aware sync).
     
     Returns:
         Sorted list of department names (raw folder names)
     """
     rows = execute("""
-        SELECT DISTINCT primary_department
-        FROM resources
-        WHERE is_archived = 0 AND is_placeholder = 0
-          AND primary_department IS NOT NULL
-        ORDER BY primary_department
+        SELECT DISTINCT dept FROM (
+            SELECT primary_department AS dept
+            FROM resources
+            WHERE is_archived = 0 AND is_placeholder = 0
+              AND primary_department IS NOT NULL
+            UNION
+            SELECT department AS dept
+            FROM departments
+        ) combined
+        ORDER BY dept
     """, fetch="all")
-    return [row['primary_department'] for row in rows] if rows else []
+    return [row['dept'] for row in rows] if rows else []
 
 
 @cached(30)
@@ -1604,19 +1610,26 @@ def get_active_resources_filtered(
 @cached(30)
 def get_active_resource_departments() -> List[str]:
     """
-    Get distinct departments from active RESOURCES (file/link only).
+    Get distinct departments from active RESOURCES (file/link only)
+    AND from the departments table (folder-aware sync).
     
-    For Inventory filter dropdown. Excludes departments that only contain folders.
+    For Inventory/Investment/Directory filter dropdowns.
+    Includes departments from folder structure even if they have zero resources.
     """
     rows = execute("""
-        SELECT DISTINCT primary_department
-        FROM resources
-        WHERE is_archived = 0 AND is_placeholder = 0
-          AND resource_type IN ('file', 'link')
-          AND primary_department IS NOT NULL
-        ORDER BY primary_department
+        SELECT DISTINCT dept FROM (
+            SELECT primary_department AS dept
+            FROM resources
+            WHERE is_archived = 0 AND is_placeholder = 0
+              AND resource_type IN ('file', 'link')
+              AND primary_department IS NOT NULL
+            UNION
+            SELECT department AS dept
+            FROM departments
+        ) combined
+        ORDER BY dept
     """, fetch="all")
-    return [row['primary_department'] for row in rows] if rows else []
+    return [row['dept'] for row in rows] if rows else []
 
 
 @cached(30)
@@ -1884,6 +1897,33 @@ def get_valid_departments() -> List[str]:
     """Get list of valid departments from folder structure."""
     rows = execute("SELECT department FROM departments ORDER BY department", fetch="all")
     return [row['department'] for row in rows] if rows else []
+
+
+def cleanup_stale_departments(sync_started_at: str) -> int:
+    """
+    Remove departments not seen in current sync.
+    
+    Same pattern as archive_stale_resources:
+    Any department with last_seen < sync_started_at was NOT
+    encountered during traversal and should be removed.
+    
+    Hard delete (not soft) because departments are lightweight folder names.
+    If the folder reappears, the next sync re-creates it.
+    
+    Returns: number of departments removed.
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(adapt_query("""
+                DELETE FROM departments
+                WHERE last_seen < ?
+            """), (sync_started_at,))
+            removed_count = cursor.rowcount
+            conn.commit()
+            return removed_count
+    finally:
+        return_connection(conn)
 
 
 # -----------------------------------------------------------------------------

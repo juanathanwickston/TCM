@@ -400,7 +400,8 @@ def import_from_folder(root_dir: str) -> Dict[str, Any]:
     from datetime import datetime, timezone
     from db import (
         get_active_resource_count, archive_stale_resources, record_sync_run,
-        upsert_department, transaction, batch_upsert_resources, clear_cache
+        upsert_department, cleanup_stale_departments,
+        transaction, batch_upsert_resources, clear_cache
     )
     
     # Record sync start time (all upserts use this as last_seen)
@@ -576,6 +577,9 @@ def import_from_folder(root_dir: str) -> Dict[str, Any]:
     # -------------------------------------------------------------------------
     for dept in discovered_departments:
         upsert_department(dept, sync_started_at)
+    
+    # Remove departments not seen in this sync
+    cleanup_stale_departments(sync_started_at)
     
     # Record sync run for CFO metrics
     active_after = get_active_resource_count()
