@@ -556,6 +556,10 @@ def init_db() -> None:
                     CREATE INDEX IF NOT EXISTS idx_resources_approved 
                     ON resources(approved_for_investment)
                 """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_resources_drive_item_id
+                    ON resources(drive_item_id)
+                """)
                 
                 # Legacy catalog_items table (for backwards compatibility)
                 cursor.execute("""
@@ -612,6 +616,15 @@ def init_db() -> None:
                         added_count INTEGER NOT NULL,
                         archived_count INTEGER NOT NULL,
                         active_total_after INTEGER NOT NULL
+                    )
+                """)
+                
+                # Sync settings table (delta token storage)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS sync_settings (
+                        setting_key TEXT PRIMARY KEY,
+                        setting_value TEXT,
+                        updated_at TEXT
                     )
                 """)
                 
@@ -1448,6 +1461,59 @@ def record_sync_run(
         started_at, finished_at, source,
         active_total_before, added_count, archived_count, active_total_after
     ))
+
+
+# =============================================================================
+# DELTA SYNC HELPERS
+# =============================================================================
+def load_delta_token(source: str = "sharepoint") -> Optional[str]:
+    """Load the last delta token for a sync source."""
+    row = execute(
+        "SELECT setting_value FROM sync_settings WHERE setting_key = ?",
+        (f"delta_token_{source}",),
+        fetch="one"
+    )
+    return row['setting_value'] if row else None
+
+
+def save_delta_token(token: str, source: str = "sharepoint") -> None:
+    """Save a delta token for a sync source."""
+    now = datetime.now(timezone.utc).isoformat()
+    execute(adapt_query("""
+        INSERT INTO sync_settings (setting_key, setting_value, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT (setting_key)
+        DO UPDATE SET setting_value = EXCLUDED.setting_value,
+                      updated_at = EXCLUDED.updated_at
+    """), (f"delta_token_{source}", token, now))
+
+
+def archive_resource_by_drive_id(drive_item_id: str) -> bool:
+    """
+    Archive a single resource by its SharePoint drive item ID.
+    Used by delta sync to process deletion tombstones.
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(adapt_query("""
+                UPDATE resources SET is_archived = 1
+                WHERE drive_item_id = ? AND is_archived = 0
+            """), (drive_item_id,))
+            affected = cursor.rowcount
+            conn.commit()
+            return affected > 0
+    finally:
+        return_connection(conn)
+
+
+def get_resource_by_drive_id(drive_item_id: str) -> Optional[Dict[str, Any]]:
+    """Look up a resource by its SharePoint drive item ID."""
+    return execute(
+        "SELECT resource_key, relative_path, resource_type FROM resources WHERE drive_item_id = ?",
+        (drive_item_id,),
+        fetch="one"
+    )
 
 
 def get_active_containers() -> List[Dict[str, Any]]:

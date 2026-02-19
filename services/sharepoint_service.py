@@ -19,6 +19,7 @@ GUARDS:
 """
 
 import os
+import re
 import hashlib
 import logging
 import time
@@ -162,6 +163,11 @@ def _make_graph_request(
                 # Permission denied or not found - skip item
                 _logger.warning(f"Graph API {response.status_code}: {url}")
                 return None
+            
+            elif response.status_code == 410:
+                # Delta token expired - caller should fall back to full sync
+                _logger.warning("Graph API 410 Gone: Delta token expired, full sync required")
+                return {"_delta_expired": True}
             
             elif response.status_code == 401:
                 # Auth failure - fail closed
@@ -376,6 +382,218 @@ def _parse_path_components(relative_path: str) -> Dict[str, Optional[str]]:
 
 
 # -----------------------------------------------------------------------------
+# DELTA SYNC HELPERS
+# -----------------------------------------------------------------------------
+def _resolve_parent_path(
+    parent_id: str,
+    drive_id: str,
+    headers: Dict[str, str]
+) -> Optional[str]:
+    """
+    Resolve the relative path for a parent folder by its ID.
+    
+    Calls GET /drives/{drive_id}/items/{parent_id} to get the full
+    parentReference.path (available on standard item GET, NOT on delta).
+    
+    Returns relative path like "HR/Onboarding/Videos" or None on failure.
+    """
+    url = f"{GRAPH_BASE_URL}/drives/{drive_id}/items/{parent_id}"
+    result = _make_graph_request(url, headers)
+    
+    if not result or result.get("_delta_expired"):
+        return None
+    
+    # Build path from the parent item's own parentReference + name
+    parent_ref = result.get("parentReference", {})
+    parent_path = parent_ref.get("path", "")
+    
+    # Strip drive prefix to get relative path
+    relative = _strip_drive_prefix(parent_path, drive_id)
+    
+    # Append this folder's own name
+    name = result.get("name", "")
+    if relative:
+        return f"{relative}/{name}"
+    return name
+
+
+def _process_delta(
+    drive_id: str,
+    headers: Dict[str, str],
+    delta_token: str,
+    sync_started_at: str,
+    stats: Dict[str, int]
+) -> Optional[str]:
+    """
+    Process delta changes from Microsoft Graph.
+    
+    Returns:
+        New delta token string on success.
+        None if delta token expired (410 Gone) — caller should full sync.
+    """
+    from db import (
+        upsert_resource, make_resource_key, upsert_department,
+        archive_resource_by_drive_id, get_resource_by_drive_id
+    )
+    from services.container_service import (
+        parse_path, is_leaf_container
+    )
+    
+    url = f"{GRAPH_BASE_URL}/drives/{drive_id}/root/delta(token='{delta_token}')"
+    new_token = None
+    
+    while url:
+        result = _make_graph_request(url, headers)
+        
+        if not result:
+            _logger.warning("Delta query returned None, aborting delta sync")
+            return None
+        
+        # Check for expired token sentinel
+        if result.get("_delta_expired"):
+            _logger.info("Delta token expired, falling back to full sync")
+            return None
+        
+        items = result.get("value", [])
+        _logger.info(f"[DELTA] Processing page with {len(items)} items")
+        
+        for item in items:
+            item_id = item.get("id")
+            item_name = item.get("name", "")
+            
+            # --- DELETED ITEMS ---
+            if "deleted" in item:
+                if item_id:
+                    archived = archive_resource_by_drive_id(item_id)
+                    if archived:
+                        stats['archived_delta'] += 1
+                        _logger.info(f"[DELTA] ARCHIVED: {item_id}")
+                continue
+            
+            # --- OS ARTIFACT EXCLUSION ---
+            if item_name.lower() in EXCLUDED_FILENAMES:
+                stats['skipped_excluded'] += 1
+                continue
+            
+            # --- SCOPE GUARD (relaxed for delta - path may be absent) ---
+            parent_ref = item.get("parentReference", {})
+            item_drive = parent_ref.get("driveId")
+            if item_drive and item_drive != drive_id:
+                stats['scope_violations'] += 1
+                _logger.warning(f"[DELTA] SCOPE: {item_id} in wrong drive {item_drive}")
+                continue
+            
+            # --- FOLDERS ---
+            if "folder" in item:
+                stats['folders_scanned'] += 1
+                
+                # Check if this is an L0 department folder
+                parent_id = parent_ref.get("id")
+                parent_path = parent_ref.get("path", "")
+                
+                # If parent path is available and ends with /root: → this is L0
+                if parent_path and parent_path.endswith("/root:"):
+                    upsert_department(item_name, sync_started_at)
+                    _logger.info(f"[DELTA] DEPT: {item_name}")
+                elif parent_id:
+                    # Resolve via API if path is missing (delta doesn't include path)
+                    resolved = _resolve_parent_path(parent_id, drive_id, headers)
+                    if resolved is not None and (not resolved or resolved == "root"):
+                        upsert_department(item_name, sync_started_at)
+                        _logger.info(f"[DELTA] DEPT (resolved): {item_name}")
+                continue  # Don't create resources for folders
+            
+            # --- FILES ---
+            if "file" in item:
+                stats['files_scanned'] += 1
+                
+                # Check if we already know this item
+                existing = get_resource_by_drive_id(item_id)
+                
+                if existing:
+                    # Known item — refresh via upsert using existing path
+                    relative_path = existing['relative_path']
+                    parent_path = "/".join(relative_path.split("/")[:-1])
+                    parsed = parse_path(parent_path)
+                    
+                    upsert_resource(
+                        resource_key=existing['resource_key'],
+                        relative_path=relative_path,
+                        resource_type=existing['resource_type'],
+                        bucket=parsed.get('bucket'),
+                        primary_department=parsed.get('primary_department'),
+                        sub_department=parsed.get('sub_department'),
+                        training_type=parsed.get('training_type'),
+                        display_name=item_name,
+                        resource_count=1,
+                        valid_link_count=0,
+                        contents_count=0,
+                        is_placeholder=False,
+                        source="sharepoint",
+                        drive_item_id=item_id,
+                        last_seen_override=sync_started_at
+                    )
+                    stats['updated_resources'] += 1
+                else:
+                    # New item — resolve parent path (1 API call)
+                    parent_id = parent_ref.get("id")
+                    
+                    if not parent_id:
+                        _logger.warning(f"[DELTA] SKIP no parent: {item_name}")
+                        continue
+                    
+                    parent_relative = _resolve_parent_path(
+                        parent_id, drive_id, headers
+                    )
+                    
+                    if parent_relative is None:
+                        _logger.warning(f"[DELTA] SKIP parent lookup failed: {item_name}")
+                        continue
+                    
+                    relative_path = f"{parent_relative}/{item_name}" if parent_relative else item_name
+                    
+                    # Depth check
+                    if not is_leaf_container(relative_path):
+                        stats['skipped_depth'] += 1
+                        continue
+                    
+                    # Check if it's a links.txt
+                    if item_name.lower() == "links.txt":
+                        _process_links_file(
+                            item=item,
+                            drive_id=drive_id,
+                            headers=headers,
+                            parent_relative=parent_relative,
+                            sync_started_at=sync_started_at,
+                            stats=stats
+                        )
+                    else:
+                        _process_file_container(
+                            item=item,
+                            drive_id=drive_id,
+                            relative_path=relative_path,
+                            sync_started_at=sync_started_at,
+                            stats=stats
+                        )
+        
+        # Pagination
+        next_link = result.get("@odata.nextLink")
+        delta_link = result.get("@odata.deltaLink")
+        
+        if delta_link:
+            # Extract token from deltaLink URL
+            token_match = re.search(r"token='([^']+)'", delta_link)
+            if not token_match:
+                token_match = re.search(r"token=([^&]+)", delta_link)
+            if token_match:
+                new_token = token_match.group(1)
+        
+        url = next_link  # None when no more pages
+    
+    return new_token
+
+
+# -----------------------------------------------------------------------------
 # SYNC ORCHESTRATOR
 # -----------------------------------------------------------------------------
 def sync_from_sharepoint() -> Dict[str, Any]:
@@ -398,7 +616,9 @@ def sync_from_sharepoint() -> Dict[str, Any]:
         record_sync_run,
         upsert_resource,
         clear_cache,
-        cleanup_stale_departments
+        cleanup_stale_departments,
+        load_delta_token,
+        save_delta_token
     )
     
     # Phase 1: Timestamp
@@ -419,7 +639,7 @@ def sync_from_sharepoint() -> Dict[str, Any]:
     site_id = resolve_site_id(headers)
     drive_id = resolve_drive_id(site_id, headers)
     
-    # Phase 4: Traverse & Upsert
+    # Phase 4: Sync (delta or full)
     stats = {
         "folders_scanned": 0,
         "files_scanned": 0,
@@ -429,50 +649,89 @@ def sync_from_sharepoint() -> Dict[str, Any]:
         "new_resources": 0,
         "updated_resources": 0,
         "scope_violations": 0,
-        # Detailed skip categories
         "skipped_excluded": 0,
         "skipped_depth": 0,
         "skipped_download_fail": 0,
         "skipped_no_urls": 0,
+        "archived_delta": 0,
+        "sync_mode": "full",
     }
     
-    _traverse_folder(
-        item_id="root",
-        drive_id=drive_id,
-        headers=headers,
-        sync_started_at=sync_started_at,
-        stats=stats,
-        parent_relative=""
-    )
+    # Try delta sync first
+    existing_delta_token = load_delta_token()
+    archived_count = 0
     
-    _logger.info(
-        f"Traversal complete: {stats['folders_scanned']} folders, "
-        f"{stats['files_scanned']} files, {stats['links_created']} links | "
-        f"Skipped: excluded={stats['skipped_excluded']}, "
-        f"depth={stats['skipped_depth']}, no_urls={stats['skipped_no_urls']}, "
-        f"download_fail={stats['skipped_download_fail']}"
-    )
+    if existing_delta_token:
+        _logger.info("[SYNC] Delta token found, attempting incremental sync")
+        new_token = _process_delta(
+            drive_id=drive_id,
+            headers=headers,
+            delta_token=existing_delta_token,
+            sync_started_at=sync_started_at,
+            stats=stats
+        )
+        
+        if new_token:
+            # Delta succeeded
+            stats['sync_mode'] = "delta"
+            archived_count = stats.get('archived_delta', 0)
+            save_delta_token(new_token)
+            _logger.info("[SYNC] Delta sync complete, new token saved")
+        else:
+            # Delta failed (expired token) — fall through to full sync
+            _logger.info("[SYNC] Delta failed, falling back to full sync")
+            existing_delta_token = None  # Force full sync below
     
-    if stats['scope_violations'] > 0:
-        _logger.warning(f"SECURITY: {stats['scope_violations']} scope violations detected")
-    
-    # Phase 5: Archive Stale (reuse existing function)
-    archived_count = archive_stale_resources(sync_started_at)
-    _logger.info(f"Archived stale resources: {archived_count}")
-    
-    # Phase 5b: Clean up stale departments
-    stale_dept_count = cleanup_stale_departments(sync_started_at)
-    _logger.info(f"Stale departments cleaned up: {stale_dept_count}")
+    if not existing_delta_token:
+        # FULL SYNC (existing behavior, unchanged)
+        stats['sync_mode'] = "full"
+        _traverse_folder(
+            item_id="root",
+            drive_id=drive_id,
+            headers=headers,
+            sync_started_at=sync_started_at,
+            stats=stats,
+            parent_relative=""
+        )
+        
+        _logger.info(
+            f"Traversal complete: {stats['folders_scanned']} folders, "
+            f"{stats['files_scanned']} files, {stats['links_created']} links | "
+            f"Skipped: excluded={stats['skipped_excluded']}, "
+            f"depth={stats['skipped_depth']}, no_urls={stats['skipped_no_urls']}, "
+            f"download_fail={stats['skipped_download_fail']}"
+        )
+        
+        if stats['scope_violations'] > 0:
+            _logger.warning(f"SECURITY: {stats['scope_violations']} scope violations detected")
+        
+        # Phase 5: Archive Stale (reuse existing function)
+        archived_count = archive_stale_resources(sync_started_at)
+        _logger.info(f"Archived stale resources: {archived_count}")
+        
+        # Phase 5b: Clean up stale departments
+        stale_dept_count = cleanup_stale_departments(sync_started_at)
+        _logger.info(f"Stale departments cleaned up: {stale_dept_count}")
+        
+        # Phase 5c: Get initial delta token for next run
+        latest_url = f"{GRAPH_BASE_URL}/drives/{drive_id}/root/delta?token=latest"
+        latest_result = _make_graph_request(latest_url, headers)
+        if latest_result and not latest_result.get("_delta_expired"):
+            delta_link = latest_result.get("@odata.deltaLink", "")
+            token_match = re.search(r"token='?([^'&]+)'?", delta_link)
+            if token_match:
+                save_delta_token(token_match.group(1))
+                _logger.info("[SYNC] Initial delta token saved for next run")
     
     # Phase 6: Metrics
     active_after = get_active_resource_count()
-    added_count = stats['new_containers']
+    added_count = stats['new_resources']
     
     # Phase 7: Record Sync Run (reuse existing function)
     record_sync_run(
         started_at=sync_started_at,
         finished_at=datetime.now(timezone.utc).isoformat(),
-        source="sharepoint",
+        source=f"sharepoint_{stats['sync_mode']}",
         active_total_before=active_before,
         added_count=added_count,
         archived_count=archived_count,
@@ -483,19 +742,21 @@ def sync_from_sharepoint() -> Dict[str, Any]:
     clear_cache()
     
     _logger.info(
-        f"SharePoint sync complete: added={added_count}, archived={archived_count}, "
-        f"active_after={active_after}, scope_violations={stats['scope_violations']}"
+        f"SharePoint sync complete [{stats['sync_mode']}]: added={added_count}, "
+        f"archived={archived_count}, active_after={active_after}, "
+        f"scope_violations={stats['scope_violations']}"
     )
     
     return {
         "added": added_count,
-        "updated": stats['updated_containers'],
+        "updated": stats['updated_resources'],
         "archived": archived_count,
         "total": active_after,
         "scope_violations": stats['scope_violations'],
         "folders_scanned": stats['folders_scanned'],
         "files_scanned": stats['files_scanned'],
         "links_created": stats['links_created'],
+        "sync_mode": stats['sync_mode'],
     }
 
 
@@ -687,7 +948,7 @@ def _process_links_file(
     validate_item_in_scope(item, drive_id)
     
     from services.container_service import parse_path, parse_links_content
-    from db import upsert_resource
+    from db import upsert_resource, execute as db_execute
     
     # Download file content (only content download allowed)
     content = _download_file_content(item["id"], drive_id, headers)
@@ -714,6 +975,14 @@ def _process_links_file(
     if not urls:
         stats['skipped_no_urls'] += 1
         return  # No valid URLs, no resources created
+    
+    # Clean up existing link resources for this links.txt
+    # (prevents orphans when URLs are removed from the file)
+    cleanup_pattern = f"{parent_relative}/links.txt#%"
+    db_execute(
+        "DELETE FROM resources WHERE relative_path LIKE ? AND resource_type = 'link'",
+        (cleanup_pattern,)
+    )
     
     # Parse parent for taxonomy
     parsed = parse_path(parent_relative)
