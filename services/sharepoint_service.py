@@ -618,8 +618,12 @@ def sync_from_sharepoint() -> Dict[str, Any]:
         clear_cache,
         cleanup_stale_departments,
         load_delta_token,
-        save_delta_token
+        save_delta_token,
+        init_db
     )
+    
+    # Phase 0: Ensure schema (idempotent — no-op if tables exist)
+    init_db()
     
     # Phase 1: Timestamp
     sync_started_at = datetime.now(timezone.utc).isoformat()
