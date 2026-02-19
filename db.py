@@ -1467,25 +1467,40 @@ def record_sync_run(
 # DELTA SYNC HELPERS
 # =============================================================================
 def load_delta_token(source: str = "sharepoint") -> Optional[str]:
-    """Load the last delta token for a sync source."""
-    row = execute(
-        "SELECT setting_value FROM sync_settings WHERE setting_key = ?",
-        (f"delta_token_{source}",),
-        fetch="one"
-    )
-    return row['setting_value'] if row else None
+    """Load the last delta token for a sync source.
+    
+    Returns None if the table doesn't exist yet (first deployment)
+    or if no token is stored — both trigger full sync (correct behavior).
+    """
+    try:
+        row = execute(
+            "SELECT setting_value FROM sync_settings WHERE setting_key = ?",
+            (f"delta_token_{source}",),
+            fetch="one"
+        )
+        return row['setting_value'] if row else None
+    except Exception as e:
+        _logger.warning(f"Could not load delta token (table may not exist yet): {e}")
+        return None
 
 
 def save_delta_token(token: str, source: str = "sharepoint") -> None:
-    """Save a delta token for a sync source."""
-    now = datetime.now(timezone.utc).isoformat()
-    execute(adapt_query("""
-        INSERT INTO sync_settings (setting_key, setting_value, updated_at)
-        VALUES (?, ?, ?)
-        ON CONFLICT (setting_key)
-        DO UPDATE SET setting_value = EXCLUDED.setting_value,
-                      updated_at = EXCLUDED.updated_at
-    """), (f"delta_token_{source}", token, now))
+    """Save a delta token for a sync source.
+    
+    Silently fails if table doesn't exist yet — token won't persist
+    until init_db runs, which is acceptable (next sync = full sync).
+    """
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        execute(adapt_query("""
+            INSERT INTO sync_settings (setting_key, setting_value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT (setting_key)
+            DO UPDATE SET setting_value = EXCLUDED.setting_value,
+                          updated_at = EXCLUDED.updated_at
+        """), (f"delta_token_{source}", token, now))
+    except Exception as e:
+        _logger.warning(f"Could not save delta token (table may not exist yet): {e}")
 
 
 def archive_resource_by_drive_id(drive_item_id: str) -> bool:
