@@ -622,11 +622,11 @@ def sync_from_sharepoint() -> Dict[str, Any]:
         cleanup_stale_departments,
         load_delta_token,
         save_delta_token,
-        init_db
+        ensure_sync_settings_table
     )
     
-    # Phase 0: Ensure schema (idempotent — no-op if tables exist)
-    init_db()
+    # Phase 0: Ensure sync_settings table exists (no guard, always runs)
+    ensure_sync_settings_table()
     
     # Phase 1: Timestamp
     sync_started_at = datetime.now(timezone.utc).isoformat()
@@ -682,8 +682,10 @@ def sync_from_sharepoint() -> Dict[str, Any]:
             # Delta succeeded
             stats['sync_mode'] = "delta"
             archived_count = stats.get('archived_delta', 0)
-            save_delta_token(new_delta_link)
-            _logger.info("[SYNC] Delta sync complete, new deltaLink saved")
+            if save_delta_token(new_delta_link):
+                _logger.info("[SYNC] Delta sync complete, new deltaLink saved")
+            else:
+                _logger.error("[SYNC] Delta sync complete but FAILED to save deltaLink")
         else:
             # Delta failed (expired token) — fall through to full sync
             _logger.info("[SYNC] Delta failed, falling back to full sync")
@@ -727,8 +729,10 @@ def sync_from_sharepoint() -> Dict[str, Any]:
         if latest_result and not latest_result.get("_delta_expired"):
             delta_link = latest_result.get("@odata.deltaLink", "")
             if delta_link:
-                save_delta_token(delta_link)
-                _logger.info(f"[SYNC] Initial deltaLink saved for next run")
+                if save_delta_token(delta_link):
+                    _logger.info("[SYNC] Initial deltaLink saved for next run")
+                else:
+                    _logger.error("[SYNC] FAILED to save initial deltaLink")
             else:
                 _logger.warning("[SYNC] No @odata.deltaLink in token=latest response")
     

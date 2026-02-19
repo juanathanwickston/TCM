@@ -1466,6 +1466,22 @@ def record_sync_run(
 # =============================================================================
 # DELTA SYNC HELPERS
 # =============================================================================
+def ensure_sync_settings_table() -> None:
+    """Create sync_settings table if missing. No guard, always runs.
+    
+    Unlike init_db() which has a _init_db_done guard and only runs once
+    per process, this function runs every time it is called. The
+    CREATE TABLE IF NOT EXISTS is idempotent and costs microseconds
+    when the table already exists.
+    """
+    execute("""
+        CREATE TABLE IF NOT EXISTS sync_settings (
+            setting_key TEXT PRIMARY KEY,
+            setting_value TEXT,
+            updated_at TEXT
+        )
+    """)
+
 def load_delta_token(source: str = "sharepoint") -> Optional[str]:
     """Load the last delta token for a sync source.
     
@@ -1484,11 +1500,10 @@ def load_delta_token(source: str = "sharepoint") -> Optional[str]:
         return None
 
 
-def save_delta_token(token: str, source: str = "sharepoint") -> None:
+def save_delta_token(token: str, source: str = "sharepoint") -> bool:
     """Save a delta token (or full deltaLink URL) for a sync source.
     
-    Silently fails if table doesn't exist yet — token won't persist
-    until init_db runs, which is acceptable (next sync = full sync).
+    Returns True if saved successfully, False if save failed.
     """
     try:
         now = datetime.now(timezone.utc).isoformat()
@@ -1499,8 +1514,10 @@ def save_delta_token(token: str, source: str = "sharepoint") -> None:
             DO UPDATE SET setting_value = EXCLUDED.setting_value,
                           updated_at = EXCLUDED.updated_at
         """, (f"delta_token_{source}", token, now))
+        return True
     except Exception as e:
-        _logger.warning(f"Could not save delta token (table may not exist yet): {e}")
+        _logger.error(f"FAILED to save delta token: {e}")
+        return False
 
 
 def archive_resource_by_drive_id(drive_item_id: str) -> bool:
