@@ -420,15 +420,20 @@ def _resolve_parent_path(
 def _process_delta(
     drive_id: str,
     headers: Dict[str, str],
-    delta_token: str,
+    delta_link_url: str,
     sync_started_at: str,
     stats: Dict[str, int]
 ) -> Optional[str]:
     """
     Process delta changes from Microsoft Graph.
     
+    Args:
+        delta_link_url: The FULL deltaLink URL saved from the previous sync.
+                       Used verbatim as the request URL (Microsoft Graph
+                       requires reusing the exact deltaLink, not reconstructing).
+    
     Returns:
-        New delta token string on success.
+        New deltaLink URL string on success (to be saved for next sync).
         None if delta token expired (410 Gone) — caller should full sync.
     """
     from db import (
@@ -439,8 +444,8 @@ def _process_delta(
         parse_path, is_leaf_container
     )
     
-    url = f"{GRAPH_BASE_URL}/drives/{drive_id}/root/delta(token='{delta_token}')"
-    new_token = None
+    url = delta_link_url  # Use saved deltaLink URL directly
+    new_delta_link = None
     
     while url:
         result = _make_graph_request(url, headers)
@@ -576,21 +581,19 @@ def _process_delta(
                             stats=stats
                         )
         
-        # Pagination
+        # Pagination / deltaLink extraction
         next_link = result.get("@odata.nextLink")
         delta_link = result.get("@odata.deltaLink")
         
         if delta_link:
-            # Extract token from deltaLink URL
-            token_match = re.search(r"token='([^']+)'", delta_link)
-            if not token_match:
-                token_match = re.search(r"token=([^&]+)", delta_link)
-            if token_match:
-                new_token = token_match.group(1)
+            # Save the ENTIRE deltaLink URL verbatim
+            # Microsoft Graph requires reusing this exact URL for the next sync
+            new_delta_link = delta_link
+            _logger.info("[DELTA] Received new deltaLink")
         
         url = next_link  # None when no more pages
     
-    return new_token
+    return new_delta_link
 
 
 # -----------------------------------------------------------------------------
@@ -662,31 +665,31 @@ def sync_from_sharepoint() -> Dict[str, Any]:
     }
     
     # Try delta sync first
-    existing_delta_token = load_delta_token()
+    saved_delta_link = load_delta_token()
     archived_count = 0
     
-    if existing_delta_token:
-        _logger.info("[SYNC] Delta token found, attempting incremental sync")
-        new_token = _process_delta(
+    if saved_delta_link:
+        _logger.info("[SYNC] Delta link found, attempting incremental sync")
+        new_delta_link = _process_delta(
             drive_id=drive_id,
             headers=headers,
-            delta_token=existing_delta_token,
+            delta_link_url=saved_delta_link,
             sync_started_at=sync_started_at,
             stats=stats
         )
         
-        if new_token:
+        if new_delta_link:
             # Delta succeeded
             stats['sync_mode'] = "delta"
             archived_count = stats.get('archived_delta', 0)
-            save_delta_token(new_token)
-            _logger.info("[SYNC] Delta sync complete, new token saved")
+            save_delta_token(new_delta_link)
+            _logger.info("[SYNC] Delta sync complete, new deltaLink saved")
         else:
             # Delta failed (expired token) — fall through to full sync
             _logger.info("[SYNC] Delta failed, falling back to full sync")
-            existing_delta_token = None  # Force full sync below
+            saved_delta_link = None  # Force full sync below
     
-    if not existing_delta_token:
+    if not saved_delta_link:
         # FULL SYNC (existing behavior, unchanged)
         stats['sync_mode'] = "full"
         _traverse_folder(
@@ -717,15 +720,17 @@ def sync_from_sharepoint() -> Dict[str, Any]:
         stale_dept_count = cleanup_stale_departments(sync_started_at)
         _logger.info(f"Stale departments cleaned up: {stale_dept_count}")
         
-        # Phase 5c: Get initial delta token for next run
+        # Phase 5c: Get initial deltaLink for next run
+        # Uses ?token=latest to skip full enumeration and get just the deltaLink
         latest_url = f"{GRAPH_BASE_URL}/drives/{drive_id}/root/delta?token=latest"
         latest_result = _make_graph_request(latest_url, headers)
         if latest_result and not latest_result.get("_delta_expired"):
             delta_link = latest_result.get("@odata.deltaLink", "")
-            token_match = re.search(r"token='?([^'&]+)'?", delta_link)
-            if token_match:
-                save_delta_token(token_match.group(1))
-                _logger.info("[SYNC] Initial delta token saved for next run")
+            if delta_link:
+                save_delta_token(delta_link)
+                _logger.info(f"[SYNC] Initial deltaLink saved for next run")
+            else:
+                _logger.warning("[SYNC] No @odata.deltaLink in token=latest response")
     
     # Phase 6: Metrics
     active_after = get_active_resource_count()

@@ -1485,20 +1485,20 @@ def load_delta_token(source: str = "sharepoint") -> Optional[str]:
 
 
 def save_delta_token(token: str, source: str = "sharepoint") -> None:
-    """Save a delta token for a sync source.
+    """Save a delta token (or full deltaLink URL) for a sync source.
     
     Silently fails if table doesn't exist yet — token won't persist
     until init_db runs, which is acceptable (next sync = full sync).
     """
     try:
         now = datetime.now(timezone.utc).isoformat()
-        execute(adapt_query("""
+        execute("""
             INSERT INTO sync_settings (setting_key, setting_value, updated_at)
             VALUES (?, ?, ?)
             ON CONFLICT (setting_key)
             DO UPDATE SET setting_value = EXCLUDED.setting_value,
                           updated_at = EXCLUDED.updated_at
-        """), (f"delta_token_{source}", token, now))
+        """, (f"delta_token_{source}", token, now))
     except Exception as e:
         _logger.warning(f"Could not save delta token (table may not exist yet): {e}")
 
