@@ -7,7 +7,7 @@ MENTAL MODEL: This is os.walk() over HTTPS. Not a SharePoint integration—a fil
 
 SCOPE BOUNDARIES (compile-time locked, non-configurable):
 - Site: https://payrocllc.sharepoint.com/sites/Roc_UCentral
-- Library: Payroc Training Catalogue
+- Library: A - Payroc Training Catalogue
 - Root: Entire library root
 
 GUARDS:
@@ -33,7 +33,7 @@ from msal import ConfidentialClientApplication
 # COMPILE-TIME LOCKED SCOPE CONSTANTS (NON-CONFIGURABLE)
 # -----------------------------------------------------------------------------
 SHAREPOINT_SITE_URL = "https://payrocllc.sharepoint.com/sites/Roc_UCentral"
-SHAREPOINT_LIBRARY_NAME = "Payroc Training Catalogue"
+SHAREPOINT_LIBRARY_NAME = "A - Payroc Training Catalogue"
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 
 # OS artifacts excluded from ingestion (matches container_service.py)
