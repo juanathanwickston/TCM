@@ -19,7 +19,7 @@ GUARDS:
 """
 
 import os
-import re
+
 import hashlib
 import logging
 import time
