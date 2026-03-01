@@ -286,6 +286,7 @@
   let searchController = null;
   let searchDebounce = null;
   let originalTbody = null;
+  let searchWasActive = false;
 
   if (searchInput) {
     // Debounced input listener (300ms, min 2 chars)
@@ -295,7 +296,7 @@
 
       if (q.length === 0) {
         // Fully empty: clean page reload to restore everything
-        if (pageContainer.classList.contains('search-active')) {
+        if (searchWasActive) {
           window.location.href = '/inventory/';
         }
         return;
@@ -332,6 +333,7 @@
 
       // Show clear button
       searchClear.classList.remove('d-none');
+      searchWasActive = true;
 
       fetch('/api/inventory/search/?q=' + encodeURIComponent(query), {
         credentials: 'same-origin',
