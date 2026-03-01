@@ -21,6 +21,7 @@ urlpatterns = [
     path('investment/batch/', views.save_investment_batch_view, name='save_investment_batch'),
     path('investment/save-item/', views.save_investment_single_view, name='save_investment_single'),
     path('inventory/batch/', views.save_audience_batch_view, name='save_audience_batch'),
+    path('api/inventory/search/', views.search_inventory_view, name='search_inventory'),
     
     # Directory
     path('directory/', views.directory_view, name='directory'),

@@ -521,3 +521,60 @@ a:hover {
 .popover      { font-size: var(--tcm-font-sm); }
 .popover-body { text-align: left; padding: 0.5rem 0.75rem; }
 
+/* ============================================
+   INVENTORY SEARCH BAR
+   ============================================ */
+#search-bar-card {
+    border-left: 3px solid var(--payroc-cobalt);
+    transition: border-color var(--tcm-transition), box-shadow var(--tcm-transition);
+}
+
+#search-bar-card:focus-within {
+    border-left-color: var(--payroc-mint);
+    box-shadow: 0 1px 6px rgba(0, 81, 194, 0.15);
+}
+
+#inventory-search {
+    border: none;
+    box-shadow: none;
+    font-size: var(--tcm-font-sm);
+    background: transparent;
+}
+
+#inventory-search:focus {
+    box-shadow: none;
+}
+
+#search-result-count {
+    white-space: nowrap;
+    font-size: var(--tcm-font-xs);
+}
+
+/* Search active state: dim filter dropdowns */
+.search-active #filter-card {
+    opacity: 0.5;
+    pointer-events: none;
+    transition: opacity var(--tcm-transition);
+}
+
+/* Match highlight */
+mark.search-highlight {
+    background-color: rgba(0, 224, 184, 0.3);
+    padding: 0 1px;
+    border-radius: 2px;
+}
+
+/* Empty state styling */
+.search-empty-state {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: #6c757d;
+    font-size: var(--tcm-font-sm);
+}
+
+.search-empty-state i {
+    font-size: 1.5rem;
+    display: block;
+    margin-bottom: 0.5rem;
+    color: rgba(0, 29, 78, 0.2);
+}

@@ -504,6 +504,128 @@ def inventory_view(request):
     return render(request, 'tcm_app/inventory.html', context)
 
 
+@login_required
+@require_http_methods(["GET"])
+def search_inventory_view(request):
+    """
+    AJAX search endpoint for Inventory page.
+
+    GET /api/inventory/search/?q=<query>
+
+    Returns JSON: {results: [...], total: int, capped: bool, query: str}
+    - Multi-field tokenized search (AND logic)
+    - Synonym expansion for taxonomy terms
+    - 100-result cap with total count
+    - Parameterized SQL with LIKE escaping
+    """
+    from django.http import JsonResponse
+    from db import execute
+
+    RESULT_CAP = 100
+
+    # -------------------------------------------------------------------------
+    # SYNONYM MAP — maps user-friendly terms to stored taxonomy values
+    # -------------------------------------------------------------------------
+    SYNONYMS = {
+        'video': 'video_on_demand',
+        'vod': 'video_on_demand',
+        'job aid': 'job_aids',
+        'jobaid': 'job_aids',
+        'job aids': 'job_aids',
+        'ilt': 'instructor_led_virtual',
+        'ilv': 'instructor_led_virtual',
+        'virtual': 'instructor_led_virtual',
+        'ilp': 'instructor_led_in_person',
+        'in person': 'instructor_led_in_person',
+        'in-person': 'instructor_led_in_person',
+    }
+
+    # Searchable fields (column names in resources table)
+    SEARCH_FIELDS = [
+        'display_name', 'relative_path', 'primary_department',
+        'training_type', 'audience', 'bucket',
+        'scrub_notes', 'invest_notes',
+    ]
+
+    # -------------------------------------------------------------------------
+    # PARSE & VALIDATE
+    # -------------------------------------------------------------------------
+    raw_query = request.GET.get('q', '').strip()
+    if len(raw_query) < 2:
+        return JsonResponse({'results': [], 'total': 0, 'capped': False, 'query': raw_query})
+
+    # Tokenize on whitespace (AND logic: all tokens must match)
+    tokens = raw_query.lower().split()
+    if not tokens:
+        return JsonResponse({'results': [], 'total': 0, 'capped': False, 'query': raw_query})
+
+    # -------------------------------------------------------------------------
+    # BUILD PARAMETERIZED QUERY
+    # -------------------------------------------------------------------------
+    base_query = """
+        SELECT resource_key, display_name, resource_type, audience,
+               resource_count, contents_count, relative_path,
+               primary_department, training_type, bucket,
+               scrub_notes, invest_notes
+        FROM resources
+        WHERE is_archived = 0 AND is_placeholder = 0
+          AND resource_type IN ('file', 'link')
+    """
+
+    count_query = """
+        SELECT COUNT(*) as total
+        FROM resources
+        WHERE is_archived = 0 AND is_placeholder = 0
+          AND resource_type IN ('file', 'link')
+    """
+
+    where_clauses = []
+    params = []
+
+    for token in tokens:
+        # Expand synonym (check multi-word synonyms first, then single)
+        expanded = SYNONYMS.get(token, token)
+
+        # Escape LIKE wildcards in user input
+        safe_token = expanded.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+        like_val = f'%{safe_token}%'
+
+        # Token must match at least one field (OR across fields)
+        field_clauses = []
+        for field in SEARCH_FIELDS:
+            field_clauses.append(f"LOWER(COALESCE({field}, '')) LIKE ? ESCAPE '\\'")
+            params.append(like_val)
+
+        where_clauses.append(f"({' OR '.join(field_clauses)})")
+
+    # AND logic: all tokens must match
+    token_filter = ' AND '.join(where_clauses)
+
+    # Count query (no LIMIT)
+    count_sql = count_query + ' AND ' + token_filter
+    count_params = list(params)  # Copy for count query
+
+    # Results query (with LIMIT)
+    results_sql = base_query + ' AND ' + token_filter + ' ORDER BY display_name'
+    results_sql += f' LIMIT {RESULT_CAP}'
+
+    # -------------------------------------------------------------------------
+    # EXECUTE
+    # -------------------------------------------------------------------------
+    total_row = execute(count_sql, tuple(count_params), fetch="one")
+    total = total_row['total'] if total_row else 0
+
+    rows = execute(results_sql, tuple(params), fetch="all")
+    results = [dict(row) for row in rows] if rows else []
+
+    return JsonResponse({
+        'results': results,
+        'total': total,
+        'capped': total > RESULT_CAP,
+        'query': raw_query,
+    })
+
+
 def _redirect_with_filters(request, view_name='inventory'):
     """
     Helper to redirect while preserving filter state from POST params.

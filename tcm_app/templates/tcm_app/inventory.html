@@ -46,8 +46,23 @@
         </div>
     </div>
 
+    <!-- Search Bar -->
+    <div class="card mb-2" id="search-bar-card">
+        <div class="card-body py-2 px-3">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-search text-muted"></i>
+                <input type="text" class="form-control form-control-sm" id="inventory-search"
+                       placeholder="Search by name, department, type, notes..."
+                       autocomplete="off">
+                <button type="button" class="btn btn-sm btn-link text-muted d-none" id="search-clear"
+                        title="Clear search"><i class="bi bi-x-lg"></i></button>
+                <span class="text-muted small d-none" id="search-result-count"></span>
+            </div>
+        </div>
+    </div>
+
     <!-- Filter Bar -->
-    <div class="card mb-2">
+    <div class="card mb-2" id="filter-card">
         <div class="card-body">
             <form method="get" class="row g-3">
                 <div class="col-md-3">
@@ -258,6 +273,248 @@
       this.form.submit();
     });
   });
+  // =========================================================================
+  // INVENTORY SEARCH
+  // =========================================================================
+  const searchInput = document.getElementById('inventory-search');
+  const searchClear = document.getElementById('search-clear');
+  const searchCount = document.getElementById('search-result-count');
+  const pageContainer = document.querySelector('.tcm-page');
+  const tableCard = document.querySelector('#audience-form')?.closest('.card') || document.querySelector('.table-responsive')?.closest('.card');
+  const paginationEls = document.querySelectorAll('.pagination-link, .tcm-toolbar .text-muted');
+  const emptyAlert = document.querySelector('.alert.alert-info');
+  let searchController = null;
+  let searchDebounce = null;
+  let originalTbody = null;
+
+  if (searchInput) {
+    // Debounced input listener (300ms, min 2 chars)
+    searchInput.addEventListener('input', function() {
+      clearTimeout(searchDebounce);
+      const q = this.value.trim();
+
+      if (q.length < 2) {
+        clearSearch();
+        return;
+      }
+
+      // Dirty-row guard
+      if (dirtyRows.size > 0 && !pageContainer.classList.contains('search-active')) {
+        const ok = confirm('You have unsaved changes. Searching will reset your view. Continue?');
+        if (!ok) {
+          this.value = '';
+          return;
+        }
+      }
+
+      searchDebounce = setTimeout(function() { doSearch(q); }, 300);
+    });
+
+    // Clear button
+    searchClear.addEventListener('click', function() {
+      searchInput.value = '';
+      // Reload page at page 1 (clear action = page reload)
+      window.location.href = '/inventory/';
+    });
+
+    function doSearch(query) {
+      // Cancel previous request
+      if (searchController) searchController.abort();
+      searchController = new AbortController();
+
+      // Show clear button
+      searchClear.classList.remove('d-none');
+
+      fetch('/api/inventory/search/?q=' + encodeURIComponent(query), {
+        credentials: 'same-origin',
+        signal: searchController.signal
+      })
+      .then(function(resp) {
+        if (!resp.ok) throw new Error('Search failed');
+        return resp.json();
+      })
+      .then(function(data) {
+        renderSearchResults(data, query);
+      })
+      .catch(function(err) {
+        if (err.name === 'AbortError') return; // Cancelled, expected
+        console.error('Search error:', err);
+      });
+    }
+
+    function renderSearchResults(data, query) {
+      // Activate search mode
+      pageContainer.classList.add('search-active');
+
+      // Hide pagination
+      paginationEls.forEach(function(el) { el.style.display = 'none'; });
+
+      // Show result count
+      searchCount.classList.remove('d-none');
+      if (data.capped) {
+        searchCount.textContent = 'Showing ' + data.results.length + ' of ' + data.total.toLocaleString() + ' — refine your search';
+      } else {
+        searchCount.textContent = 'Showing ' + data.total.toLocaleString() + ' of ' + data.total.toLocaleString() + ' resources';
+      }
+
+      // Get or create the table body
+      var tbody = document.querySelector('.tcm-data-table tbody');
+      var tableWrapper = document.querySelector('.table-responsive');
+
+      if (data.results.length === 0) {
+        // Empty state
+        if (tbody) tbody.innerHTML = '';
+        // Hide table, show empty state
+        if (tableCard) tableCard.style.display = 'none';
+        // Remove any previous empty state
+        var prev = document.getElementById('search-empty');
+        if (prev) prev.remove();
+        // Create empty state
+        var emptyDiv = document.createElement('div');
+        emptyDiv.id = 'search-empty';
+        emptyDiv.className = 'search-empty-state';
+        emptyDiv.innerHTML = '<i class="bi bi-search"></i>' +
+          '<p>No resources match \u201c' + escapeHtml(query) + '\u201d</p>' +
+          '<p class="text-muted">Try different keywords or check spelling.</p>';
+        pageContainer.appendChild(emptyDiv);
+        return;
+      }
+
+      // Remove empty state if present
+      var prevEmpty = document.getElementById('search-empty');
+      if (prevEmpty) prevEmpty.remove();
+
+      // Ensure table is visible
+      if (tableCard) tableCard.style.display = '';
+
+      // If no table exists (empty page), we need to create one
+      if (!tbody) {
+        // Hide the alert-info empty state
+        if (emptyAlert) emptyAlert.style.display = 'none';
+        // Create a table structure
+        var cardDiv = document.createElement('div');
+        cardDiv.className = 'card';
+        cardDiv.id = 'search-results-card';
+        cardDiv.innerHTML = '<div class="card-body p-0"><div class="table-responsive">' +
+          '<table class="table table-hover tcm-data-table"><thead class="table-light"><tr>' +
+          '<th style="min-width:280px">Name</th>' +
+          '<th style="width:70px;text-align:center">Type</th>' +
+          '<th style="width:140px">Audience</th>' +
+          '<th style="width:90px;text-align:center">Contents</th>' +
+          '<th>Path</th></tr></thead><tbody></tbody></table></div></div>';
+        pageContainer.appendChild(cardDiv);
+        tbody = cardDiv.querySelector('tbody');
+      }
+
+      // Build tokens for highlighting
+      var tokens = query.toLowerCase().split(/\s+/);
+
+      // Render rows (read-only)
+      var html = '';
+      data.results.forEach(function(r) {
+        var name = escapeHtml(r.display_name || '');
+        var path = escapeHtml(r.relative_path || '');
+        var audience = escapeHtml(r.audience || '-');
+        var typeBadge = r.resource_type === 'link'
+          ? '<span class="badge bg-info">LINK</span>'
+          : '<span class="badge bg-secondary">FILE</span>';
+        var contents = r.resource_type === 'folder'
+          ? (r.contents_count || 0)
+          : 'Single File';
+
+        // Highlight matched tokens in visible fields
+        var hName = highlightTokens(name, tokens);
+        var hPath = highlightTokens(path, tokens);
+        var hAudience = highlightTokens(audience, tokens);
+
+        html += '<tr>' +
+          '<td class="col-name">' + hName + '</td>' +
+          '<td class="col-type">' + typeBadge + '</td>' +
+          '<td class="col-audience">' + hAudience + '</td>' +
+          '<td class="col-contents" style="text-align:center">' + contents + '</td>' +
+          '<td class="col-path"><small class="text-muted">' + hPath + '</small></td>' +
+          '</tr>';
+      });
+
+      tbody.innerHTML = html;
+    }
+
+    function clearSearch() {
+      pageContainer.classList.remove('search-active');
+      searchCount.classList.add('d-none');
+      searchClear.classList.add('d-none');
+
+      // Remove dynamic empty state
+      var prevEmpty = document.getElementById('search-empty');
+      if (prevEmpty) prevEmpty.remove();
+
+      // Remove dynamic results card
+      var resultsCard = document.getElementById('search-results-card');
+      if (resultsCard) resultsCard.remove();
+
+      // Restore original table visibility
+      if (tableCard) tableCard.style.display = '';
+
+      // Restore pagination
+      paginationEls.forEach(function(el) { el.style.display = ''; });
+
+      // Restore original tbody if saved
+      var tbody = document.querySelector('.tcm-data-table tbody');
+      if (tbody && originalTbody) {
+        tbody.innerHTML = originalTbody;
+        originalTbody = null;
+        // Re-attach dirty-track listeners
+        document.querySelectorAll('.dirty-track').forEach(function(el) {
+          el.addEventListener('change', function() {
+            var row = this.closest('tr');
+            if (!row) return;
+            var key = row.dataset.containerKey;
+            var origAudience = row.dataset.originalAudience;
+            var currAudience = this.value;
+            if (currAudience !== origAudience) {
+              dirtyRows.add(key);
+              row.classList.add('table-warning');
+            } else {
+              dirtyRows.delete(key);
+              row.classList.remove('table-warning');
+            }
+            updateSaveButton();
+          });
+        });
+      }
+
+      // Restore empty alert
+      if (emptyAlert) emptyAlert.style.display = '';
+    }
+
+    // Save original tbody on first search
+    searchInput.addEventListener('focus', function() {
+      if (!originalTbody) {
+        var tbody = document.querySelector('.tcm-data-table tbody');
+        if (tbody) originalTbody = tbody.innerHTML;
+      }
+    });
+
+    // HTML escape helper
+    function escapeHtml(str) {
+      var div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // Highlight matching tokens in an already-escaped string
+    function highlightTokens(escapedStr, tokens) {
+      var result = escapedStr;
+      tokens.forEach(function(token) {
+        if (token.length < 2) return;
+        // Escape regex special chars in the token
+        var safeToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        var regex = new RegExp('(' + safeToken + ')', 'gi');
+        result = result.replace(regex, '<mark class="search-highlight">$1</mark>');
+      });
+      return result;
+    }
+  }
 })();
 </script>
 {% endblock %}
