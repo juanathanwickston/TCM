@@ -293,6 +293,14 @@
       clearTimeout(searchDebounce);
       const q = this.value.trim();
 
+      if (q.length === 0) {
+        // Fully empty: clean page reload to restore everything
+        if (pageContainer.classList.contains('search-active')) {
+          window.location.href = '/inventory/';
+        }
+        return;
+      }
+
       if (q.length < 2) {
         clearSearch();
         return;
