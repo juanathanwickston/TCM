@@ -274,19 +274,21 @@
     });
   });
   // =========================================================================
-  // INVENTORY SEARCH
+  // INVENTORY SEARCH (hide/show architecture — never mutates original DOM)
   // =========================================================================
   const searchInput = document.getElementById('inventory-search');
   const searchClear = document.getElementById('search-clear');
   const searchCount = document.getElementById('search-result-count');
   const pageContainer = document.querySelector('.tcm-page');
-  const tableCard = document.querySelector('#audience-form')?.closest('.card') || document.querySelector('.table-responsive')?.closest('.card');
-  const paginationEls = document.querySelectorAll('.pagination-link, .tcm-toolbar .text-muted');
+
+  // Elements to hide during search
+  const audienceForm = document.getElementById('audience-form');
   const emptyAlert = document.querySelector('.alert.alert-info');
+  const paginationEls = document.querySelectorAll('.pagination-link, .tcm-toolbar .text-muted');
+  // Note: saveBtn already declared at line 187 in this IIFE scope
+
   let searchController = null;
   let searchDebounce = null;
-  let originalTbody = null;
-  let searchWasActive = false;
 
   if (searchInput) {
     // Debounced input listener (300ms, min 2 chars)
@@ -295,20 +297,16 @@
       const q = this.value.trim();
 
       if (q.length === 0) {
-        // Fully empty: clean page reload to restore everything
-        if (searchWasActive) {
-          window.location.href = '/inventory/';
-        }
-        return;
-      }
-
-      if (q.length < 2) {
         clearSearch();
         return;
       }
 
-      // Dirty-row guard
-      if (dirtyRows.size > 0 && !pageContainer.classList.contains('search-active')) {
+      if (q.length < 2) {
+        return; // Wait for more chars, don't clear yet
+      }
+
+      // Dirty-row guard (only if dirtyRows exists — won't exist on empty pages)
+      if (typeof dirtyRows !== 'undefined' && dirtyRows.size > 0 && !pageContainer.classList.contains('search-active')) {
         const ok = confirm('You have unsaved changes. Searching will reset your view. Continue?');
         if (!ok) {
           this.value = '';
@@ -319,10 +317,9 @@
       searchDebounce = setTimeout(function() { doSearch(q); }, 300);
     });
 
-    // Clear button
+    // Clear button (intentional clear = page reload is fine)
     searchClear.addEventListener('click', function() {
       searchInput.value = '';
-      // Reload page at page 1 (clear action = page reload)
       window.location.href = '/inventory/';
     });
 
@@ -333,7 +330,6 @@
 
       // Show clear button
       searchClear.classList.remove('d-none');
-      searchWasActive = true;
 
       fetch('/api/inventory/search/?q=' + encodeURIComponent(query), {
         credentials: 'same-origin',
@@ -347,7 +343,7 @@
         renderSearchResults(data, query);
       })
       .catch(function(err) {
-        if (err.name === 'AbortError') return; // Cancelled, expected
+        if (err.name === 'AbortError') return;
         console.error('Search error:', err);
       });
     }
@@ -356,32 +352,28 @@
       // Activate search mode
       pageContainer.classList.add('search-active');
 
-      // Hide pagination
+      // Hide original content (never destroy it)
+      if (audienceForm) audienceForm.style.display = 'none';
+      if (emptyAlert) emptyAlert.style.display = 'none';
+      if (saveBtn) saveBtn.style.display = 'none';
       paginationEls.forEach(function(el) { el.style.display = 'none'; });
 
       // Show result count
       searchCount.classList.remove('d-none');
       if (data.capped) {
-        searchCount.textContent = 'Showing ' + data.results.length + ' of ' + data.total.toLocaleString() + ' — refine your search';
+        searchCount.textContent = 'Showing ' + data.results.length + ' of ' + data.total.toLocaleString() + ' \u2014 refine your search';
       } else {
         searchCount.textContent = 'Showing ' + data.total.toLocaleString() + ' of ' + data.total.toLocaleString() + ' resources';
       }
 
-      // Get or create the table body
-      var tbody = document.querySelector('.tcm-data-table tbody');
-      var tableWrapper = document.querySelector('.table-responsive');
+      // Remove previous results container (from prior search)
+      var prev = document.getElementById('search-results-container');
+      if (prev) prev.remove();
 
       if (data.results.length === 0) {
         // Empty state
-        if (tbody) tbody.innerHTML = '';
-        // Hide table, show empty state
-        if (tableCard) tableCard.style.display = 'none';
-        // Remove any previous empty state
-        var prev = document.getElementById('search-empty');
-        if (prev) prev.remove();
-        // Create empty state
         var emptyDiv = document.createElement('div');
-        emptyDiv.id = 'search-empty';
+        emptyDiv.id = 'search-results-container';
         emptyDiv.className = 'search-empty-state';
         emptyDiv.innerHTML = '<i class="bi bi-search"></i>' +
           '<p>No resources match \u201c' + escapeHtml(query) + '\u201d</p>' +
@@ -390,36 +382,23 @@
         return;
       }
 
-      // Remove empty state if present
-      var prevEmpty = document.getElementById('search-empty');
-      if (prevEmpty) prevEmpty.remove();
-
-      // Ensure table is visible
-      if (tableCard) tableCard.style.display = '';
-
-      // If no table exists (empty page), we need to create one
-      if (!tbody) {
-        // Hide the alert-info empty state
-        if (emptyAlert) emptyAlert.style.display = 'none';
-        // Create a table structure
-        var cardDiv = document.createElement('div');
-        cardDiv.className = 'card';
-        cardDiv.id = 'search-results-card';
-        cardDiv.innerHTML = '<div class="card-body p-0"><div class="table-responsive">' +
-          '<table class="table table-hover tcm-data-table"><thead class="table-light"><tr>' +
-          '<th style="min-width:280px">Name</th>' +
-          '<th style="width:70px;text-align:center">Type</th>' +
-          '<th style="width:140px">Audience</th>' +
-          '<th style="width:90px;text-align:center">Contents</th>' +
-          '<th>Path</th></tr></thead><tbody></tbody></table></div></div>';
-        pageContainer.appendChild(cardDiv);
-        tbody = cardDiv.querySelector('tbody');
-      }
+      // Create results container with table
+      var container = document.createElement('div');
+      container.id = 'search-results-container';
+      container.className = 'card';
+      container.innerHTML = '<div class="card-body p-0"><div class="table-responsive">' +
+        '<table class="table table-hover tcm-data-table"><thead class="table-light"><tr>' +
+        '<th style="min-width:280px">Name</th>' +
+        '<th style="width:70px;text-align:center">Type</th>' +
+        '<th style="width:140px">Audience</th>' +
+        '<th style="width:90px;text-align:center">Contents</th>' +
+        '<th>Path</th></tr></thead><tbody></tbody></table></div></div>';
 
       // Build tokens for highlighting
       var tokens = query.toLowerCase().split(/\s+/);
 
       // Render rows (read-only)
+      var tbody = container.querySelector('tbody');
       var html = '';
       data.results.forEach(function(r) {
         var name = escapeHtml(r.display_name || '');
@@ -432,7 +411,6 @@
           ? (r.contents_count || 0)
           : 'Single File';
 
-        // Highlight matched tokens in visible fields
         var hName = highlightTokens(name, tokens);
         var hPath = highlightTokens(path, tokens);
         var hAudience = highlightTokens(audience, tokens);
@@ -445,65 +423,29 @@
           '<td class="col-path"><small class="text-muted">' + hPath + '</small></td>' +
           '</tr>';
       });
-
       tbody.innerHTML = html;
+
+      pageContainer.appendChild(container);
     }
 
     function clearSearch() {
+      // Remove search results container
+      var container = document.getElementById('search-results-container');
+      if (container) container.remove();
+
+      // Remove search-active state
       pageContainer.classList.remove('search-active');
+
+      // Hide UI elements
       searchCount.classList.add('d-none');
       searchClear.classList.add('d-none');
 
-      // Remove dynamic empty state
-      var prevEmpty = document.getElementById('search-empty');
-      if (prevEmpty) prevEmpty.remove();
-
-      // Remove dynamic results card
-      var resultsCard = document.getElementById('search-results-card');
-      if (resultsCard) resultsCard.remove();
-
-      // Restore original table visibility
-      if (tableCard) tableCard.style.display = '';
-
-      // Restore pagination
-      paginationEls.forEach(function(el) { el.style.display = ''; });
-
-      // Restore original tbody if saved
-      var tbody = document.querySelector('.tcm-data-table tbody');
-      if (tbody && originalTbody) {
-        tbody.innerHTML = originalTbody;
-        originalTbody = null;
-        // Re-attach dirty-track listeners
-        document.querySelectorAll('.dirty-track').forEach(function(el) {
-          el.addEventListener('change', function() {
-            var row = this.closest('tr');
-            if (!row) return;
-            var key = row.dataset.containerKey;
-            var origAudience = row.dataset.originalAudience;
-            var currAudience = this.value;
-            if (currAudience !== origAudience) {
-              dirtyRows.add(key);
-              row.classList.add('table-warning');
-            } else {
-              dirtyRows.delete(key);
-              row.classList.remove('table-warning');
-            }
-            updateSaveButton();
-          });
-        });
-      }
-
-      // Restore empty alert
+      // Unhide original content (untouched, fully intact)
+      if (audienceForm) audienceForm.style.display = '';
       if (emptyAlert) emptyAlert.style.display = '';
+      if (saveBtn) saveBtn.style.display = '';
+      paginationEls.forEach(function(el) { el.style.display = ''; });
     }
-
-    // Save original tbody on first search
-    searchInput.addEventListener('focus', function() {
-      if (!originalTbody) {
-        var tbody = document.querySelector('.tcm-data-table tbody');
-        if (tbody) originalTbody = tbody.innerHTML;
-      }
-    });
 
     // HTML escape helper
     function escapeHtml(str) {
@@ -517,7 +459,6 @@
       var result = escapedStr;
       tokens.forEach(function(token) {
         if (token.length < 2) return;
-        // Escape regex special chars in the token
         var safeToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         var regex = new RegExp('(' + safeToken + ')', 'gi');
         result = result.replace(regex, '<mark class="search-highlight">$1</mark>');
