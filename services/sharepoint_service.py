@@ -558,7 +558,7 @@ def _process_delta(
                     relative_path = f"{parent_relative}/{item_name}" if parent_relative else item_name
                     
                     # Depth check
-                    if not is_leaf_container(relative_path):
+                    if not is_leaf_container(parent_relative, False, item_name):
                         stats['skipped_depth'] += 1
                         continue
                     
